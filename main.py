@@ -24,9 +24,11 @@ nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
 # 자동 퇴장 태스크 관리
 auto_disconnect_tasks = {}
 
-# 🔁 자동퇴장용 비동기 함수
+# 자동 퇴장 타이머 함수 (로그 추가)
 async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.VoiceChannel, timeout=1200):
-    await asyncio.sleep(timeout)  # 20분 대기
+    print(f"[자동퇴장 타이머 시작] {user}님, {timeout}초 후 자동퇴장 대기중...")
+    await asyncio.sleep(timeout)
+    print(f"[자동퇴장 타이머 종료] {user}님 퇴장 시도")
     if user.voice and user.voice.channel == channel:
         try:
             await user.move_to(None)
@@ -42,6 +44,9 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
             print(f"강제 퇴장 실패: {e}")
         finally:
             auto_disconnect_tasks.pop(user.id, None)
+    else:
+        print(f"{user} 님이 이미 채널을 떠났거나 다른 채널에 있습니다.")
+        auto_disconnect_tasks.pop(user.id, None)
 
 
 # ✅ 음성 상태 변화 감지 (자동퇴장 취소 + 대기방 메시지 전송 통합)
@@ -194,7 +199,7 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
     view = TeamMoveView(teams, empty_channels, user_channel)
     await interaction.response.send_message(msg, view=view)
 
-# 🍚 /밥 명령어
+# /밥 명령어 부분 수정 (타이머 등록 시 로그 추가)
 @tree.command(name="밥", description="밥좀묵겠습니다 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
 async def 밥(interaction: discord.Interaction):
     user = interaction.user
@@ -215,23 +220,32 @@ async def 밥(interaction: discord.Interaction):
         return
 
     try:
-        # 음성 채널 이동 (유저가 음성채널에 없더라도 무조건 이동 시도)
+        # 음성 채널 이동
         await user.move_to(target_channel)
-        await interaction.response.send_message(f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 토끼록끼의 강력한 파워로 자동 퇴장된다!.", ephemeral=True)
+        await interaction.response.send_message(
+            f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 토끼록끼의 강력한 파워로 자동 퇴장된다!.",
+            ephemeral=True
+        )
 
         # 즉시 경고 메시지 전송
         await text_channel.send(f"{user.mention}님, 20분 동안 밥을 먹지 못하면 토끼록끼의 강력한 염력으로 강제퇴장 당할 수 있습니다.")
 
-        # 기존 자동퇴장 타이머가 있다면 취소
+        # 기존 자동퇴장 타이머 취소
         if user.id in auto_disconnect_tasks:
             auto_disconnect_tasks[user.id].cancel()
+            print(f"[타이머 취소] 기존 {user}님의 자동퇴장 타이머가 취소되었습니다.")
 
-        # 새 타이머 등록
-        task = asyncio.create_task(auto_disconnect_after_timeout(user, target_channel, timeout=10))
+        # 새 타이머 등록 (테스트용 10초, 실제 1200초로 변경)
+        task = asyncio.create_task(auto_disconnect_after_timeout(user, target_channel, timeout=1200))
         auto_disconnect_tasks[user.id] = task
+        print(f"[타이머 등록] {user}님 자동퇴장 타이머가 등록되었습니다.")
 
     except Exception as e:
-        await interaction.response.send_message(f"❌ 채널 이동에 실패했습니다: {e}", ephemeral=True)
+        try:
+            await interaction.response.send_message(f"❌ 채널 이동에 실패했습니다: {e}", ephemeral=True)
+        except Exception as send_error:
+            print(f"에러 발생, 응답 전송 실패: {send_error}")
+        print(f"채널 이동 실패: {e}")
 
 
 # ▶️ Koyeb 헬스 체크용 웹서버 실행
