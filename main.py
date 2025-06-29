@@ -67,7 +67,7 @@ async def 검사(interaction: discord.Interaction):
     )
 
 
-@tree.command(name="소환", description="다른 음성 채널에 있는 유저들을 모두 현재 채널로 이동시킵니다.", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="소환", description="다른 음성 채널에 있는 유저들을 토끼록끼의 엄청난 파워로 현재 채널로 모두 이동시킵니다.", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
     guild = interaction.guild
     user_channel = interaction.user.voice.channel if interaction.user.voice else None
@@ -117,7 +117,7 @@ class TeamMoveView(discord.ui.View):
 
         self.moved = True
         button.disabled = True
-        await interaction.response.edit_message(content="🚀 팀 이동 완료! 버튼은 비활성화되었습니다.", view=self)
+        await interaction.response.edit_message(content="🚀 토끼록끼의 엄청난 속도로 팀 이동 완료! 버튼은 한번만 사용할 수 있지롱.", view=self)
         self.stop()
 
 
