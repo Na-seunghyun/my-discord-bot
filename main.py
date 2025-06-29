@@ -134,7 +134,70 @@ async def 소환(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"📢 총 {moved}명을 소환했습니다!")
 
-# /밥 명령어 부분 (변경 없음)
+# 🧩 팀짜기 뷰 및 명령어 복원
+class TeamMoveView(discord.ui.View):
+    def __init__(self, teams, empty_channels, origin_channel):
+        super().__init__(timeout=None)
+        self.teams = teams
+        self.empty_channels = empty_channels
+        self.origin_channel = origin_channel
+        self.moved = False
+
+    @discord.ui.button(label="✅ 팀 이동 시작", style=discord.ButtonStyle.green)
+    async def move(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.moved:
+            await interaction.response.send_message("⚠️ 이미 이동 완료됨", ephemeral=True)
+            return
+        for team, channel in zip(self.teams[1:], self.empty_channels):
+            for member in team:
+                try:
+                    await member.move_to(channel)
+                except:
+                    pass
+        self.moved = True
+        button.disabled = True
+        await interaction.response.edit_message(content="🚀 팀 이동 완료!", view=self)
+        self.stop()
+
+@tree.command(name="팀짜기", description="팀을 나누고 버튼으로 이동시킵니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(team_size="팀당 인원수 선택")
+@app_commands.choices(team_size=[
+    app_commands.Choice(name="2", value=2),
+    app_commands.Choice(name="3", value=3),
+    app_commands.Choice(name="4", value=4),
+])
+async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Choice[int]):
+    user_channel = interaction.user.voice.channel if interaction.user.voice else None
+    if not user_channel:
+        await interaction.response.send_message("❌ 음성 채널에 먼저 들어가 주세요!", ephemeral=True)
+        return
+
+    members = [m for m in user_channel.members if not m.bot]
+    if len(members) < 2:
+        await interaction.response.send_message("❌ 최소 2명 필요!", ephemeral=True)
+        return
+
+    random.shuffle(members)
+    teams = [members[i:i + team_size.value] for i in range(0, len(members), team_size.value)]
+
+    guild = interaction.guild
+    candidate_channels = [discord.utils.get(guild.voice_channels, name=f"일반{i}") for i in range(1, 17)]
+    empty_channels = [ch for ch in candidate_channels if ch and len(ch.members) == 0 and ch != user_channel]
+
+    if len(empty_channels) < len(teams) - 1:
+        await interaction.response.send_message("❌ 빈 채널 부족!", ephemeral=True)
+        return
+
+    msg = f"🎲 팀 나누기 완료! 팀당 {team_size.value}명\n\n"
+    msg += f"**팀 1 (현재 채널):** {', '.join(m.mention for m in teams[0])}\n"
+    for idx, (team, channel) in enumerate(zip(teams[1:], empty_channels), start=2):
+        mentions = ", ".join(m.mention for m in team)
+        msg += f"**팀 {idx} ({channel.name}):** {mentions}\n"
+
+    view = TeamMoveView(teams, empty_channels, user_channel)
+    await interaction.response.send_message(msg, view=view)
+
+# /밥 명령어
 @tree.command(name="밥", description="밥좀묵겠습니다 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
 async def 밥(interaction: discord.Interaction):
     user = interaction.user
