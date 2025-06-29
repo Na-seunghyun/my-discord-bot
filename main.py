@@ -1,3 +1,5 @@
+from keep_alive import keep_alive  # ✅ 추가: Koyeb 헬스체크용 Flask 서버 실행
+
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -172,6 +174,9 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
     view = TeamMoveView(teams=teams, empty_channels=empty_channels, origin_channel=origin_channel)
     await interaction.response.send_message(msg, view=view)
 
+
+# ▶️ keep_alive를 먼저 실행
+keep_alive()  # ✅ Koyeb 헬스체크를 위한 웹 서버 실행
 
 # ▶️ 디스코드 봇 실행
 TOKEN = os.getenv("DISCORD_TOKEN")
