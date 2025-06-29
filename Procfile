@@ -1,1 +1,2 @@
-python main.py
+[build]
+  command = "python main.py"
