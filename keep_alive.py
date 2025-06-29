@@ -1,15 +1,20 @@
-from flask import Flask
-from threading import Thread
+# keep_alive.py
+from aiohttp import web
+import asyncio
 
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "봇이 실행 중입니다!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
+async def handle(request):
+    return web.Response(text="봇이 실행 중입니다!")
 
 def keep_alive():
-    t = Thread(target=run)
-    t.start()
+    app = web.Application()
+    app.router.add_get("/", handle)
+
+    runner = web.AppRunner(app)
+
+    async def start_app():
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", 8080)
+        await site.start()
+
+    loop = asyncio.get_event_loop()
+    loop.create_task(start_app())
