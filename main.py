@@ -15,20 +15,15 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# 닉네임 정규식 패턴
 nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
 
 
 @bot.event
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
-
-    # 전역 명령어 삭제
     tree.clear_commands(guild=None)
     await tree.sync(guild=None)
     print("❎ 전역 명령어 삭제 요청 완료")
-
-    # 길드 명령어 등록
     await tree.sync(guild=guild)
     print(f"✅ 봇 로그인 완료: {bot.user} | 길드 슬래시 명령어 동기화 완료")
 
@@ -41,7 +36,6 @@ async def 검사(interaction: discord.Interaction):
         return
 
     await interaction.response.defer(ephemeral=True)
-
     count = 0
     for member in guild.members:
         if member.bot:
@@ -55,8 +49,6 @@ async def 검사(interaction: discord.Interaction):
             clean_parts = [p.strip().replace(" ", "") for p in parts]
             cleaned_nickname = "/".join(clean_parts)
             valid = bool(nickname_pattern.fullmatch(cleaned_nickname))
-
-        print(f"DEBUG 검사중: '{raw_nickname}' -> '{cleaned_nickname}' 유효: {valid}")
 
         if not valid:
             try:
@@ -75,7 +67,34 @@ async def 검사(interaction: discord.Interaction):
     )
 
 
-@tree.command(name="팀짜기", description="음성 채널 멤버를 팀당 인원수로 나누고 빈 채널로 이동", guild=discord.Object(id=GUILD_ID))
+class TeamMoveView(discord.ui.View):
+    def __init__(self, teams, empty_channels, origin_channel):
+        super().__init__(timeout=None)
+        self.teams = teams
+        self.empty_channels = empty_channels
+        self.origin_channel = origin_channel
+        self.moved = False  # ✅ 중복 이동 방지 플래그
+
+    @discord.ui.button(label="✅ 팀 이동 시작", style=discord.ButtonStyle.green)
+    async def move_teams(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.moved:
+            await interaction.response.send_message("⚠️ 이미 팀 이동이 완료되었습니다.", ephemeral=True)
+            return
+
+        for team, channel in zip(self.teams[1:], self.empty_channels):
+            for member in team:
+                try:
+                    await member.move_to(channel)
+                except Exception as e:
+                    print(f"{member} 이동 실패: {e}")
+
+        self.moved = True
+        button.disabled = True
+        await interaction.response.edit_message(content="🚀 팀 이동 완료! 버튼은 비활성화되었습니다.", view=self)
+        self.stop()
+
+
+@tree.command(name="팀짜기", description="음성 채널 멤버를 팀당 인원수로 나누고 이동 버튼을 제공합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(team_size="팀당 인원수 (2, 3, 4 중 선택)")
 @app_commands.choices(team_size=[
     app_commands.Choice(name="2", value=2),
@@ -100,30 +119,15 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
         await interaction.response.send_message("❌ 팀을 나누기 위해서는 최소 2명이 필요합니다.", ephemeral=True)
         return
 
-    team_size_value = team_size.value
     random.shuffle(members)
+    team_size_value = team_size.value
+    teams = [members[i:i + team_size_value] for i in range(0, len(members), team_size_value)]
 
-    # 팀 나누기
-    teams = []
-    for i in range(0, len(members), team_size_value):
-        teams.append(members[i:i + team_size_value])
-
-    # "일반1" ~ "일반16" 음성 채널 리스트 찾기
     voice_channel_names = [f"일반{i}" for i in range(1, 17)]
-    target_channels = []
-    for name in voice_channel_names:
-        ch = discord.utils.get(guild.voice_channels, name=name)
-        if ch:
-            target_channels.append(ch)
+    target_channels = [discord.utils.get(guild.voice_channels, name=name) for name in voice_channel_names]
+    target_channels = [ch for ch in target_channels if ch is not None]
+    empty_channels = [ch for ch in target_channels if len(ch.members) == 0 and ch != origin_channel]
 
-    # 빈 채널 리스트 만들기 (이미 인원이 있는 채널 제외)
-    empty_channels = [ch for ch in target_channels if len(ch.members) == 0]
-
-    # 호출 채널(origin_channel)은 빈 채널에서 제외
-    if origin_channel in empty_channels:
-        empty_channels.remove(origin_channel)
-
-    # 이동할 팀(팀 2부터) 수와 빈 채널 수 비교
     if len(empty_channels) < len(teams) - 1:
         await interaction.response.send_message(
             f"❌ 빈 음성 채널이 부족합니다! 필요한 채널: {len(teams) - 1}, 비어있는 채널: {len(empty_channels)}",
@@ -131,28 +135,15 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
         )
         return
 
-    # 팀 1은 이동 안 함, 팀 2부터 빈 채널에 차례대로 이동
-    for team, channel in zip(teams[1:], empty_channels):
-        for member in team:
-            try:
-                await member.move_to(channel)
-            except Exception as e:
-                print(f"{member} 이동 실패: {e}")
-
-    # 결과 메시지 작성
-    msg = f"🎲 팀 나누기 및 음성 채널 이동 완료! (팀당 {team_size_value}명 기준)\n\n"
-    # 팀1은 호출 채널에 그대로
-    mentions_team1 = ", ".join(m.mention for m in teams[0])
-    msg += f"**팀 1 (기존 채널 {origin_channel.name}):** {mentions_team1}\n"
-
-    # 팀 2부터 이동 채널 명시
+    msg = f"🎲 팀 나누기 완료! 팀당 {team_size_value}명 기준입니다.\n\n"
+    msg += f"**팀 1 (현재 채널 {origin_channel.name}):** {', '.join(m.mention for m in teams[0])}\n"
     for idx, (team, channel) in enumerate(zip(teams[1:], empty_channels), start=2):
         mentions = ", ".join(m.mention for m in team)
-        msg += f"**팀 {idx} ({channel.name}):** {mentions}\n"
+        msg += f"**팀 {idx} (예정 채널 {channel.name}):** {mentions}\n"
+    msg += "\n📌 아래 버튼을 클릭하면 팀별로 음성 채널로 이동됩니다."
 
-    msg += "\n❤️ 오덕봇을 사랑해주세요. 이 영광을 토끼록끼에게 바칩니다."
-
-    await interaction.response.send_message(msg, ephemeral=False)
+    view = TeamMoveView(teams=teams, empty_channels=empty_channels, origin_channel=origin_channel)
+    await interaction.response.send_message(msg, view=view)
 
 
 # ▶️ 디스코드 봇 실행
