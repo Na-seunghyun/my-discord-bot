@@ -31,10 +31,18 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
         try:
             await user.move_to(None)
             print(f"{user} 님이 {channel.name}에서 자동 퇴장 처리됨")
+
+            # 자유채팅방에 메시지 보내기
+            guild = user.guild
+            text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+            if text_channel:
+                await text_channel.send(f"{user.mention} 님, 결국 20분 동안 밥을 먹지 못해 강제 퇴장 당했습니다. 😢")
+
         except Exception as e:
             print(f"강제 퇴장 실패: {e}")
         finally:
             auto_disconnect_tasks.pop(user.id, None)
+
 
 # ✅ 음성 상태 변화 감지 (자동퇴장 취소 + 대기방 메시지 전송 통합)
 @bot.event
@@ -219,7 +227,7 @@ async def 밥(interaction: discord.Interaction):
             auto_disconnect_tasks[user.id].cancel()
 
         # 새 타이머 등록
-        task = asyncio.create_task(auto_disconnect_after_timeout(user, target_channel, timeout=1200))
+        task = asyncio.create_task(auto_disconnect_after_timeout(user, target_channel, timeout=10))
         auto_disconnect_tasks[user.id] = task
 
     except Exception as e:
