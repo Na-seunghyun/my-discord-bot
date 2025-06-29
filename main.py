@@ -220,7 +220,7 @@ async def 밥(interaction: discord.Interaction):
     try:
         await user.move_to(target_channel)
         await interaction.response.send_message(
-            f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 토끼록끼의 강력한 파워로 자동 퇴장된다!.",
+            f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 당신은 자동 퇴장처리 됩니다.",
             ephemeral=True
         )
         await text_channel.send(f"{user.mention}님, 20분 동안 밥을 먹지 못하면 토끼록끼의 강력한 염력으로 강제퇴장 당할 수 있습니다.")
