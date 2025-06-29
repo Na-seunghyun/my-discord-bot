@@ -7,7 +7,6 @@ import re
 import os
 import random
 import asyncio
-import aiohttp  # ✅ PUBG API 요청용
 
 # 디스코드 서버 ID
 GUILD_ID = 1309433603331198977
@@ -134,61 +133,6 @@ async def 소환(interaction: discord.Interaction):
                     pass
 
     await interaction.response.send_message(f"📢 총 {moved}명을 소환했습니다!")
-
-# 🆕 PUBG 전적 조회 명령어
-@tree.command(name="전적", description="카카오 배틀그라운드 전적을 조회합니다.", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(nickname="닉네임을 입력하세요.")
-async def 전적(interaction: discord.Interaction, nickname: str):
-    await interaction.response.defer(ephemeral=True)
-
-    api_key = os.getenv("PUBG_API_KEY")
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Accept": "application/vnd.api+json"
-    }
-    platform = "kakao"
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}", headers=headers) as res:
-                data = await res.json()
-                if res.status != 200 or not data.get("data"):
-                    await interaction.followup.send("❌ 유저를 찾을 수 없습니다.", ephemeral=True)
-                    return
-                player_id = data["data"][0]["id"]
-
-            async with session.get(f"https://api.pubg.com/shards/{platform}/players/{player_id}/matches", headers=headers) as res:
-                match_data = await res.json()
-                match_ids = match_data.get("data", [])
-                if not match_ids:
-                    await interaction.followup.send("⚠️ 최근 매치가 없습니다.", ephemeral=True)
-                    return
-                latest_match_id = match_ids[0]["id"]
-
-            async with session.get(f"https://api.pubg.com/shards/{platform}/matches/{latest_match_id}", headers=headers) as res:
-                match_detail = await res.json()
-
-            for participant in match_detail["included"]:
-                if participant["type"] == "participant" and participant["attributes"]["stats"]["name"] == nickname:
-                    stats = participant["attributes"]["stats"]
-                    break
-            else:
-                await interaction.followup.send("⚠️ 플레이어 전적 정보를 찾을 수 없습니다.", ephemeral=True)
-                return
-
-            embed = discord.Embed(title=f"{nickname}님의 최근 전적", color=0x1F8B4C)
-            embed.add_field(name="킬", value=str(stats["kills"]))
-            embed.add_field(name="어시스트", value=str(stats["assists"]))
-            embed.add_field(name="데미지", value=str(round(stats["damageDealt"], 1)))
-            embed.add_field(name="생존 시간", value=f"{int(stats['timeSurvived'])}초")
-            embed.add_field(name="KDA", value=f"{(stats['kills'] + stats['assists']) / (stats['DBNOs'] or 1):.2f}")
-            embed.set_footer(text="Powered by PUBG API")
-
-            await interaction.followup.send(embed=embed, ephemeral=True)
-
-    except Exception as e:
-        print("전적 명령어 오류:", e)
-        await interaction.followup.send("⚠️ 전적 조회 중 오류가 발생했습니다.", ephemeral=True)
 
 # /밥 명령어 부분 (변경 없음)
 @tree.command(name="밥", description="밥좀묵겠습니다 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
