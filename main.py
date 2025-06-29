@@ -191,29 +191,40 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
 async def 밥(interaction: discord.Interaction):
     user = interaction.user
     guild = interaction.guild
-    if not user.voice or not user.voice.channel:
-        await interaction.response.send_message("❌ 음성 채널에 먼저 접속해주세요.", ephemeral=True)
+    if not guild:
+        await interaction.response.send_message("❌ 서버에서만 사용할 수 있습니다.", ephemeral=True)
         return
 
     target_channel = discord.utils.get(guild.voice_channels, name="밥좀묵겠습니다")
     text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
 
-    if not target_channel or not text_channel:
-        await interaction.response.send_message("❌ 채널을 찾을 수 없습니다.", ephemeral=True)
+    if not target_channel:
+        await interaction.response.send_message("❌ '밥좀묵겠습니다' 음성채널을 찾을 수 없습니다.", ephemeral=True)
+        return
+
+    if not text_channel:
+        await interaction.response.send_message("❌ '자유채팅방' 텍스트채널을 찾을 수 없습니다.", ephemeral=True)
         return
 
     try:
+        # 음성 채널 이동 (유저가 음성채널에 없더라도 무조건 이동 시도)
         await user.move_to(target_channel)
-        await interaction.response.send_message(f"🍚 '{target_channel.name}' 채널로 이동했습니다!", ephemeral=True)
+        await interaction.response.send_message(f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 토끼록끼의 강력한 파워로 자동 퇴장된다!.", ephemeral=True)
+
+        # 즉시 경고 메시지 전송
         await text_channel.send(f"{user.mention}님, 20분 동안 밥을 먹지 못하면 토끼록끼의 강력한 염력으로 강제퇴장 당할 수 있습니다.")
 
-        # 자동퇴장 설정
+        # 기존 자동퇴장 타이머가 있다면 취소
         if user.id in auto_disconnect_tasks:
             auto_disconnect_tasks[user.id].cancel()
+
+        # 새 타이머 등록
         task = asyncio.create_task(auto_disconnect_after_timeout(user, target_channel, timeout=1200))
         auto_disconnect_tasks[user.id] = task
+
     except Exception as e:
-        await interaction.response.send_message(f"❌ 이동 실패: {e}", ephemeral=True)
+        await interaction.response.send_message(f"❌ 채널 이동에 실패했습니다: {e}", ephemeral=True)
+
 
 # ▶️ Koyeb 헬스 체크용 웹서버 실행
 keep_alive()
