@@ -75,7 +75,7 @@ async def 검사(interaction: discord.Interaction):
     )
 
 
-@tree.command(name="팀짜기", description="음성 채널 멤버를 입력한 팀당 인원수로 나눕니다.", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="팀짜기", description="음성 채널 멤버를 팀당 인원수로 나누고 빈 채널로 이동", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(team_size="팀당 인원수 (2, 3, 4 중 선택)")
 @app_commands.choices(team_size=[
     app_commands.Choice(name="2", value=2),
@@ -93,8 +93,8 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
         await interaction.response.send_message("❌ 음성 채널에 먼저 들어가야 합니다.", ephemeral=True)
         return
 
-    voice_channel = voice_state.channel
-    members = [m for m in voice_channel.members if not m.bot]
+    origin_channel = voice_state.channel
+    members = [m for m in origin_channel.members if not m.bot]
 
     if len(members) < 2:
         await interaction.response.send_message("❌ 팀을 나누기 위해서는 최소 2명이 필요합니다.", ephemeral=True)
@@ -103,60 +103,56 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
     team_size_value = team_size.value
     random.shuffle(members)
 
+    # 팀 나누기
     teams = []
     for i in range(0, len(members), team_size_value):
         teams.append(members[i:i + team_size_value])
 
-    msg = f"🎲 **음성 채널 '{voice_channel.name}'의 팀 나누기 결과 (팀당 {team_size_value}명 기준)** 🎲\n\n"
-    for idx, team in enumerate(teams, start=1):
+    # "일반1" ~ "일반16" 음성 채널 리스트 찾기
+    voice_channel_names = [f"일반{i}" for i in range(1, 17)]
+    target_channels = []
+    for name in voice_channel_names:
+        ch = discord.utils.get(guild.voice_channels, name=name)
+        if ch:
+            target_channels.append(ch)
+
+    # 빈 채널 리스트 만들기 (이미 인원이 있는 채널 제외)
+    empty_channels = [ch for ch in target_channels if len(ch.members) == 0]
+
+    # 호출 채널(origin_channel)은 빈 채널에서 제외
+    if origin_channel in empty_channels:
+        empty_channels.remove(origin_channel)
+
+    # 이동할 팀(팀 2부터) 수와 빈 채널 수 비교
+    if len(empty_channels) < len(teams) - 1:
+        await interaction.response.send_message(
+            f"❌ 빈 음성 채널이 부족합니다! 필요한 채널: {len(teams) - 1}, 비어있는 채널: {len(empty_channels)}",
+            ephemeral=True
+        )
+        return
+
+    # 팀 1은 이동 안 함, 팀 2부터 빈 채널에 차례대로 이동
+    for team, channel in zip(teams[1:], empty_channels):
+        for member in team:
+            try:
+                await member.move_to(channel)
+            except Exception as e:
+                print(f"{member} 이동 실패: {e}")
+
+    # 결과 메시지 작성
+    msg = f"🎲 팀 나누기 및 음성 채널 이동 완료! (팀당 {team_size_value}명 기준)\n\n"
+    # 팀1은 호출 채널에 그대로
+    mentions_team1 = ", ".join(m.mention for m in teams[0])
+    msg += f"**팀 1 (기존 채널 {origin_channel.name}):** {mentions_team1}\n"
+
+    # 팀 2부터 이동 채널 명시
+    for idx, (team, channel) in enumerate(zip(teams[1:], empty_channels), start=2):
         mentions = ", ".join(m.mention for m in team)
-        msg += f"**팀 {idx}:** {mentions}\n"
+        msg += f"**팀 {idx} ({channel.name}):** {mentions}\n"
 
     msg += "\n❤️ 오덕봇을 사랑해주세요. 이 영광을 토끼록끼에게 바칩니다."
 
     await interaction.response.send_message(msg, ephemeral=False)
-
-
-@tree.command(name="소환", description="'밥좀묵겠습니다' 채널 제외 음성 참가자들을 사용자가 있는 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
-async def 통합이동(interaction: discord.Interaction):
-    guild = interaction.guild
-    if not guild:
-        await interaction.response.send_message("❌ 서버 내에서만 사용할 수 있습니다.", ephemeral=True)
-        return
-
-    user_voice = interaction.user.voice
-    if not user_voice or not user_voice.channel:
-        await interaction.response.send_message("❌ 명령어를 사용하려면 먼저 음성 채널에 들어가 있어야 합니다.", ephemeral=True)
-        return
-
-    target_channel = user_voice.channel
-    exclude_channel_name = "밥좀묵겠습니다"
-    exclude_channel = discord.utils.get(guild.voice_channels, name=exclude_channel_name)
-
-    members_to_move = []
-
-    for voice_channel in guild.voice_channels:
-        if voice_channel == exclude_channel or voice_channel == target_channel:
-            continue
-
-        for member in voice_channel.members:
-            if not member.bot:
-                members_to_move.append(member)
-
-    if not members_to_move:
-        await interaction.response.send_message("❌ 이동할 멤버가 없습니다.", ephemeral=True)
-        return
-
-    for member in members_to_move:
-        try:
-            await member.move_to(target_channel)
-        except Exception as e:
-            print(f"멤버 이동 실패: {member} - {e}")
-
-    await interaction.response.send_message(
-        f"✅ '밥좀묵겠습니다' 채널과 사용자가 있는 '{target_channel.name}' 채널을 제외한 모든 음성 참가자 {len(members_to_move)}명을 '{target_channel.name}' 채널로 이동 완료했습니다.",
-        ephemeral=False
-    )
 
 
 # ▶️ 디스코드 봇 실행
