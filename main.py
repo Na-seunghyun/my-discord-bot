@@ -6,6 +6,7 @@ from discord import app_commands
 import re
 import os
 import random
+import requests
 import asyncio
 
 # 디스코드 서버 ID
@@ -246,6 +247,44 @@ async def 밥(interaction: discord.Interaction):
         except Exception as send_error:
             print(f"에러 발생, 응답 전송 실패: {send_error}")
         print(f"채널 이동 실패: {e}")
+
+
+# 📊 배그 전적 조회 슬래시 명령어
+@tree.command(name="전적", description="배틀그라운드 전적을 조회합니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(nickname="PUBG 닉네임 입력 (예: rogkki)")
+async def 전적(interaction: discord.Interaction, nickname: str):
+    await interaction.response.defer(ephemeral=True)
+
+    api_key = os.getenv("PUBG_API_KEY")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/vnd.api+json"
+    }
+
+    try:
+        # 플랫폼: steam, kakao, xbox 등 (여기선 steam 기준)
+        platform = "steam"
+        url = f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}"
+        res = requests.get(url, headers=headers)
+        if res.status_code == 429:
+            await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+            return
+        if res.status_code == 404 or not res.json().get("data"):
+            await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
+            return
+
+        player_data = res.json()["data"][0]
+        player_id = player_data["id"]
+
+        await interaction.followup.send(
+            f"🎮 **{nickname}** 님의 PUBG 전적:\n\n"
+            f"🔗 [OP.GG에서 보기](https://pubg.op.gg/user/{nickname})\n"
+            f"🆔 ID: `{player_id}`"
+        )
+
+    except Exception as e:
+        await interaction.followup.send(f"⚠️ 오류 발생: {e}", ephemeral=True)
+
 
 
 # ▶️ Koyeb 헬스 체크용 웹서버 실행
