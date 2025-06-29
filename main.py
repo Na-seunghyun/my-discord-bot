@@ -111,6 +111,28 @@ async def 검사(interaction: discord.Interaction):
 
     await interaction.followup.send(f"🔍 닉네임 검사 완료: {count}명 오류", ephemeral=True)
 
+@tree.command(name="랜덤퇴장", description="음성채널 2명 이상일 때, 랜덤으로 한 명을 퇴장시킵니다.", guild=discord.Object(id=GUILD_ID))
+async def 랜덤퇴장(interaction: discord.Interaction):
+    user = interaction.user
+    if not user.voice or not user.voice.channel:
+        await interaction.response.send_message("❌ 먼저 음성 채널에 입장해 주세요.", ephemeral=True)
+        return
+
+    channel = user.voice.channel
+    members = [m for m in channel.members if not m.bot]
+
+    if len(members) < 2:
+        await interaction.response.send_message("❌ 음성채널 인원이 2명 이상이어야만 사용할 수 있습니다.", ephemeral=True)
+        return
+
+    kicked = random.choice(members)
+    try:
+        await kicked.move_to(None)
+        await interaction.response.send_message(f"👋 {kicked.mention} 님이 랜덤으로 퇴장되었습니다.", ephemeral=False)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ 퇴장 처리 중 오류가 발생했습니다: {e}", ephemeral=True)
+
+
 # 📣 소환 명령어 (변경 없음)
 @tree.command(name="소환", description="모든 유저를 현재 음성 채널로 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
