@@ -25,7 +25,6 @@ nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
 # 자동 퇴장 태스크 관리
 auto_disconnect_tasks = {}
 
-# 자동 퇴장 타이머 함수 (로그 추가)
 async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.VoiceChannel, timeout=1200):
     print(f"[자동퇴장 타이머 시작] {user}님, {timeout}초 후 자동퇴장 대기중...")
     await asyncio.sleep(timeout)
@@ -35,7 +34,6 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
             await user.move_to(None)
             print(f"{user} 님이 {channel.name}에서 자동 퇴장 처리됨")
 
-            # 자유채팅방에 메시지 보내기
             guild = user.guild
             text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
             if text_channel:
@@ -49,7 +47,6 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
         print(f"{user} 님이 이미 채널을 떠났거나 다른 채널에 있습니다.")
         auto_disconnect_tasks.pop(user.id, None)
 
-# ✅ 음성 상태 변화 감지 (자동퇴장 취소 + 대기방 메시지 전송 통합)
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.bot:
@@ -72,14 +69,12 @@ async def on_voice_state_update(member, before, after):
                     f"나를 끼워주지 않으면 토끼록끼가 모든 음성채널을 폭파합니다. 💥🐰"
                 )
 
-# ⏱ 봇 준비 시
 @bot.event
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
     await tree.sync(guild=guild)
     print(f"✅ 봇 로그인 완료: {bot.user} | 슬래시 명령어 동기화 완료")
 
-# 🧪 닉네임 검사 명령어 (변경 없음)
 @tree.command(name="검사", description="서버 전체 닉네임을 검사합니다.", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
     guild = interaction.guild
@@ -112,7 +107,6 @@ async def 검사(interaction: discord.Interaction):
 
     await interaction.followup.send(f"🔍 닉네임 검사 완료: {count}명 오류", ephemeral=True)
 
-# 📣 소환 명령어 (변경 없음)
 @tree.command(name="소환", description="모든 유저를 현재 음성 채널로 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
     user_channel = interaction.user.voice.channel if interaction.user.voice else None
@@ -135,7 +129,6 @@ async def 소환(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"📢 총 {moved}명을 소환했습니다!")
 
-# 🧩 팀짜기 뷰 및 명령어 (변경 없음)
 class TeamMoveView(discord.ui.View):
     def __init__(self, teams, empty_channels, origin_channel):
         super().__init__(timeout=None)
@@ -198,7 +191,6 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
     view = TeamMoveView(teams, empty_channels, user_channel)
     await interaction.response.send_message(msg, view=view)
 
-# /밥 명령어 부분 (변경 없음)
 @tree.command(name="밥", description="밥좀묵겠습니다 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
 async def 밥(interaction: discord.Interaction):
     user = interaction.user
@@ -219,22 +211,18 @@ async def 밥(interaction: discord.Interaction):
         return
 
     try:
-        # 음성 채널 이동
         await user.move_to(target_channel)
         await interaction.response.send_message(
             f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 토끼록끼의 강력한 파워로 자동 퇴장된다!.",
             ephemeral=True
         )
 
-        # 즉시 경고 메시지 전송
         await text_channel.send(f"{user.mention}님, 20분 동안 밥을 먹지 못하면 토끼록끼의 강력한 염력으로 강제퇴장 당할 수 있습니다.")
 
-        # 기존 자동퇴장 타이머 취소
         if user.id in auto_disconnect_tasks:
             auto_disconnect_tasks[user.id].cancel()
             print(f"[타이머 취소] 기존 {user}님의 자동퇴장 타이머가 취소되었습니다.")
 
-        # 새 타이머 등록 (1200초 = 20분)
         task = asyncio.create_task(auto_disconnect_after_timeout(user, target_channel, timeout=1200))
         auto_disconnect_tasks[user.id] = task
         print(f"[타이머 등록] {user}님 자동퇴장 타이머가 등록되었습니다.")
@@ -246,69 +234,76 @@ async def 밥(interaction: discord.Interaction):
             print(f"에러 발생, 응답 전송 실패: {send_error}")
         print(f"채널 이동 실패: {e}")
 
-# 📊 배그 전적 조회 슬래시 명령어 (비동기 버전 + 플랫폼 선택)
+# 비동기 요청 함수
+async def fetch(session, url, headers):
+    async with session.get(url, headers=headers) as response:
+        if response.status == 429:
+            raise Exception("Too Many Requests")
+        if response.status == 404:
+            raise Exception("Not Found")
+        if response.status != 200:
+            raise Exception(f"API Error {response.status}")
+        return await response.json()
+
 @tree.command(name="전적", description="배틀그라운드 전적을 조회합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(nickname="PUBG 닉네임 입력", platform="플랫폼 선택 (kakao 또는 steam)")
 @app_commands.choices(platform=[
     app_commands.Choice(name="kakao", value="kakao"),
     app_commands.Choice(name="steam", value="steam"),
 ])
-async def 전적(interaction: discord.Interaction, nickname: str):
+async def 전적(interaction: discord.Interaction, nickname: str, platform: app_commands.Choice[str]):
     await interaction.response.defer(ephemeral=True)
 
     api_key = os.getenv("PUBG_API_KEY")
+    if not api_key:
+        await interaction.followup.send("❌ API 키가 설정되어 있지 않습니다.", ephemeral=True)
+        return
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/vnd.api+json"
     }
-    platform = "kakao"
+    platform_value = platform.value
     nickname = nickname.strip()
 
-    # 플레이어 조회
-    url = f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}"
-    res = requests.get(url, headers=headers)
-    if res.status_code == 429:
-        await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
-        return
-    if res.status_code == 404 or not res.json().get("data"):
-        await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
-        return
-    if res.status_code != 200:
-        await interaction.followup.send(f"⚠️ API 오류 발생: {res.status_code}", ephemeral=True)
-        return
+    async with aiohttp.ClientSession() as session:
+        try:
+            # 플레이어 정보 조회
+            url = f"https://api.pubg.com/shards/{platform_value}/players?filter[playerNames]={nickname}"
+            player_data_res = await fetch(session, url, headers)
+            players = player_data_res.get("data", [])
+            if not players:
+                await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
+                return
 
-    player_data = res.json()["data"][0]
-    player_id = player_data["id"]
+            player_id = players[0]["id"]
 
-    # 매치 리스트 조회
-    matches_url = f"https://api.pubg.com/shards/{platform}/players/{player_id}/matches"
-    matches_res = requests.get(matches_url, headers=headers)
-    if matches_res.status_code == 429:
-        await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
-        return
-    if matches_res.status_code != 200:
-        await interaction.followup.send("⚠️ 매치 정보를 불러오는데 실패했습니다.", ephemeral=True)
-        return
+            # 매치 리스트 조회
+            matches_url = f"https://api.pubg.com/shards/{platform_value}/players/{player_id}/matches"
+            matches_data_res = await fetch(session, matches_url, headers)
+            matches = matches_data_res.get("data", [])
+            if not matches:
+                await interaction.followup.send("⚠️ 최근 매치 기록이 없습니다.", ephemeral=True)
+                return
 
-    matches_data = matches_res.json().get("data", [])
-    if not matches_data:
-        await interaction.followup.send("⚠️ 최근 매치 기록이 없습니다.", ephemeral=True)
-        return
+            latest_match_id = matches[0]["id"]
 
-    latest_match_id = matches_data[0]["id"]
+            # 매치 상세 조회
+            match_url = f"https://api.pubg.com/shards/{platform_value}/matches/{latest_match_id}"
+            match_data_res = await fetch(session, match_url, headers)
 
-    # 매치 상세 조회
-    match_url = f"https://api.pubg.com/shards/{platform}/matches/{latest_match_id}"
-    match_res = requests.get(match_url, headers=headers)
-    if match_res.status_code == 404:
-        await interaction.followup.send("⚠️ 최근 매치 상세 정보를 찾을 수 없습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
-        return
-    if match_res.status_code != 200:
-        await interaction.followup.send("⚠️ 매치 상세 정보를 불러오는데 실패했습니다.", ephemeral=True)
-        return
+            included = match_data_res.get("included", [])
+            participant_stats = None
+            for item in included:
+                if item.get("type") == "participant":
+                    stats = item.get("attributes", {}).get("stats", {})
+                    if stats.get("name", "").lower() == nickname.lower():
+                        participant_stats = stats
+                        break
 
-    # ... (이하 매치 데이터 처리 및 임베드 메시지 생성 코드)
-
+            if not participant_stats:
+                await interaction.followup.send("⚠️ 해당 매치 내 플레이어 전적을 찾을 수 없습니다.", ephemeral=True)
+                return
 
             kills = participant_stats.get("kills", 0)
             assists = participant_stats.get("assists", 0)
@@ -329,13 +324,13 @@ async def 전적(interaction: discord.Interaction, nickname: str):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
-            try:
-                await interaction.followup.send(f"⚠️ 오류 발생: {e}", ephemeral=True)
-            except Exception:
-                try:
-                    await interaction.response.send_message(f"⚠️ 오류 발생: {e}", ephemeral=True)
-                except Exception:
-                    print(f"전적 명령어 처리 중 치명적 오류 발생: {e}")
+            msg = str(e)
+            if msg == "Too Many Requests":
+                await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+            elif msg == "Not Found":
+                await interaction.followup.send("⚠️ 요청한 데이터를 찾을 수 없습니다.", ephemeral=True)
+            else:
+                await interaction.followup.send(f"⚠️ 오류 발생: {msg}", ephemeral=True)
 
 # ▶️ Koyeb 헬스 체크용 웹서버 실행
 keep_alive()
