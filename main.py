@@ -236,7 +236,7 @@ async def 밥(interaction: discord.Interaction):
             auto_disconnect_tasks[user.id].cancel()
             print(f"[타이머 취소] 기존 {user}님의 자동퇴장 타이머가 취소되었습니다.")
 
-        # 새 타이머 등록 (테스트용 10초, 실제 1200초로 변경)
+        # 새 타이머 등록 (1200초 = 20분)
         task = asyncio.create_task(auto_disconnect_after_timeout(user, target_channel, timeout=1200))
         auto_disconnect_tasks[user.id] = task
         print(f"[타이머 등록] {user}님 자동퇴장 타이머가 등록되었습니다.")
@@ -249,7 +249,7 @@ async def 밥(interaction: discord.Interaction):
         print(f"채널 이동 실패: {e}")
 
 
-# 📊 배그 전적 조회 슬래시 명령어 (카카오 플랫폼용)
+# 📊 배그 전적 조회 슬래시 명령어
 @tree.command(name="전적", description="배틀그라운드 전적을 조회합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(nickname="PUBG 닉네임 입력 (예: kakao 닉네임)")
 async def 전적(interaction: discord.Interaction, nickname: str):
@@ -261,8 +261,10 @@ async def 전적(interaction: discord.Interaction, nickname: str):
         "Accept": "application/vnd.api+json"
     }
 
+    platform = "kakao"
+
     try:
-        platform = "kakao"  # 카카오 플랫폼으로 변경
+        # 플레이어 ID 조회
         url = f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}"
         res = requests.get(url, headers=headers)
         if res.status_code == 429:
@@ -296,15 +298,17 @@ async def 전적(interaction: discord.Interaction, nickname: str):
             await interaction.followup.send("⚠️ 매치 상세 정보를 불러오는데 실패했습니다.", ephemeral=True)
             return
 
-        match_data = match_res.json()["data"]
-        included = match_res.json().get("included", [])
+        match_json = match_res.json()
+        included = match_json.get("included", [])
 
-        # 참가자 정보 찾기
+        # 참가자 스탯 찾기
         participant_stats = None
         for item in included:
-            if item["type"] == "participant" and item["attributes"]["stats"]["name"].lower() == nickname.lower():
-                participant_stats = item["attributes"]["stats"]
-                break
+            if item.get("type") == "participant":
+                stats = item.get("attributes", {}).get("stats", {})
+                if stats.get("name", "").lower() == nickname.lower():
+                    participant_stats = stats
+                    break
 
         if not participant_stats:
             await interaction.followup.send("⚠️ 해당 유저의 매치 데이터가 없습니다.", ephemeral=True)
@@ -315,7 +319,7 @@ async def 전적(interaction: discord.Interaction, nickname: str):
         damage = participant_stats.get("damageDealt", 0)
         dBNOs = participant_stats.get("DBNOs", 0)
         kill_death_ratio = participant_stats.get("killDeathRatio", 0.0)
-        # KDA 계산: (킬+어시스트)/다운 (DBNOs)
+        # KDA 계산: (킬 + 어시스트) / 다운(기절)
         kda = (kills + assists) / dBNOs if dBNOs > 0 else kills + assists
 
         embed = discord.Embed(title=f"{nickname}님의 최근 스쿼드 경기 전적", color=0x1F8B4C)
