@@ -253,17 +253,17 @@ async def 밥(interaction: discord.Interaction):
 @tree.command(name="전적", description="배틀그라운드 전적을 조회합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(nickname="PUBG 닉네임 입력 (예: kakao 닉네임)")
 async def 전적(interaction: discord.Interaction, nickname: str):
-    await interaction.response.defer(ephemeral=True)
-
-    api_key = os.getenv("PUBG_API_KEY")
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Accept": "application/vnd.api+json"
-    }
-
-    platform = "kakao"
-
     try:
+        await interaction.response.defer(ephemeral=True)  # 초기 응답 지연
+
+        api_key = os.getenv("PUBG_API_KEY")
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/vnd.api+json"
+        }
+
+        platform = "kakao"
+
         # 플레이어 ID 조회
         url = f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}"
         res = requests.get(url, headers=headers)
@@ -319,7 +319,6 @@ async def 전적(interaction: discord.Interaction, nickname: str):
         damage = participant_stats.get("damageDealt", 0)
         dBNOs = participant_stats.get("DBNOs", 0)
         kill_death_ratio = participant_stats.get("killDeathRatio", 0.0)
-        # KDA 계산: (킬 + 어시스트) / 다운(기절)
         kda = (kills + assists) / dBNOs if dBNOs > 0 else kills + assists
 
         embed = discord.Embed(title=f"{nickname}님의 최근 스쿼드 경기 전적", color=0x1F8B4C)
@@ -331,10 +330,18 @@ async def 전적(interaction: discord.Interaction, nickname: str):
         embed.add_field(name="킬/데스 비율", value=f"{kill_death_ratio:.2f}")
         embed.add_field(name="OP.GG 링크", value=f"https://pubg.op.gg/user/{nickname}", inline=False)
 
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     except Exception as e:
-        await interaction.followup.send(f"⚠️ 오류 발생: {e}", ephemeral=True)
+        # 에러 발생 시 응답 실패할 수 있으니 이중으로 시도
+        try:
+            await interaction.followup.send(f"⚠️ 오류 발생: {e}", ephemeral=True)
+        except Exception:
+            try:
+                await interaction.response.send_message(f"⚠️ 오류 발생: {e}", ephemeral=True)
+            except Exception:
+                print(f"전적 명령어 처리 중 치명적 오류 발생: {e}")
+
 
 
 # ▶️ Koyeb 헬스 체크용 웹서버 실행
