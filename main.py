@@ -67,6 +67,33 @@ async def 검사(interaction: discord.Interaction):
     )
 
 
+@tree.command(name="소환", description="다른 음성 채널에 있는 유저들을 모두 현재 채널로 이동시킵니다.", guild=discord.Object(id=GUILD_ID))
+async def 소환(interaction: discord.Interaction):
+    guild = interaction.guild
+    user_channel = interaction.user.voice.channel if interaction.user.voice else None
+
+    if not user_channel:
+        await interaction.response.send_message("❌ 먼저 음성 채널에 접속해주세요!", ephemeral=True)
+        return
+
+    exclude_channel_name = "밥좀묵겠습니다"
+    moved_count = 0
+
+    for vc in guild.voice_channels:
+        if vc.name == exclude_channel_name or vc == user_channel:
+            continue
+
+        for member in vc.members:
+            if not member.bot:
+                try:
+                    await member.move_to(user_channel)
+                    moved_count += 1
+                except Exception as e:
+                    print(f"{member} 이동 실패: {e}")
+
+    await interaction.response.send_message(f"📣 {moved_count}명을 {user_channel.name} 채널로 토끼롞끼의 강력한 힘으로 소환했습니다!")
+
+
 class TeamMoveView(discord.ui.View):
     def __init__(self, teams, empty_channels, origin_channel):
         super().__init__(timeout=None)
