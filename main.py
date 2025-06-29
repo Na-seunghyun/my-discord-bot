@@ -253,81 +253,62 @@ async def 밥(interaction: discord.Interaction):
     app_commands.Choice(name="kakao", value="kakao"),
     app_commands.Choice(name="steam", value="steam"),
 ])
-async def 전적(interaction: discord.Interaction, nickname: str, platform: app_commands.Choice[str]):
+async def 전적(interaction: discord.Interaction, nickname: str):
     await interaction.response.defer(ephemeral=True)
 
-    platform_value = platform.value.lower()
-    if platform_value not in ("kakao", "steam"):
-        await interaction.followup.send("❌ 플랫폼은 'kakao' 또는 'steam'만 지원합니다.", ephemeral=True)
-        return
-
     api_key = os.getenv("PUBG_API_KEY")
-    if not api_key:
-        await interaction.followup.send("❌ PUBG API 키가 설정되어 있지 않습니다.", ephemeral=True)
-        return
-
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/vnd.api+json"
     }
+    platform = "kakao"
+    nickname = nickname.strip()
 
-    async with aiohttp.ClientSession() as session:
-        try:
-            # 플레이어 ID 조회
-            url = f"https://api.pubg.com/shards/{platform_value}/players?filter[playerNames]={nickname}"
-            async with session.get(url, headers=headers) as res:
-                if res.status == 429:
-                    await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
-                    return
-                if res.status == 404:
-                    await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
-                    return
-                if res.status != 200:
-                    await interaction.followup.send(f"❌ 플레이어 조회 실패 (HTTP {res.status})", ephemeral=True)
-                    return
-                data = await res.json()
+    # 플레이어 조회
+    url = f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}"
+    res = requests.get(url, headers=headers)
+    if res.status_code == 429:
+        await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+        return
+    if res.status_code == 404 or not res.json().get("data"):
+        await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
+        return
+    if res.status_code != 200:
+        await interaction.followup.send(f"⚠️ API 오류 발생: {res.status_code}", ephemeral=True)
+        return
 
-            player_data = data.get("data")
-            if not player_data:
-                await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
-                return
-            player_id = player_data[0]["id"]
+    player_data = res.json()["data"][0]
+    player_id = player_data["id"]
 
-            # 최근 매치 조회
-            matches_url = f"https://api.pubg.com/shards/{platform_value}/players/{player_id}/matches"
-            async with session.get(matches_url, headers=headers) as matches_res:
-                if matches_res.status != 200:
-                    await interaction.followup.send(f"⚠️ 매치 정보를 불러오는데 실패했습니다. (HTTP {matches_res.status})", ephemeral=True)
-                    return
-                matches_data = await matches_res.json()
+    # 매치 리스트 조회
+    matches_url = f"https://api.pubg.com/shards/{platform}/players/{player_id}/matches"
+    matches_res = requests.get(matches_url, headers=headers)
+    if matches_res.status_code == 429:
+        await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+        return
+    if matches_res.status_code != 200:
+        await interaction.followup.send("⚠️ 매치 정보를 불러오는데 실패했습니다.", ephemeral=True)
+        return
 
-            matches_list = matches_data.get("data", [])
-            if not matches_list:
-                await interaction.followup.send("⚠️ 최근 매치 기록이 없습니다.", ephemeral=True)
-                return
+    matches_data = matches_res.json().get("data", [])
+    if not matches_data:
+        await interaction.followup.send("⚠️ 최근 매치 기록이 없습니다.", ephemeral=True)
+        return
 
-            latest_match_id = matches_list[0]["id"]
+    latest_match_id = matches_data[0]["id"]
 
-            # 매치 상세 조회
-            match_url = f"https://api.pubg.com/shards/{platform_value}/matches/{latest_match_id}"
-            async with session.get(match_url, headers=headers) as match_res:
-                if match_res.status != 200:
-                    await interaction.followup.send(f"⚠️ 매치 상세 정보를 불러오는데 실패했습니다. (HTTP {match_res.status})", ephemeral=True)
-                    return
-                match_json = await match_res.json()
+    # 매치 상세 조회
+    match_url = f"https://api.pubg.com/shards/{platform}/matches/{latest_match_id}"
+    match_res = requests.get(match_url, headers=headers)
+    if match_res.status_code == 404:
+        await interaction.followup.send("⚠️ 최근 매치 상세 정보를 찾을 수 없습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+        return
+    if match_res.status_code != 200:
+        await interaction.followup.send("⚠️ 매치 상세 정보를 불러오는데 실패했습니다.", ephemeral=True)
+        return
 
-            included = match_json.get("included", [])
-            participant_stats = None
-            for item in included:
-                if item.get("type") == "participant":
-                    stats = item.get("attributes", {}).get("stats", {})
-                    if stats.get("name", "").lower() == nickname.lower():
-                        participant_stats = stats
-                        break
+    # ... (이하 매치 데이터 처리 및 임베드 메시지 생성 코드)
 
-            if not participant_stats:
-                await interaction.followup.send("⚠️ 해당 유저의 매치 데이터가 없습니다.", ephemeral=True)
-                return
 
             kills = participant_stats.get("kills", 0)
             assists = participant_stats.get("assists", 0)
