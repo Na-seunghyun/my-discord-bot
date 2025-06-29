@@ -7,7 +7,7 @@ import re
 import os
 import random
 import asyncio
-import aiohttp  # 비동기 HTTP 클라이언트
+import aiohttp  # ✅ PUBG API 요청용
 
 # 디스코드 서버 ID
 GUILD_ID = 1309433603331198977
@@ -25,6 +25,7 @@ nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
 # 자동 퇴장 태스크 관리
 auto_disconnect_tasks = {}
 
+# 자동 퇴장 타이머 함수 (로그 추가)
 async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.VoiceChannel, timeout=1200):
     print(f"[자동퇴장 타이머 시작] {user}님, {timeout}초 후 자동퇴장 대기중...")
     await asyncio.sleep(timeout)
@@ -34,6 +35,7 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
             await user.move_to(None)
             print(f"{user} 님이 {channel.name}에서 자동 퇴장 처리됨")
 
+            # 자유채팅방에 메시지 보내기
             guild = user.guild
             text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
             if text_channel:
@@ -47,6 +49,7 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
         print(f"{user} 님이 이미 채널을 떠났거나 다른 채널에 있습니다.")
         auto_disconnect_tasks.pop(user.id, None)
 
+# ✅ 음성 상태 변화 감지 (자동퇴장 취소 + 대기방 메시지 전송 통합)
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.bot:
@@ -69,12 +72,14 @@ async def on_voice_state_update(member, before, after):
                     f"나를 끼워주지 않으면 토끼록끼가 모든 음성채널을 폭파합니다. 💥🐰"
                 )
 
+# ⏱ 봇 준비 시
 @bot.event
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
     await tree.sync(guild=guild)
     print(f"✅ 봇 로그인 완료: {bot.user} | 슬래시 명령어 동기화 완료")
 
+# 🧪 닉네임 검사 명령어 (변경 없음)
 @tree.command(name="검사", description="서버 전체 닉네임을 검사합니다.", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
     guild = interaction.guild
@@ -107,6 +112,7 @@ async def 검사(interaction: discord.Interaction):
 
     await interaction.followup.send(f"🔍 닉네임 검사 완료: {count}명 오류", ephemeral=True)
 
+# 📣 소환 명령어 (변경 없음)
 @tree.command(name="소환", description="모든 유저를 현재 음성 채널로 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
     user_channel = interaction.user.voice.channel if interaction.user.voice else None
@@ -129,68 +135,62 @@ async def 소환(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"📢 총 {moved}명을 소환했습니다!")
 
-class TeamMoveView(discord.ui.View):
-    def __init__(self, teams, empty_channels, origin_channel):
-        super().__init__(timeout=None)
-        self.teams = teams
-        self.empty_channels = empty_channels
-        self.origin_channel = origin_channel
-        self.moved = False
+# 🆕 PUBG 전적 조회 명령어
+@tree.command(name="전적", description="카카오 배틀그라운드 전적을 조회합니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(nickname="닉네임을 입력하세요.")
+async def 전적(interaction: discord.Interaction, nickname: str):
+    await interaction.response.defer(ephemeral=True)
 
-    @discord.ui.button(label="✅ 팀 이동 시작", style=discord.ButtonStyle.green)
-    async def move(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.moved:
-            await interaction.response.send_message("⚠️ 이미 이동 완료됨", ephemeral=True)
-            return
-        for team, channel in zip(self.teams[1:], self.empty_channels):
-            for member in team:
-                try:
-                    await member.move_to(channel)
-                except:
-                    pass
-        self.moved = True
-        button.disabled = True
-        await interaction.response.edit_message(content="🚀 팀 이동 완료!", view=self)
-        self.stop()
+    api_key = os.getenv("PUBG_API_KEY")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/vnd.api+json"
+    }
+    platform = "kakao"
 
-@tree.command(name="팀짜기", description="팀을 나누고 버튼으로 이동시킵니다.", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(team_size="팀당 인원수 선택")
-@app_commands.choices(team_size=[
-    app_commands.Choice(name="2", value=2),
-    app_commands.Choice(name="3", value=3),
-    app_commands.Choice(name="4", value=4),
-])
-async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Choice[int]):
-    user_channel = interaction.user.voice.channel if interaction.user.voice else None
-    if not user_channel:
-        await interaction.response.send_message("❌ 음성 채널에 먼저 들어가 주세요!", ephemeral=True)
-        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}", headers=headers) as res:
+                data = await res.json()
+                if res.status != 200 or not data.get("data"):
+                    await interaction.followup.send("❌ 유저를 찾을 수 없습니다.", ephemeral=True)
+                    return
+                player_id = data["data"][0]["id"]
 
-    members = [m for m in user_channel.members if not m.bot]
-    if len(members) < 2:
-        await interaction.response.send_message("❌ 최소 2명 필요!", ephemeral=True)
-        return
+            async with session.get(f"https://api.pubg.com/shards/{platform}/players/{player_id}/matches", headers=headers) as res:
+                match_data = await res.json()
+                match_ids = match_data.get("data", [])
+                if not match_ids:
+                    await interaction.followup.send("⚠️ 최근 매치가 없습니다.", ephemeral=True)
+                    return
+                latest_match_id = match_ids[0]["id"]
 
-    random.shuffle(members)
-    teams = [members[i:i + team_size.value] for i in range(0, len(members), team_size.value)]
+            async with session.get(f"https://api.pubg.com/shards/{platform}/matches/{latest_match_id}", headers=headers) as res:
+                match_detail = await res.json()
 
-    guild = interaction.guild
-    candidate_channels = [discord.utils.get(guild.voice_channels, name=f"일반{i}") for i in range(1, 17)]
-    empty_channels = [ch for ch in candidate_channels if ch and len(ch.members) == 0 and ch != user_channel]
+            for participant in match_detail["included"]:
+                if participant["type"] == "participant" and participant["attributes"]["stats"]["name"] == nickname:
+                    stats = participant["attributes"]["stats"]
+                    break
+            else:
+                await interaction.followup.send("⚠️ 플레이어 전적 정보를 찾을 수 없습니다.", ephemeral=True)
+                return
 
-    if len(empty_channels) < len(teams) - 1:
-        await interaction.response.send_message("❌ 빈 채널 부족!", ephemeral=True)
-        return
+            embed = discord.Embed(title=f"{nickname}님의 최근 전적", color=0x1F8B4C)
+            embed.add_field(name="킬", value=str(stats["kills"]))
+            embed.add_field(name="어시스트", value=str(stats["assists"]))
+            embed.add_field(name="데미지", value=str(round(stats["damageDealt"], 1)))
+            embed.add_field(name="생존 시간", value=f"{int(stats['timeSurvived'])}초")
+            embed.add_field(name="KDA", value=f"{(stats['kills'] + stats['assists']) / (stats['DBNOs'] or 1):.2f}")
+            embed.set_footer(text="Powered by PUBG API")
 
-    msg = f"🎲 팀 나누기 완료! 팀당 {team_size.value}명\n\n"
-    msg += f"**팀 1 (현재 채널):** {', '.join(m.mention for m in teams[0])}\n"
-    for idx, (team, channel) in enumerate(zip(teams[1:], empty_channels), start=2):
-        mentions = ", ".join(m.mention for m in team)
-        msg += f"**팀 {idx} ({channel.name}):** {mentions}\n"
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
-    view = TeamMoveView(teams, empty_channels, user_channel)
-    await interaction.response.send_message(msg, view=view)
+    except Exception as e:
+        print("전적 명령어 오류:", e)
+        await interaction.followup.send("⚠️ 전적 조회 중 오류가 발생했습니다.", ephemeral=True)
 
+# /밥 명령어 부분 (변경 없음)
 @tree.command(name="밥", description="밥좀묵겠습니다 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
 async def 밥(interaction: discord.Interaction):
     user = interaction.user
@@ -216,7 +216,6 @@ async def 밥(interaction: discord.Interaction):
             f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 토끼록끼의 강력한 파워로 자동 퇴장된다!.",
             ephemeral=True
         )
-
         await text_channel.send(f"{user.mention}님, 20분 동안 밥을 먹지 못하면 토끼록끼의 강력한 염력으로 강제퇴장 당할 수 있습니다.")
 
         if user.id in auto_disconnect_tasks:
@@ -233,104 +232,6 @@ async def 밥(interaction: discord.Interaction):
         except Exception as send_error:
             print(f"에러 발생, 응답 전송 실패: {send_error}")
         print(f"채널 이동 실패: {e}")
-
-# 비동기 요청 함수
-async def fetch(session, url, headers):
-    async with session.get(url, headers=headers) as response:
-        if response.status == 429:
-            raise Exception("Too Many Requests")
-        if response.status == 404:
-            raise Exception("Not Found")
-        if response.status != 200:
-            raise Exception(f"API Error {response.status}")
-        return await response.json()
-
-@tree.command(name="전적", description="배틀그라운드 전적을 조회합니다.", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(nickname="PUBG 닉네임 입력", platform="플랫폼 선택 (kakao 또는 steam)")
-@app_commands.choices(platform=[
-    app_commands.Choice(name="kakao", value="kakao"),
-    app_commands.Choice(name="steam", value="steam"),
-])
-async def 전적(interaction: discord.Interaction, nickname: str, platform: app_commands.Choice[str]):
-    await interaction.response.defer(ephemeral=True)
-
-    api_key = os.getenv("PUBG_API_KEY")
-    if not api_key:
-        await interaction.followup.send("❌ API 키가 설정되어 있지 않습니다.", ephemeral=True)
-        return
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Accept": "application/vnd.api+json"
-    }
-    platform_value = platform.value
-    nickname = nickname.strip()
-
-    async with aiohttp.ClientSession() as session:
-        try:
-            # 플레이어 정보 조회
-            url = f"https://api.pubg.com/shards/{platform_value}/players?filter[playerNames]={nickname}"
-            player_data_res = await fetch(session, url, headers)
-            players = player_data_res.get("data", [])
-            if not players:
-                await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
-                return
-
-            player_id = players[0]["id"]
-
-            # 매치 리스트 조회
-            matches_url = f"https://api.pubg.com/shards/{platform_value}/players/{player_id}/matches"
-            matches_data_res = await fetch(session, matches_url, headers)
-            matches = matches_data_res.get("data", [])
-            if not matches:
-                await interaction.followup.send("⚠️ 최근 매치 기록이 없습니다.", ephemeral=True)
-                return
-
-            latest_match_id = matches[0]["id"]
-
-            # 매치 상세 조회
-            match_url = f"https://api.pubg.com/shards/{platform_value}/matches/{latest_match_id}"
-            match_data_res = await fetch(session, match_url, headers)
-
-            included = match_data_res.get("included", [])
-            participant_stats = None
-            for item in included:
-                if item.get("type") == "participant":
-                    stats = item.get("attributes", {}).get("stats", {})
-                    if stats.get("name", "").lower() == nickname.lower():
-                        participant_stats = stats
-                        break
-
-            if not participant_stats:
-                await interaction.followup.send("⚠️ 해당 매치 내 플레이어 전적을 찾을 수 없습니다.", ephemeral=True)
-                return
-
-            kills = participant_stats.get("kills", 0)
-            assists = participant_stats.get("assists", 0)
-            damage = participant_stats.get("damageDealt", 0)
-            dBNOs = participant_stats.get("DBNOs", 0)
-            kill_death_ratio = participant_stats.get("killDeathRatio", 0.0)
-            kda = (kills + assists) / dBNOs if dBNOs > 0 else kills + assists
-
-            embed = discord.Embed(title=f"{nickname}님의 최근 스쿼드 경기 전적", color=0x1F8B4C)
-            embed.add_field(name="킬", value=str(kills))
-            embed.add_field(name="어시스트", value=str(assists))
-            embed.add_field(name="다운(기절)", value=str(dBNOs))
-            embed.add_field(name="데미지", value=f"{damage:.1f}")
-            embed.add_field(name="KDA", value=f"{kda:.2f}")
-            embed.add_field(name="킬/데스 비율", value=f"{kill_death_ratio:.2f}")
-            embed.add_field(name="OP.GG 링크", value=f"https://pubg.op.gg/user/{nickname}", inline=False)
-
-            await interaction.followup.send(embed=embed, ephemeral=True)
-
-        except Exception as e:
-            msg = str(e)
-            if msg == "Too Many Requests":
-                await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
-            elif msg == "Not Found":
-                await interaction.followup.send("⚠️ 요청한 데이터를 찾을 수 없습니다.", ephemeral=True)
-            else:
-                await interaction.followup.send(f"⚠️ 오류 발생: {msg}", ephemeral=True)
 
 # ▶️ Koyeb 헬스 체크용 웹서버 실행
 keep_alive()
