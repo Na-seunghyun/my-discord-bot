@@ -117,6 +117,48 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
     await interaction.response.send_message(msg, ephemeral=False)
 
 
+@tree.command(name="소환", description="'밥좀묵겠습니다' 채널 제외 음성 참가자들을 사용자가 있는 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
+async def 통합이동(interaction: discord.Interaction):
+    guild = interaction.guild
+    if not guild:
+        await interaction.response.send_message("❌ 서버 내에서만 사용할 수 있습니다.", ephemeral=True)
+        return
+
+    user_voice = interaction.user.voice
+    if not user_voice or not user_voice.channel:
+        await interaction.response.send_message("❌ 명령어를 사용하려면 먼저 음성 채널에 들어가 있어야 합니다.", ephemeral=True)
+        return
+
+    target_channel = user_voice.channel
+    exclude_channel_name = "밥좀묵겠습니다"
+    exclude_channel = discord.utils.get(guild.voice_channels, name=exclude_channel_name)
+
+    members_to_move = []
+
+    for voice_channel in guild.voice_channels:
+        if voice_channel == exclude_channel or voice_channel == target_channel:
+            continue
+
+        for member in voice_channel.members:
+            if not member.bot:
+                members_to_move.append(member)
+
+    if not members_to_move:
+        await interaction.response.send_message("❌ 이동할 멤버가 없습니다.", ephemeral=True)
+        return
+
+    for member in members_to_move:
+        try:
+            await member.move_to(target_channel)
+        except Exception as e:
+            print(f"멤버 이동 실패: {member} - {e}")
+
+    await interaction.response.send_message(
+        f"✅ '밥좀묵겠습니다' 채널과 사용자가 있는 '{target_channel.name}' 채널을 제외한 모든 음성 참가자 {len(members_to_move)}명을 '{target_channel.name}' 채널로 이동 완료했습니다.",
+        ephemeral=False
+    )
+
+
 # ▶️ 디스코드 봇 실행
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
