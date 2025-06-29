@@ -9,7 +9,7 @@ async def start_app():
     app.router.add_get("/", handle)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 8000)
+    site = web.TCPSite(runner, "0.0.0.0", 80)
     await site.start()
     print("✅ 헬스 체크 서버 실행 중 (8000)")
 
