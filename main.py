@@ -236,7 +236,7 @@ async def 밥(interaction: discord.Interaction):
             print(f"[타이머 취소] 기존 {user}님의 자동퇴장 타이머가 취소되었습니다.")
 
         # 새 타이머 등록 (테스트용 10초, 실제 1200초로 변경)
-        task = asyncio.create_task(auto_disconnect_after_timeout(user, target_channel, timeout=1200))
+        task = asyncio.create_task(auto_disconnect_after_timeout(user, target_channel, timeout=20))
         auto_disconnect_tasks[user.id] = task
         print(f"[타이머 등록] {user}님 자동퇴장 타이머가 등록되었습니다.")
 
