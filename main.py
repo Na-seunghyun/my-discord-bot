@@ -6,8 +6,8 @@ from discord import app_commands
 import re
 import os
 import random
-import requests
 import asyncio
+import aiohttp  # 비동기 HTTP 클라이언트
 
 # 디스코드 서버 ID
 GUILD_ID = 1309433603331198977
@@ -49,7 +49,6 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
         print(f"{user} 님이 이미 채널을 떠났거나 다른 채널에 있습니다.")
         auto_disconnect_tasks.pop(user.id, None)
 
-
 # ✅ 음성 상태 변화 감지 (자동퇴장 취소 + 대기방 메시지 전송 통합)
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -80,7 +79,7 @@ async def on_ready():
     await tree.sync(guild=guild)
     print(f"✅ 봇 로그인 완료: {bot.user} | 슬래시 명령어 동기화 완료")
 
-# 🧪 닉네임 검사 명령어
+# 🧪 닉네임 검사 명령어 (변경 없음)
 @tree.command(name="검사", description="서버 전체 닉네임을 검사합니다.", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
     guild = interaction.guild
@@ -113,7 +112,7 @@ async def 검사(interaction: discord.Interaction):
 
     await interaction.followup.send(f"🔍 닉네임 검사 완료: {count}명 오류", ephemeral=True)
 
-# 📣 소환 명령어
+# 📣 소환 명령어 (변경 없음)
 @tree.command(name="소환", description="모든 유저를 현재 음성 채널로 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
     user_channel = interaction.user.voice.channel if interaction.user.voice else None
@@ -136,7 +135,7 @@ async def 소환(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"📢 총 {moved}명을 소환했습니다!")
 
-# 🧩 팀짜기 뷰
+# 🧩 팀짜기 뷰 및 명령어 (변경 없음)
 class TeamMoveView(discord.ui.View):
     def __init__(self, teams, empty_channels, origin_channel):
         super().__init__(timeout=None)
@@ -161,7 +160,6 @@ class TeamMoveView(discord.ui.View):
         await interaction.response.edit_message(content="🚀 팀 이동 완료!", view=self)
         self.stop()
 
-# 🎲 팀짜기 명령어
 @tree.command(name="팀짜기", description="팀을 나누고 버튼으로 이동시킵니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(team_size="팀당 인원수 선택")
 @app_commands.choices(team_size=[
@@ -200,7 +198,7 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
     view = TeamMoveView(teams, empty_channels, user_channel)
     await interaction.response.send_message(msg, view=view)
 
-# /밥 명령어 부분 수정 (타이머 등록 시 로그 추가)
+# /밥 명령어 부분 (변경 없음)
 @tree.command(name="밥", description="밥좀묵겠습니다 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
 async def 밥(interaction: discord.Interaction):
     user = interaction.user
@@ -248,101 +246,115 @@ async def 밥(interaction: discord.Interaction):
             print(f"에러 발생, 응답 전송 실패: {send_error}")
         print(f"채널 이동 실패: {e}")
 
-
-# 📊 배그 전적 조회 슬래시 명령어
+# 📊 배그 전적 조회 슬래시 명령어 (비동기 버전 + 플랫폼 선택)
 @tree.command(name="전적", description="배틀그라운드 전적을 조회합니다.", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(nickname="PUBG 닉네임 입력 (예: kakao 닉네임)")
-async def 전적(interaction: discord.Interaction, nickname: str):
-    try:
-        await interaction.response.defer(ephemeral=True)  # 초기 응답 지연
+@app_commands.describe(nickname="PUBG 닉네임 입력", platform="플랫폼 선택 (kakao 또는 steam)")
+@app_commands.choices(platform=[
+    app_commands.Choice(name="kakao", value="kakao"),
+    app_commands.Choice(name="steam", value="steam"),
+])
+async def 전적(interaction: discord.Interaction, nickname: str, platform: app_commands.Choice[str]):
+    await interaction.response.defer(ephemeral=True)
 
-        api_key = os.getenv("PUBG_API_KEY")
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Accept": "application/vnd.api+json"
-        }
+    platform_value = platform.value.lower()
+    if platform_value not in ("kakao", "steam"):
+        await interaction.followup.send("❌ 플랫폼은 'kakao' 또는 'steam'만 지원합니다.", ephemeral=True)
+        return
 
-        platform = "kakao"
+    api_key = os.getenv("PUBG_API_KEY")
+    if not api_key:
+        await interaction.followup.send("❌ PUBG API 키가 설정되어 있지 않습니다.", ephemeral=True)
+        return
 
-        # 플레이어 ID 조회
-        url = f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}"
-        res = requests.get(url, headers=headers)
-        if res.status_code == 429:
-            await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
-            return
-        if res.status_code == 404 or not res.json().get("data"):
-            await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
-            return
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/vnd.api+json"
+    }
 
-        player_data = res.json()["data"][0]
-        player_id = player_data["id"]
-
-        # 최근 매치 조회
-        matches_url = f"https://api.pubg.com/shards/{platform}/players/{player_id}/matches"
-        matches_res = requests.get(matches_url, headers=headers)
-        if matches_res.status_code != 200:
-            await interaction.followup.send("⚠️ 매치 정보를 불러오는데 실패했습니다.", ephemeral=True)
-            return
-
-        matches_data = matches_res.json().get("data", [])
-        if not matches_data:
-            await interaction.followup.send("⚠️ 최근 매치 기록이 없습니다.", ephemeral=True)
-            return
-
-        latest_match_id = matches_data[0]["id"]
-
-        # 매치 상세 조회
-        match_url = f"https://api.pubg.com/shards/{platform}/matches/{latest_match_id}"
-        match_res = requests.get(match_url, headers=headers)
-        if match_res.status_code != 200:
-            await interaction.followup.send("⚠️ 매치 상세 정보를 불러오는데 실패했습니다.", ephemeral=True)
-            return
-
-        match_json = match_res.json()
-        included = match_json.get("included", [])
-
-        # 참가자 스탯 찾기
-        participant_stats = None
-        for item in included:
-            if item.get("type") == "participant":
-                stats = item.get("attributes", {}).get("stats", {})
-                if stats.get("name", "").lower() == nickname.lower():
-                    participant_stats = stats
-                    break
-
-        if not participant_stats:
-            await interaction.followup.send("⚠️ 해당 유저의 매치 데이터가 없습니다.", ephemeral=True)
-            return
-
-        kills = participant_stats.get("kills", 0)
-        assists = participant_stats.get("assists", 0)
-        damage = participant_stats.get("damageDealt", 0)
-        dBNOs = participant_stats.get("DBNOs", 0)
-        kill_death_ratio = participant_stats.get("killDeathRatio", 0.0)
-        kda = (kills + assists) / dBNOs if dBNOs > 0 else kills + assists
-
-        embed = discord.Embed(title=f"{nickname}님의 최근 스쿼드 경기 전적", color=0x1F8B4C)
-        embed.add_field(name="킬", value=str(kills))
-        embed.add_field(name="어시스트", value=str(assists))
-        embed.add_field(name="다운(기절)", value=str(dBNOs))
-        embed.add_field(name="데미지", value=f"{damage:.1f}")
-        embed.add_field(name="KDA", value=f"{kda:.2f}")
-        embed.add_field(name="킬/데스 비율", value=f"{kill_death_ratio:.2f}")
-        embed.add_field(name="OP.GG 링크", value=f"https://pubg.op.gg/user/{nickname}", inline=False)
-
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    except Exception as e:
-        # 에러 발생 시 응답 실패할 수 있으니 이중으로 시도
+    async with aiohttp.ClientSession() as session:
         try:
-            await interaction.followup.send(f"⚠️ 오류 발생: {e}", ephemeral=True)
-        except Exception:
+            # 플레이어 ID 조회
+            url = f"https://api.pubg.com/shards/{platform_value}/players?filter[playerNames]={nickname}"
+            async with session.get(url, headers=headers) as res:
+                if res.status == 429:
+                    await interaction.followup.send("⏳ 너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+                    return
+                if res.status == 404:
+                    await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
+                    return
+                if res.status != 200:
+                    await interaction.followup.send(f"❌ 플레이어 조회 실패 (HTTP {res.status})", ephemeral=True)
+                    return
+                data = await res.json()
+
+            player_data = data.get("data")
+            if not player_data:
+                await interaction.followup.send("❌ 해당 닉네임의 유저를 찾을 수 없습니다.", ephemeral=True)
+                return
+            player_id = player_data[0]["id"]
+
+            # 최근 매치 조회
+            matches_url = f"https://api.pubg.com/shards/{platform_value}/players/{player_id}/matches"
+            async with session.get(matches_url, headers=headers) as matches_res:
+                if matches_res.status != 200:
+                    await interaction.followup.send(f"⚠️ 매치 정보를 불러오는데 실패했습니다. (HTTP {matches_res.status})", ephemeral=True)
+                    return
+                matches_data = await matches_res.json()
+
+            matches_list = matches_data.get("data", [])
+            if not matches_list:
+                await interaction.followup.send("⚠️ 최근 매치 기록이 없습니다.", ephemeral=True)
+                return
+
+            latest_match_id = matches_list[0]["id"]
+
+            # 매치 상세 조회
+            match_url = f"https://api.pubg.com/shards/{platform_value}/matches/{latest_match_id}"
+            async with session.get(match_url, headers=headers) as match_res:
+                if match_res.status != 200:
+                    await interaction.followup.send(f"⚠️ 매치 상세 정보를 불러오는데 실패했습니다. (HTTP {match_res.status})", ephemeral=True)
+                    return
+                match_json = await match_res.json()
+
+            included = match_json.get("included", [])
+            participant_stats = None
+            for item in included:
+                if item.get("type") == "participant":
+                    stats = item.get("attributes", {}).get("stats", {})
+                    if stats.get("name", "").lower() == nickname.lower():
+                        participant_stats = stats
+                        break
+
+            if not participant_stats:
+                await interaction.followup.send("⚠️ 해당 유저의 매치 데이터가 없습니다.", ephemeral=True)
+                return
+
+            kills = participant_stats.get("kills", 0)
+            assists = participant_stats.get("assists", 0)
+            damage = participant_stats.get("damageDealt", 0)
+            dBNOs = participant_stats.get("DBNOs", 0)
+            kill_death_ratio = participant_stats.get("killDeathRatio", 0.0)
+            kda = (kills + assists) / dBNOs if dBNOs > 0 else kills + assists
+
+            embed = discord.Embed(title=f"{nickname}님의 최근 스쿼드 경기 전적", color=0x1F8B4C)
+            embed.add_field(name="킬", value=str(kills))
+            embed.add_field(name="어시스트", value=str(assists))
+            embed.add_field(name="다운(기절)", value=str(dBNOs))
+            embed.add_field(name="데미지", value=f"{damage:.1f}")
+            embed.add_field(name="KDA", value=f"{kda:.2f}")
+            embed.add_field(name="킬/데스 비율", value=f"{kill_death_ratio:.2f}")
+            embed.add_field(name="OP.GG 링크", value=f"https://pubg.op.gg/user/{nickname}", inline=False)
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
             try:
-                await interaction.response.send_message(f"⚠️ 오류 발생: {e}", ephemeral=True)
+                await interaction.followup.send(f"⚠️ 오류 발생: {e}", ephemeral=True)
             except Exception:
-                print(f"전적 명령어 처리 중 치명적 오류 발생: {e}")
-
-
+                try:
+                    await interaction.response.send_message(f"⚠️ 오류 발생: {e}", ephemeral=True)
+                except Exception:
+                    print(f"전적 명령어 처리 중 치명적 오류 발생: {e}")
 
 # ▶️ Koyeb 헬스 체크용 웹서버 실행
 keep_alive()
