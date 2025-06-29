@@ -249,9 +249,9 @@ async def 밥(interaction: discord.Interaction):
         print(f"채널 이동 실패: {e}")
 
 
-# 📊 배그 전적 조회 슬래시 명령어
+# 📊 배그 전적 조회 슬래시 명령어 (카카오 플랫폼용)
 @tree.command(name="전적", description="배틀그라운드 전적을 조회합니다.", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(nickname="PUBG 닉네임 입력 (예: rogkki)")
+@app_commands.describe(nickname="PUBG 닉네임 입력 (예: kakao 닉네임)")
 async def 전적(interaction: discord.Interaction, nickname: str):
     await interaction.response.defer(ephemeral=True)
 
@@ -262,8 +262,7 @@ async def 전적(interaction: discord.Interaction, nickname: str):
     }
 
     try:
-        # 플랫폼: steam, kakao, xbox 등 (여기선 steam 기준)
-        platform = "steam"
+        platform = "kakao"  # 카카오 플랫폼으로 변경
         url = f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}"
         res = requests.get(url, headers=headers)
         if res.status_code == 429:
@@ -276,15 +275,62 @@ async def 전적(interaction: discord.Interaction, nickname: str):
         player_data = res.json()["data"][0]
         player_id = player_data["id"]
 
-        await interaction.followup.send(
-            f"🎮 **{nickname}** 님의 PUBG 전적:\n\n"
-            f"🔗 [OP.GG에서 보기](https://pubg.op.gg/user/{nickname})\n"
-            f"🆔 ID: `{player_id}`"
-        )
+        # 최근 매치 조회
+        matches_url = f"https://api.pubg.com/shards/{platform}/players/{player_id}/matches"
+        matches_res = requests.get(matches_url, headers=headers)
+        if matches_res.status_code != 200:
+            await interaction.followup.send("⚠️ 매치 정보를 불러오는데 실패했습니다.", ephemeral=True)
+            return
+
+        matches_data = matches_res.json().get("data", [])
+        if not matches_data:
+            await interaction.followup.send("⚠️ 최근 매치 기록이 없습니다.", ephemeral=True)
+            return
+
+        latest_match_id = matches_data[0]["id"]
+
+        # 매치 상세 조회
+        match_url = f"https://api.pubg.com/shards/{platform}/matches/{latest_match_id}"
+        match_res = requests.get(match_url, headers=headers)
+        if match_res.status_code != 200:
+            await interaction.followup.send("⚠️ 매치 상세 정보를 불러오는데 실패했습니다.", ephemeral=True)
+            return
+
+        match_data = match_res.json()["data"]
+        included = match_res.json().get("included", [])
+
+        # 참가자 정보 찾기
+        participant_stats = None
+        for item in included:
+            if item["type"] == "participant" and item["attributes"]["stats"]["name"].lower() == nickname.lower():
+                participant_stats = item["attributes"]["stats"]
+                break
+
+        if not participant_stats:
+            await interaction.followup.send("⚠️ 해당 유저의 매치 데이터가 없습니다.", ephemeral=True)
+            return
+
+        kills = participant_stats.get("kills", 0)
+        assists = participant_stats.get("assists", 0)
+        damage = participant_stats.get("damageDealt", 0)
+        dBNOs = participant_stats.get("DBNOs", 0)
+        kill_death_ratio = participant_stats.get("killDeathRatio", 0.0)
+        # KDA 계산: (킬+어시스트)/다운 (DBNOs)
+        kda = (kills + assists) / dBNOs if dBNOs > 0 else kills + assists
+
+        embed = discord.Embed(title=f"{nickname}님의 최근 스쿼드 경기 전적", color=0x1F8B4C)
+        embed.add_field(name="킬", value=str(kills))
+        embed.add_field(name="어시스트", value=str(assists))
+        embed.add_field(name="다운(기절)", value=str(dBNOs))
+        embed.add_field(name="데미지", value=f"{damage:.1f}")
+        embed.add_field(name="KDA", value=f"{kda:.2f}")
+        embed.add_field(name="킬/데스 비율", value=f"{kill_death_ratio:.2f}")
+        embed.add_field(name="OP.GG 링크", value=f"https://pubg.op.gg/user/{nickname}", inline=False)
+
+        await interaction.followup.send(embed=embed)
 
     except Exception as e:
         await interaction.followup.send(f"⚠️ 오류 발생: {e}", ephemeral=True)
-
 
 
 # ▶️ Koyeb 헬스 체크용 웹서버 실행
