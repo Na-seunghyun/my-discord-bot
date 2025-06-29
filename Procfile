@@ -1,2 +1,1 @@
-[build]
-  command = "python main.py"
+worker: python main.py
