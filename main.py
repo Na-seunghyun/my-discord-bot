@@ -5,16 +5,17 @@ import re
 import os
 import random
 
-from keep_alive import keep_alive  # 🔧 Replit 서버를 계속 켜기 위한 웹 서버
+# 디스코드 서버 ID
+GUILD_ID = 1309433603331198977
 
-GUILD_ID = 1309433603331198977  # 내 디스코드 서버 ID
-
+# 봇 설정
 intents = discord.Intents.default()
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
+# 닉네임 정규식 패턴
 nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
 
 
@@ -115,9 +116,6 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
 
     await interaction.response.send_message(msg, ephemeral=False)
 
-
-# ▶️ 웹서버로 Replit 인스턴스 유지
-keep_alive()
 
 # ▶️ 디스코드 봇 실행
 TOKEN = os.getenv("DISCORD_TOKEN")
