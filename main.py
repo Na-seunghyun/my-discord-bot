@@ -268,7 +268,7 @@ class VoiceTopButton(View):
         await interaction.response.defer(ephemeral=True)
 
         try:
-        response = supabase.rpc("get_top_voice_activity", {}).execute()
+            response = supabase.rpc("get_top_voice_activity", {}).execute()
 
             if not hasattr(response, "data") or response.data is None:
                 await interaction.followup.send("❌ Supabase 응답 오류 또는 데이터 없음", ephemeral=True)
@@ -294,6 +294,7 @@ class VoiceTopButton(View):
 
         except Exception as e:
             await interaction.followup.send(f"❗ 오류 발생: {e}", ephemeral=True)
+
 
 
 
