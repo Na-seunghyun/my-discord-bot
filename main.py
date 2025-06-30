@@ -234,7 +234,7 @@ def format_duration(seconds: int) -> str:
 async def 접속시간랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
     try:
-        response = supabase.rpc("get_top_voice_activity").execute()
+        response = supabase.rpc("get_top_voice_activity", params={}).execute()
 
         # 상태 코드 체크
         if response.status_code != 200:
