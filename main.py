@@ -71,27 +71,32 @@ async def on_voice_state_update(member, before, after):
             left_time = datetime.now(timezone.utc)
             duration = int((left_time - join_time).total_seconds())
 
+            user_id = str(member.id)
+            username = member.display_name
+            joined_at = join_time.isoformat()
+            left_at = left_time.isoformat()
+
             data = {
-                "user_id": str(member.id),
-                "username": member.display_name,
-                "joined_at": join_time.isoformat(),
-                "left_at": left_time.isoformat(),
-                "duration_sec": duration
+                "user_id": user_id,
+                "username": username,
+                "joined_at": joined_at,
+                "left_at": left_at,
+                "duration_sec": duration,
             }
 
             try:
                 response = supabase.table("voice_activity").insert(data).execute()
-                if response.error:
-                    print(f"Supabase 오류: {response.error.message}")
+                if response.status_code != 201:
+                    print(f"Supabase 오류: {response.data}")
             except Exception as e:
                 print(f"Supabase 예외 발생: {e}")
-
 
     # 방송 종료 감지
     if before.self_stream and not after.self_stream and before.channel == after.channel:
         text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
         if text_channel:
             await text_channel.send(f"📴 {member.mention} 님 방송 종료됨")
+
 
 
 @tasks.loop(minutes=10)
