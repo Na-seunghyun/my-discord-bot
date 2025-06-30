@@ -60,6 +60,13 @@ async def on_voice_state_update(member, before, after):
         auto_disconnect_tasks[member.id].cancel()
         auto_disconnect_tasks.pop(member.id, None)
 
+    # 대기방(예: "대기방") 입장 시 메시지 보내기
+    if (before.channel != after.channel) and (after.channel is not None):
+        if after.channel.name == "대기방":
+            text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+            if text_channel:
+                await text_channel.send(f"{member.mention} 나도 게임하고싶어! 나 도 끼 워 줘!")
+
     # 입장 기록
     if before.channel is None and after.channel is not None:
         voice_join_times[member.id] = datetime.now(timezone.utc)
@@ -250,42 +257,43 @@ def format_duration(seconds: int) -> str:
     return " ".join(parts)
 
 
+from discord.ui import View, button
+
+class VoiceTopButton(View):
+    def __init__(self):
+        super().__init__(timeout=180)  # 3분 타임아웃, 필요시 조정
+
+    @button(label="접속시간랭킹 보기", style=discord.ButtonStyle.primary)
+    async def on_click(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()  # 버튼 클릭 즉시 로딩 표시
+
+        try:
+            response = supabase.rpc("get_top_voice_activity", params={}).execute()
+
+            if not hasattr(response, "data") or response.data is None:
+                await interaction.followup.send("❌ Supabase 응답 오류 또는 데이터 없음")
+                return
+
+            data = response.data
+            if not data:
+                await interaction.followup.send("😥 기록된 접속 시간이 없습니다.")
+                return
+
+            msg = "🎤 음성 접속시간 Top 10\n"
+            for rank, info in enumerate(data, 1):
+                time_str = format_duration(info['total_duration'])
+                msg += f"{rank}. {info['username']} — {time_str}\n"
+
+            await interaction.followup.send(msg)
+
+        except Exception as e:
+            await interaction.followup.send(f"❗ 오류 발생: {e}")
+
+
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
 async def 접속시간랭킹(interaction: discord.Interaction):
-    try:
-        await interaction.response.defer()  # 응답 지연 예약
-
-        response = supabase.rpc("get_top_voice_activity").execute()
-
-        if not hasattr(response, "data") or response.data is None:
-            await interaction.followup.send("❌ Supabase 응답 오류 또는 데이터 없음")
-            return
-
-        data = response.data
-        if not data:
-            await interaction.followup.send("😥 기록된 접속 시간이 없습니다.")
-            return
-
-        msg = "🎤 음성 접속시간 Top 10\n"
-        for rank, info in enumerate(data, 1):
-            time_str = format_duration(info['total_duration'])
-            msg += f"{rank}. {info['username']} — {time_str}\n"
-
-        await interaction.followup.send(msg)
-
-    except Exception as e:
-        try:
-            await interaction.followup.send(f"❗ 오류 발생: {e}")
-        except Exception as inner:
-            print(f"🛑 응답 실패 (interaction 만료): {inner}")
-            print(f"🧵 원래 오류: {e}")
-
-
-
-
-
-
-
+    # ephemeral=True 로 명령어 호출자에게만 표시 (필요에 따라 False 변경 가능)
+    await interaction.response.send_message("버튼을 눌러 음성 접속시간 랭킹을 확인하세요.", view=VoiceTopButton(), ephemeral=True)
 
 
 
