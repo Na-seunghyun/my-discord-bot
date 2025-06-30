@@ -233,11 +233,11 @@ def format_duration(seconds: int) -> str:
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
 async def 접속시간랭킹(interaction: discord.Interaction):
     try:
+        # 딱 한 번만 defer 호출
         await interaction.response.defer()
-        
+
         response = supabase.rpc("get_top_voice_activity", params={}).execute()
 
-        # 상태 코드 체크
         if response.status_code != 200:
             await interaction.followup.send(f"Supabase 오류: {response.status_text}")
             return
@@ -255,7 +255,13 @@ async def 접속시간랭킹(interaction: discord.Interaction):
         await interaction.followup.send(msg)
 
     except Exception as e:
-        await interaction.followup.send(f"오류 발생: {e}")
+        # 예외 발생 시 followup으로 에러 메시지 전송, 중복 호출 주의
+        try:
+            await interaction.followup.send(f"오류 발생: {e}")
+        except:
+            # 이미 응답이 완료됐거나 다른 오류면 무시
+            pass
+
 
 
 
