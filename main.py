@@ -43,6 +43,12 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
     auto_disconnect_tasks.pop(user.id, None)
 
 
+def sql_escape(s):
+    if s is None:
+        return 'NULL'
+    return "'" + str(s).replace("'", "''") + "'"
+
+
 @bot.event
 async def on_voice_state_update(member, before, after):
     print(f"Voice state update - member: {member}, before: {before.channel if before else None}, after: {after.channel if after else None}")
@@ -64,14 +70,26 @@ async def on_voice_state_update(member, before, after):
         if join_time:
             left_time = datetime.now(timezone.utc)
             duration = int((left_time - join_time).total_seconds())
+
+            user_id = str(member.id)
+            username = member.display_name
+            joined_at = join_time.isoformat()
+            left_at = left_time.isoformat()
+
+            query = f"""
+            INSERT INTO public.voice_activity (user_id, username, joined_at, left_at, duration_sec)
+            VALUES (
+                {sql_escape(user_id)},
+                {sql_escape(username)},
+                {sql_escape(joined_at)},
+                {sql_escape(left_at)},
+                {duration}
+            )
+            ON CONFLICT (user_id, joined_at, left_at) DO NOTHING;
+            """
+
             try:
-                supabase.table("voice_activity").insert({
-                    "user_id": str(member.id),
-                    "username": member.display_name,
-                    "joined_at": join_time.isoformat(),
-                    "left_at": left_time.isoformat(),
-                    "duration_sec": duration
-                }).on_conflict("user_id,joined_at,left_at").execute()
+                supabase.rpc('sql', {'query': query}).execute()
             except Exception as e:
                 print(f"Supabase 오류: {e}")
 
