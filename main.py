@@ -232,26 +232,31 @@ def format_duration(seconds: int) -> str:
 
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
 async def 접속시간랭킹(interaction: discord.Interaction):
-    await interaction.response.defer()
     try:
+        await interaction.response.defer()
+        
         response = supabase.rpc("get_top_voice_activity", params={}).execute()
 
-        # .data가 없거나 비어 있는 경우
-        if not response or not response.data:
+        # 상태 코드 체크
+        if response.status_code != 200:
+            await interaction.followup.send(f"Supabase 오류: {response.status_text}")
+            return
+
+        data = response.data
+        if not data:
             await interaction.followup.send("데이터가 없습니다.")
             return
 
-        data = response.data  # response는 SingleAPIResponse, .data에 list 형태가 담김
-
-        msg = "🎤 **음성 접속시간 Top 10**\n\n"
+        msg = "🎤 음성 접속시간 Top 10\n"
         for rank, info in enumerate(data, 1):
             time_str = format_duration(info['total_duration'])
-            msg += f"**{rank}위. {info['username']}** — {time_str}\n"
+            msg += f"{rank}. {info['username']} — {time_str}\n"
 
         await interaction.followup.send(msg)
 
     except Exception as e:
-        await interaction.followup.send(f"❌ 오류 발생: `{e}`")
+        await interaction.followup.send(f"오류 발생: {e}")
+
 
 
 
