@@ -233,15 +233,18 @@ def format_duration(seconds: int) -> str:
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
 async def 접속시간랭킹(interaction: discord.Interaction):
     try:
-        response = supabase.rpc("get_top_voice_activity").execute()
+        await interaction.response.defer()
+        
+        response = supabase.rpc("get_top_voice_activity", params={}).execute()
 
-        if response.error:
-            await interaction.response.send_message(f"Supabase 오류: {response.error.message}", ephemeral=True)
+        # 상태 코드 체크
+        if response.status_code != 200:
+            await interaction.followup.send(f"Supabase 오류: {response.status_text}")
             return
 
         data = response.data
         if not data:
-            await interaction.response.send_message("데이터가 없습니다.", ephemeral=True)
+            await interaction.followup.send("데이터가 없습니다.")
             return
 
         msg = "🎤 음성 접속시간 Top 10\n"
@@ -249,13 +252,11 @@ async def 접속시간랭킹(interaction: discord.Interaction):
             time_str = format_duration(info['total_duration'])
             msg += f"{rank}. {info['username']} — {time_str}\n"
 
-        await interaction.response.send_message(msg)
+        await interaction.followup.send(msg)
 
     except Exception as e:
-        try:
-            await interaction.response.send_message(f"오류 발생: {e}", ephemeral=True)
-        except:
-            pass
+        await interaction.followup.send(f"오류 발생: {e}")
+
 
 
 
