@@ -120,7 +120,7 @@ async def 소환(interaction: discord.Interaction):
     guild = interaction.guild
     moved = 0
     for vc in guild.voice_channels:
-        if vc == user_channel or vc.name in ["밥좀묵겠습니다"]:
+        if vc == user_channel or vc.name in ["밥좀묵겠습니다", "대기방", "게스트방", "클랜훈련소"]:
             continue
         for member in vc.members:
             if not member.bot:
