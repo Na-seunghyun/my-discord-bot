@@ -71,7 +71,7 @@ async def on_voice_state_update(member, before, after):
                     "joined_at": join_time.isoformat(),
                     "left_at": left_time.isoformat(),
                     "duration_sec": duration
-                }).execute()
+                }).on_conflict("user_id,joined_at,left_at").execute()
             except Exception as e:
                 print(f"Supabase 오류: {e}")
 
