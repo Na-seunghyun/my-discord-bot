@@ -250,10 +250,9 @@ def format_duration(seconds: int) -> str:
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
 async def 접속시간랭킹(interaction: discord.Interaction):
     try:
-        # 응답 지연(로딩 표시) - ephemeral True 옵션 추가 가능
         await interaction.response.defer()
 
-        response = supabase.rpc("get_top_voice_activity").execute()
+        response = supabase.rpc("get_top_voice_activity", {}).execute()
 
         if response.error:
             await interaction.followup.send(f"Supabase 오류: {response.error.message}")
@@ -275,8 +274,8 @@ async def 접속시간랭킹(interaction: discord.Interaction):
         try:
             await interaction.followup.send(f"오류 발생: {e}")
         except:
-            # interaction이 이미 만료됐으면 여기서 무시
             pass
+
 
 
 
