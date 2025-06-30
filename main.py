@@ -234,11 +234,11 @@ def format_duration(seconds: int) -> str:
 async def 접속시간랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
     try:
-        # Supabase에서 사용자별 누적 duration_sec 합계를 구해 상위 10명 추출 (아래 SQL 함수 참고)
         response = supabase.rpc("get_top_voice_activity").execute()
 
-        if response.error:
-            await interaction.followup.send(f"Supabase 오류: {response.error.message}")
+        # error 대신 status_code 체크
+        if response.status_code != 200:
+            await interaction.followup.send(f"Supabase 오류: {response.status_text}")
             return
 
         data = response.data
