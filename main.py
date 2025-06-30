@@ -72,7 +72,7 @@ async def on_voice_state_update(member, before, after):
             left_time = datetime.now(timezone.utc)
             duration = int((left_time - join_time).total_seconds())
             try:
-                supabase.table("voice_logs").insert({
+                supabase.table("voice_activity").insert({
                     "user_id": str(member.id),
                     "username": member.display_name,
                     "joined_at": join_time.isoformat(),
