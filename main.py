@@ -299,7 +299,12 @@ class VoiceTopButton(View):
 
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
 async def 접속시간랭킹(interaction: discord.Interaction):
-    await interaction.response.send_message("버튼을 눌러 음성 접속시간 랭킹을 확인하세요.", view=VoiceTopButton(), ephemeral=True)
+    try:
+        await interaction.response.send_message("버튼을 눌러 음성 접속시간 랭킹을 확인하세요.", view=VoiceTopButton(), ephemeral=True)
+    except discord.errors.InteractionResponded:
+        # 이미 응답되었으면 followup 사용
+        await interaction.followup.send("버튼을 눌러 음성 접속시간 랭킹을 확인하세요.", view=VoiceTopButton(), ephemeral=True)
+
 
 
 
