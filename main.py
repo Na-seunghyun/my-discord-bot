@@ -42,6 +42,12 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
             print(f"오류: {e}")
     auto_disconnect_tasks.pop(user.id, None)
 
+@bot.event
+async def on_voice_state_update(member, before, after):
+    print(f"Voice state update fired: member={member}, before={before.channel if before else None}, after={after.channel if after else None}")
+    if member.bot:
+        return
+    # 기존 코드 계속
 
 @bot.event
 async def on_ready():
