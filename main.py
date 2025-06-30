@@ -236,7 +236,7 @@ async def 접속시간랭킹(interaction: discord.Interaction):
     try:
         response = supabase.rpc("get_top_voice_activity").execute()
 
-        # error 대신 status_code 체크
+        # 상태 코드 체크
         if response.status_code != 200:
             await interaction.followup.send(f"Supabase 오류: {response.status_text}")
             return
@@ -252,8 +252,11 @@ async def 접속시간랭킹(interaction: discord.Interaction):
             msg += f"{rank}. {info['username']} — {time_str}\n"
 
         await interaction.followup.send(msg)
+
     except Exception as e:
+        # 에러 발생 시 메시지 출력
         await interaction.followup.send(f"오류 발생: {e}")
+
 
 
 @bot.event
