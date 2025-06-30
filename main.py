@@ -71,27 +71,21 @@ async def on_voice_state_update(member, before, after):
             left_time = datetime.now(timezone.utc)
             duration = int((left_time - join_time).total_seconds())
 
-            user_id = str(member.id)
-            username = member.display_name
-            joined_at = join_time.isoformat()
-            left_at = left_time.isoformat()
-
-            query = f"""
-            INSERT INTO public.voice_activity (user_id, username, joined_at, left_at, duration_sec)
-            VALUES (
-                {sql_escape(user_id)},
-                {sql_escape(username)},
-                {sql_escape(joined_at)},
-                {sql_escape(left_at)},
-                {duration}
-            )
-            ON CONFLICT (user_id, joined_at, left_at) DO NOTHING;
-            """
+            data = {
+                "user_id": str(member.id),
+                "username": member.display_name,
+                "joined_at": join_time.isoformat(),
+                "left_at": left_time.isoformat(),
+                "duration_sec": duration
+            }
 
             try:
-                supabase.rpc('sql', {'query': query}).execute()
+                response = supabase.table("voice_activity").insert(data).execute()
+                if response.error:
+                    print(f"Supabase 오류: {response.error.message}")
             except Exception as e:
-                print(f"Supabase 오류: {e}")
+                print(f"Supabase 예외 발생: {e}")
+
 
     # 방송 종료 감지
     if before.self_stream and not after.self_stream and before.channel == after.channel:
