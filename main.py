@@ -261,22 +261,23 @@ from discord.ui import View, button
 
 class VoiceTopButton(View):
     def __init__(self):
-        super().__init__(timeout=180)  # 3분 타임아웃, 필요시 조정
+        super().__init__(timeout=180)  # 뷰 타임아웃 3분
 
     @button(label="접속시간랭킹 보기", style=discord.ButtonStyle.primary)
     async def on_click(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()  # 버튼 클릭 즉시 로딩 표시
+        # 버튼 클릭 즉시 로딩 표시, 클릭자에게만 보이도록 처리
+        await interaction.response.defer(ephemeral=True)
 
         try:
-            response = supabase.rpc("get_top_voice_activity", params={}).execute()
+            response = supabase.rpc("get_top_voice_activity").execute()
 
             if not hasattr(response, "data") or response.data is None:
-                await interaction.followup.send("❌ Supabase 응답 오류 또는 데이터 없음")
+                await interaction.followup.send("❌ Supabase 응답 오류 또는 데이터 없음", ephemeral=True)
                 return
 
             data = response.data
             if not data:
-                await interaction.followup.send("😥 기록된 접속 시간이 없습니다.")
+                await interaction.followup.send("😥 기록된 접속 시간이 없습니다.", ephemeral=True)
                 return
 
             msg = "🎤 음성 접속시간 Top 10\n"
@@ -284,16 +285,22 @@ class VoiceTopButton(View):
                 time_str = format_duration(info['total_duration'])
                 msg += f"{rank}. {info['username']} — {time_str}\n"
 
-            await interaction.followup.send(msg)
+            # 버튼 비활성화 처리
+            button.disabled = True
+            # 메시지의 뷰를 업데이트 (버튼 비활성화 반영)
+            await interaction.message.edit(view=self)
+
+            await interaction.followup.send(msg, ephemeral=True)
 
         except Exception as e:
-            await interaction.followup.send(f"❗ 오류 발생: {e}")
+            await interaction.followup.send(f"❗ 오류 발생: {e}", ephemeral=True)
+
 
 
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
 async def 접속시간랭킹(interaction: discord.Interaction):
-    # ephemeral=True 로 명령어 호출자에게만 표시 (필요에 따라 False 변경 가능)
     await interaction.response.send_message("버튼을 눌러 음성 접속시간 랭킹을 확인하세요.", view=VoiceTopButton(), ephemeral=True)
+
 
 
 
