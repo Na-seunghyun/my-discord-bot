@@ -1,7 +1,7 @@
-from keep_alive import keep_alive  # ✅ Koyeb 헬스체크용 Flask 서버 실행
+from keep_alive import keep_alive
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import re
 import os
@@ -10,18 +10,15 @@ import asyncio
 
 # 디스코드 서버 ID
 GUILD_ID = 1309433603331198977
+MONITORED_CHANNEL_NAMES = [f"일반{i}" for i in range(1, 17)] + ["큰맵1", "큰맵2"]
 
-# 봇 설정
 intents = discord.Intents.default()
 intents.members = True
-intents.voice_states = True  # 음성 상태 이벤트 수신
+intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
-
 nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
-
-# 자동 퇴장 태스크 관리
 auto_disconnect_tasks = {}
 
 # 자동 퇴장 타이머 함수 (로그 추가)
@@ -47,7 +44,13 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
         print(f"{user} 님이 이미 채널을 떠났거나 다른 채널에 있습니다.")
         auto_disconnect_tasks.pop(user.id, None)
 
-# ✅ 음성 상태 변화 감지 (자동퇴장 취소 + 대기방 메시지 전송 중복 방지)
+@bot.event
+async def on_ready():
+    guild = discord.Object(id=GUILD_ID)
+    await tree.sync(guild=guild)
+    check_voice_channels_for_streaming.start()
+    print(f"✅ 봇 로그인 완료: {bot.user} | 슬래시 명령어 동기화 완료")
+
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.bot:
@@ -58,22 +61,56 @@ async def on_voice_state_update(member, before, after):
         task.cancel()
         print(f"{member.name}님의 자동퇴장 타이머가 취소되었습니다.")
 
+    # 대기방 입장 알림
     if after.channel and after.channel.name == "대기방":
         if not before.channel or before.channel.id != after.channel.id:
-            guild = member.guild
-            text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+            text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
             if text_channel:
                 await text_channel.send(
-                    f"{member.mention} 나도 게임을 하고싶어! "
-                    f"나를 끼워주지 않으면 토끼록끼가 모든 음성채널을 폭파합니다. 💥🐰"
+                    f"{member.mention} 나도 게임을 하고싶어! 나를 끼워주지 않으면 토끼록끼가 모든 음성채널을 폭파합니다. 💥🐰"
                 )
 
-@bot.event
-async def on_ready():
-    guild = discord.Object(id=GUILD_ID)
-    await tree.sync(guild=guild)
-    print(f"✅ 봇 로그인 완료: {bot.user} | 슬래시 명령어 동기화 완료")
+    # 방송 종료 감지 (같은 채널에서 방송만 꺼졌을 때)
+    was_streaming = before.self_stream
+    is_streaming = after.self_stream
+    same_channel = before.channel == after.channel and after.channel is not None
 
+    if was_streaming and not is_streaming and same_channel:
+        text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+        if text_channel:
+            embed = discord.Embed(
+                title="📴 방송 종료 감지!",
+                description=f"{member.mention} 님이 `{after.channel.name}` 채널에서 방송을 종료했어요.\n혹시 실수로 끄셨나요? 🎥 다시 켜주세요!",
+                color=discord.Color.orange()
+            )
+            embed.add_field(name="채널명", value=after.channel.name, inline=True)
+            embed.add_field(name="방송 상태", value="❌ 꺼짐", inline=True)
+            await text_channel.send(content=member.mention, embed=embed)
+
+@tasks.loop(minutes=10)
+async def check_voice_channels_for_streaming():
+    for guild in bot.guilds:
+        text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+        if not text_channel:
+            continue
+
+        for vc in guild.voice_channels:
+            if vc.name in MONITORED_CHANNEL_NAMES and vc.members:
+                if not any(m.voice and m.voice.self_stream for m in vc.members if not m.bot):
+                    embed = discord.Embed(
+                        title="🚨 방송 꺼짐 감지",
+                        description=f"`{vc.name}` 채널에 사람이 있지만 Go Live 방송이 꺼져 있습니다.",
+                        color=discord.Color.red()
+                    )
+                    embed.add_field(name="현재 인원", value=f"{len(vc.members)}명", inline=True)
+                    embed.add_field(name="라이브 상태", value="❌ 없음", inline=True)
+                    mentions = " ".join(m.mention for m in vc.members if not m.bot)
+                    await text_channel.send(content=mentions, embed=embed)
+
+# ✅ 기존 명령어 및 이벤트 핸들러들 그대로 유지
+# 검사, 소환, 팀짜기, 밥 이동 등 기존 코드 아래에 이어서 추가
+
+# 명령어: 검사
 @tree.command(name="검사", description="서버 전체 닉네임을 검사합니다.", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
     guild = interaction.guild
@@ -106,6 +143,7 @@ async def 검사(interaction: discord.Interaction):
 
     await interaction.followup.send(f"🔍 닉네임 검사 완료: {count}명 오류", ephemeral=True)
 
+# 명령어: 소환
 @tree.command(name="소환", description="모든 유저를 현재 음성 채널로 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
     user_channel = interaction.user.voice.channel if interaction.user.voice else None
@@ -132,6 +170,7 @@ async def 소환(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"📢 총 {moved}명을 소환했습니다!")
 
+# 명령어: 팀짜기
 class TeamMoveView(discord.ui.View):
     def __init__(self, teams, empty_channels, origin_channel):
         super().__init__(timeout=None)
@@ -194,6 +233,7 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
     view = TeamMoveView(teams, empty_channels, user_channel)
     await interaction.response.send_message(msg, view=view)
 
+# 명령어: 밥 이동
 @tree.command(name="밥", description="밥좀묵겠습니다 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
 async def 밥(interaction: discord.Interaction):
     user = interaction.user
