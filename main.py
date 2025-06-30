@@ -129,8 +129,10 @@ async def 소환(interaction: discord.Interaction):
         await interaction.response.send_message("❌ 음성 채널에 먼저 들어가 주세요!", ephemeral=True)
         return
 
-    # 대기방, 밥좀묵겠습니다 채널에서는 사용 불가 처리
-    if user_channel.name in ["대기방", "밥좀묵겠습니다"]:
+    # 소환 불가 음성채널 목록
+    blocked_channels = ["대기방", "밥좀묵겠습니다", "게스트방", "클랜훈련소"]
+
+    if user_channel.name in blocked_channels:
         await interaction.response.send_message(
             f"❌ '{user_channel.name}' 채널에서는 소환 명령어를 사용할 수 없습니다.",
             ephemeral=True
@@ -151,6 +153,7 @@ async def 소환(interaction: discord.Interaction):
                     pass
 
     await interaction.response.send_message(f"📢 총 {moved}명을 소환했습니다!")
+
 
 
 # 🧩 팀짜기 뷰 및 명령어 복원
