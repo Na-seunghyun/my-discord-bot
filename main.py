@@ -87,7 +87,7 @@ async def on_voice_state_update(member, before, after):
             try:
                 response = supabase.table("voice_activity").insert(data).execute()
                 if response.status_code != 201:
-                    print(f"Supabase 오류: {response.data}")
+                    print(f"Supabase 오류: {response.error.message}")
             except Exception as e:
                 print(f"Supabase 예외 발생: {e}")
 
