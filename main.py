@@ -186,12 +186,11 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
         return
 
     msg = f"🎲 **팀 나누기 완료! 팀당 {team_size.value}명**\n\n"
-    msg += "✅ **아래 버튼을 눌러 팀 이동을 시작하세요!**\n\n"
     msg += f"**팀 1 (현재 채널):** {', '.join(f'`{m.display_name}`' for m in teams[0])}\n"
     for idx, (team, channel) in enumerate(zip(teams[1:], empty_channels), start=2):
         mentions = ", ".join(f"`{m.display_name}`" for m in team)
-        msg += f"**팀 {idx} ({channel.name}):** {mentions}\n"
-
+        msg += f"**팀 {idx} ({channel.name}):** {mentions}\n"   
+    msg += "✅ **아래 버튼을 눌러 팀 이동을 시작하세요!**\n\n"
     view = TeamMoveView(teams, empty_channels, user_channel)
     await interaction.response.send_message(msg, view=view)
 
