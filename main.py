@@ -50,6 +50,11 @@ async def on_ready():
     check_voice_channels_for_streaming.start()
     print(f"✅ 봇 로그인: {bot.user}")
 
+@bot.event
+async def on_voice_state_update(member, before, after):
+    print(f"Voice state update - member: {member}, before: {before.channel}, after: {after.channel}")
+    if member.bot:
+        return
 
 @bot.event
 async def on_voice_state_update(member, before, after):
