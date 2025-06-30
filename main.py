@@ -14,7 +14,7 @@ GUILD_ID = 1309433603331198977
 # 봇 설정
 intents = discord.Intents.default()
 intents.members = True
-intents.voice_states = True  # 음성 상태 이벤트 수신
+intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
@@ -24,10 +24,6 @@ nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
 # 자동 퇴장 태스크 관리
 auto_disconnect_tasks = {}
 
-# 중복 메시지 전송 방지용 딕셔너리
-recently_announced = {}
-
-# 자동 퇴장 타이머 함수 (로그 추가)
 async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.VoiceChannel, timeout=1200):
     print(f"[자동퇴장 타이머 시작] {user}님, {timeout}초 후 자동퇴장 대기중...")
     await asyncio.sleep(timeout)
@@ -36,13 +32,10 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
         try:
             await user.move_to(None)
             print(f"{user} 님이 {channel.name}에서 자동 퇴장 처리됨")
-
-            # 자유채팅방에 메시지 보내기
             guild = user.guild
             text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
             if text_channel:
                 await text_channel.send(f"{user.mention} 님, 결국 20분 동안 밥을 먹지 못해 강제 퇴장 당했습니다. 😢")
-
         except Exception as e:
             print(f"강제 퇴장 실패: {e}")
         finally:
@@ -51,44 +44,30 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
         print(f"{user} 님이 이미 채널을 떠났거나 다른 채널에 있습니다.")
         auto_disconnect_tasks.pop(user.id, None)
 
-# ✅ 음성 상태 변화 감지 (자동퇴장 취소 + 대기방 메시지 전송 통합)
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.bot:
         return
 
-    # 자동퇴장 타이머 취소
     if member.id in auto_disconnect_tasks:
         task = auto_disconnect_tasks.pop(member.id)
         task.cancel()
         print(f"{member.name}님의 자동퇴장 타이머가 취소되었습니다.")
 
-    # 대기방 진입 감지 및 중복 메시지 방지
-    if after.channel and after.channel.name == "대기방":
-        if not before.channel or before.channel != after.channel:
-            now = discord.utils.utcnow()
-            last_time = recently_announced.get(member.id)
-            if last_time and (now - last_time).total_seconds() < 10:
-                # 10초 이내 중복 메시지 전송 방지
-                return
-            recently_announced[member.id] = now
+    if after.channel and after.channel.name == "대기방" and (not before.channel or before.channel != after.channel):
+        guild = member.guild
+        text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+        if text_channel:
+            await text_channel.send(
+                f"{member.mention} 나도 게임을 하고싶어! 나를 끼워주지 않으면 토끼록끼가 모든 음성채널을 폭파합니다. 💥🐰"
+            )
 
-            guild = member.guild
-            text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
-            if text_channel:
-                await text_channel.send(
-                    f"{member.mention} 나도 게임을 하고싶어! "
-                    f"나를 끼워주지 않으면 토끼록끼가 모든 음성채널을 폭파합니다. 💥🐰"
-                )
-
-# ⏱ 봇 준비 시
 @bot.event
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
     await tree.sync(guild=guild)
     print(f"✅ 봇 로그인 완료: {bot.user} | 슬래시 명령어 동기화 완료")
 
-# 🧪 닉네임 검사 명령어 (변경 없음)
 @tree.command(name="검사", description="서버 전체 닉네임을 검사합니다.", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
     guild = interaction.guild
@@ -121,22 +100,17 @@ async def 검사(interaction: discord.Interaction):
 
     await interaction.followup.send(f"🔍 닉네임 검사 완료: {count}명 오류", ephemeral=True)
 
-# 📣 소환 명령어 (변경 없음)
 @tree.command(name="소환", description="모든 유저를 현재 음성 채널로 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     user_channel = interaction.user.voice.channel if interaction.user.voice else None
     if not user_channel:
-        await interaction.response.send_message("❌ 음성 채널에 먼저 들어가 주세요!", ephemeral=True)
+        await interaction.followup.send("❌ 음성 채널에 먼저 들어가 주세요!", ephemeral=True)
         return
 
-    # 소환 불가 음성채널 목록
     blocked_channels = ["대기방", "밥좀묵겠습니다", "게스트방", "클랜훈련소"]
-
     if user_channel.name in blocked_channels:
-        await interaction.response.send_message(
-            f"❌ '{user_channel.name}' 채널에서는 소환 명령어를 사용할 수 없습니다.",
-            ephemeral=True
-        )
+        await interaction.followup.send(f"❌ '{user_channel.name}' 채널에서는 소환 명령어를 사용할 수 없습니다.", ephemeral=True)
         return
 
     guild = interaction.guild
@@ -152,11 +126,8 @@ async def 소환(interaction: discord.Interaction):
                 except:
                     pass
 
-    await interaction.response.send_message(f"📢 총 {moved}명을 소환했습니다!")
+    await interaction.followup.send(f"📢 총 {moved}명을 소환했습니다!", ephemeral=True)
 
-
-
-# 🧩 팀짜기 뷰 및 명령어 복원
 class TeamMoveView(discord.ui.View):
     def __init__(self, teams, empty_channels, origin_channel):
         super().__init__(timeout=None)
@@ -178,7 +149,7 @@ class TeamMoveView(discord.ui.View):
                     pass
         self.moved = True
         button.disabled = True
-        await interaction.response.edit_message(content="🚀 팀 이동 완료!", view=self)
+        await interaction.response.edit_message(view=self)  # 메시지 내용은 유지, 버튼만 비활성화
         self.stop()
 
 @tree.command(name="팀짜기", description="팀을 나누고 버튼으로 이동시킵니다.", guild=discord.Object(id=GUILD_ID))
@@ -219,7 +190,6 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
     view = TeamMoveView(teams, empty_channels, user_channel)
     await interaction.response.send_message(msg, view=view)
 
-# /밥 명령어
 @tree.command(name="밥", description="밥좀묵겠습니다 채널로 이동합니다.", guild=discord.Object(id=GUILD_ID))
 async def 밥(interaction: discord.Interaction):
     user = interaction.user
@@ -235,25 +205,17 @@ async def 밥(interaction: discord.Interaction):
         await interaction.response.send_message("❌ '밥좀묵겠습니다' 음성채널을 찾을 수 없습니다.", ephemeral=True)
         return
 
-    if not user.voice or not user.voice.channel:
-        await interaction.response.send_message("❌ 먼저 음성채널에 접속해 주세요.", ephemeral=True)
-        return
-
-    # 이미 밥 채널에 있는지 확인
-    if user.voice.channel == target_channel:
-        await interaction.response.send_message("✅ 이미 '밥좀묵겠습니다' 채널에 있습니다!", ephemeral=True)
+    if not text_channel:
+        await interaction.response.send_message("❌ '자유채팅방' 텍스트채널을 찾을 수 없습니다.", ephemeral=True)
         return
 
     try:
         await user.move_to(target_channel)
         await interaction.response.send_message(
-            f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 당신은 자동 퇴장처리 됩니다.",
-            ephemeral=True
+            f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 당신은 자동 퇴장처리 됩니다.", ephemeral=True
         )
-        if text_channel:
-            await text_channel.send(f"{user.mention}님, 20분 동안 밥을 먹지 못하면 토끼록끼의 강력한 염력으로 강제퇴장 당할 수 있습니다.")
+        await text_channel.send(f"{user.mention}님, 20분 동안 밥을 먹지 못하면 토끼록끼의 강력한 염력으로 강제퇴장 당할 수 있습니다.")
 
-        # 자동퇴장 타이머 시작
         if user.id in auto_disconnect_tasks:
             auto_disconnect_tasks[user.id].cancel()
             print(f"[타이머 취소] 기존 {user}님의 자동퇴장 타이머가 취소되었습니다.")
@@ -269,7 +231,7 @@ async def 밥(interaction: discord.Interaction):
             print(f"에러 발생, 응답 전송 실패: {send_error}")
         print(f"채널 이동 실패: {e}")
 
-# ▶️ Koyeb 헬스 체크용 웹서버 실행
+# ▶️ 헬스 체크 웹서버 실행
 keep_alive()
 
 # ▶️ 봇 실행
