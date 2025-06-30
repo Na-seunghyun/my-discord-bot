@@ -42,28 +42,10 @@ async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.V
             print(f"오류: {e}")
     auto_disconnect_tasks.pop(user.id, None)
 
-@bot.event
-async def on_voice_state_update(member, before, after):
-    print(f"Voice state update fired: member={member}, before={before.channel if before else None}, after={after.channel if after else None}")
-    if member.bot:
-        return
-    # 기존 코드 계속
-
-@bot.event
-async def on_ready():
-    guild = discord.Object(id=GUILD_ID)
-    await tree.sync(guild=guild)
-    check_voice_channels_for_streaming.start()
-    print(f"✅ 봇 로그인: {bot.user}")
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    print(f"Voice state update - member: {member}, before: {before.channel}, after: {after.channel}")
-    if member.bot:
-        return
-
-@bot.event
-async def on_voice_state_update(member, before, after):
+    print(f"Voice state update - member: {member}, before: {before.channel if before else None}, after: {after.channel if after else None}")
     if member.bot:
         return
 
@@ -228,6 +210,58 @@ async def 밥(interaction: discord.Interaction):
         auto_disconnect_tasks[user.id] = task
     except:
         await interaction.response.send_message("❌ 이동 실패", ephemeral=True)
+
+
+# ——— 여기부터 추가 ———
+def format_duration(seconds: int) -> str:
+    days, remainder = divmod(seconds, 86400)  # 86400초 = 1일
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    parts = []
+    if days > 0:
+        parts.append(f"{days}일")
+    if hours > 0 or days > 0:
+        parts.append(f"{hours}시간")
+    if minutes > 0 or hours > 0 or days > 0:
+        parts.append(f"{minutes}분")
+    parts.append(f"{seconds}초")
+
+    return " ".join(parts)
+
+
+@tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
+async def 접속시간랭킹(interaction: discord.Interaction):
+    await interaction.response.defer()
+    try:
+        # Supabase에서 사용자별 누적 duration_sec 합계를 구해 상위 10명 추출 (아래 SQL 함수 참고)
+        response = supabase.rpc("get_top_voice_activity").execute()
+
+        if response.error:
+            await interaction.followup.send(f"Supabase 오류: {response.error.message}")
+            return
+
+        data = response.data
+        if not data:
+            await interaction.followup.send("데이터가 없습니다.")
+            return
+
+        msg = "🎤 음성 접속시간 Top 10\n"
+        for rank, info in enumerate(data, 1):
+            time_str = format_duration(info['total_duration'])
+            msg += f"{rank}. {info['username']} — {time_str}\n"
+
+        await interaction.followup.send(msg)
+    except Exception as e:
+        await interaction.followup.send(f"오류 발생: {e}")
+
+
+@bot.event
+async def on_ready():
+    guild = discord.Object(id=GUILD_ID)
+    await tree.sync(guild=guild)
+    check_voice_channels_for_streaming.start()
+    print(f"✅ 봇 로그인: {bot.user}")
 
 
 keep_alive()
