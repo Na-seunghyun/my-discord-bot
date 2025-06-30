@@ -252,15 +252,12 @@ async def 접속시간랭킹(interaction: discord.Interaction):
     try:
         await interaction.response.defer()
 
-        response = supabase.rpc("get_top_voice_activity", {}).execute()
-
-        if response.error:
-            await interaction.followup.send(f"Supabase 오류: {response.error.message}")
-            return
+        # ✅ params={} 명시, 오류 속성 제거
+        response = supabase.rpc("get_top_voice_activity", params={}).execute()
 
         data = response.data
         if not data:
-            await interaction.followup.send("데이터가 없습니다.")
+            await interaction.followup.send("⚠️ 데이터가 없습니다.")
             return
 
         msg = "🎤 음성 접속시간 Top 10\n"
@@ -272,9 +269,10 @@ async def 접속시간랭킹(interaction: discord.Interaction):
 
     except Exception as e:
         try:
-            await interaction.followup.send(f"오류 발생: {e}")
+            await interaction.followup.send(f"🚨 오류 발생: {e}")
         except:
             pass
+
 
 
 
