@@ -99,13 +99,37 @@ async def on_voice_state_update(member, before, after):
                     print("⚠️ DB 저장 실패: 응답에 데이터 없음")
             except Exception as e:
                 print(f"❌ Supabase 예외 발생: {e}")
-
-    # 방송 종료 감지
+   
+    
+    # 방송 종료 감지 (임베드 메시지로 전환)
     if before.self_stream and not after.self_stream and before.channel == after.channel:
         text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
         if text_channel:
-            await text_channel.send(f"📴 {member.mention} 님 방송 종료됨")
+            embed = discord.Embed(
+                title="📴 방송이 종료되었습니다",
+                description=f"{member.mention} 님의 방송이 꺼졌습니다.",
+                color=discord.Color.orange()
+            )
+            embed.add_field(
+                name="안내",
+                value="실수로 꺼졌다면 다시 방송을 켜주세요! 🎥",
+                inline=False
+            )
+            embed.set_footer(text="ROGGIBOT 알림 시스템")
+            await text_channel.send(embed=embed)
 
+    # ✅ 방송 시작 감지
+    if not before.self_stream and after.self_stream and after.channel is not None:
+        text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+        if text_channel:
+            embed = discord.Embed(
+                title="📺 방송 시작 알림!",
+                description=f"{member.mention} 님이 `{after.channel.name}` 채널에서 방송을 시작했어요!\n👀 모두 구경하러 가보세요!",
+                color=discord.Color.green()
+            )
+            embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+            embed.set_footer(text="Go Live 활성화됨")
+            await text_channel.send(embed=embed)
 
 
 
@@ -118,9 +142,21 @@ async def check_voice_channels_for_streaming():
 
         for vc in guild.voice_channels:
             if vc.name in MONITORED_CHANNEL_NAMES and vc.members:
-                if not any(m.voice and m.voice.self_stream for m in vc.members if not m.bot):
-                    mentions = " ".join(m.mention for m in vc.members if not m.bot)
-                    await text_channel.send(f"🚨 `{vc.name}` 방송 꺼져있습니다!\n{mentions}")
+                non_bot_members = [m for m in vc.members if not m.bot]
+                if not any(m.voice and m.voice.self_stream for m in non_bot_members):
+                    mentions = " ".join(m.mention for m in non_bot_members)
+
+                    embed = discord.Embed(
+                        title="🚨 방송 꺼짐 감지",
+                        description=f"`{vc.name}` 채널에 사람이 있지만 **Go Live 방송이 꺼져 있습니다.**",
+                        color=discord.Color.red()
+                    )
+                    embed.add_field(name="현재 인원", value=f"{len(non_bot_members)}명", inline=True)
+                    embed.add_field(name="라이브 상태", value="❌ 없음", inline=True)
+                    embed.set_footer(text="실수로 꺼졌다면 다시 방송을 켜주세요! 🎥")
+
+                    await text_channel.send(content=mentions, embed=embed)
+
 
 
 # ✅ 슬래시 명령어: 검사
