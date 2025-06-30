@@ -24,6 +24,9 @@ nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
 # 자동 퇴장 태스크 관리
 auto_disconnect_tasks = {}
 
+# 중복 메시지 전송 방지용 딕셔너리
+recently_announced = {}
+
 # 자동 퇴장 타이머 함수 (로그 추가)
 async def auto_disconnect_after_timeout(user: discord.Member, channel: discord.VoiceChannel, timeout=1200):
     print(f"[자동퇴장 타이머 시작] {user}님, {timeout}초 후 자동퇴장 대기중...")
@@ -60,9 +63,16 @@ async def on_voice_state_update(member, before, after):
         task.cancel()
         print(f"{member.name}님의 자동퇴장 타이머가 취소되었습니다.")
 
-    # 대기방 진입 감지
+    # 대기방 진입 감지 및 중복 메시지 방지
     if after.channel and after.channel.name == "대기방":
         if not before.channel or before.channel != after.channel:
+            now = discord.utils.utcnow()
+            last_time = recently_announced.get(member.id)
+            if last_time and (now - last_time).total_seconds() < 10:
+                # 10초 이내 중복 메시지 전송 방지
+                return
+            recently_announced[member.id] = now
+
             guild = member.guild
             text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
             if text_channel:
@@ -110,28 +120,6 @@ async def 검사(interaction: discord.Interaction):
             count += 1
 
     await interaction.followup.send(f"🔍 닉네임 검사 완료: {count}명 오류", ephemeral=True)
-
-@tree.command(name="랜덤퇴장", description="음성채널 2명 이상일 때, 랜덤으로 한 명을 퇴장시킵니다.", guild=discord.Object(id=GUILD_ID))
-async def 랜덤퇴장(interaction: discord.Interaction):
-    user = interaction.user
-    if not user.voice or not user.voice.channel:
-        await interaction.response.send_message("❌ 먼저 음성 채널에 입장해 주세요.", ephemeral=True)
-        return
-
-    channel = user.voice.channel
-    members = [m for m in channel.members if not m.bot]
-
-    if len(members) < 2:
-        await interaction.response.send_message("❌ 음성채널 인원이 2명 이상이어야만 사용할 수 있습니다.", ephemeral=True)
-        return
-
-    kicked = random.choice(members)
-    try:
-        await kicked.move_to(None)
-        await interaction.response.send_message(f"👋 {kicked.mention} 님이 랜덤으로 퇴장되었습니다.", ephemeral=False)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ 퇴장 처리 중 오류가 발생했습니다: {e}", ephemeral=True)
-
 
 # 📣 소환 명령어 (변경 없음)
 @tree.command(name="소환", description="모든 유저를 현재 음성 채널로 소환합니다.", guild=discord.Object(id=GUILD_ID))
@@ -235,8 +223,13 @@ async def 밥(interaction: discord.Interaction):
         await interaction.response.send_message("❌ '밥좀묵겠습니다' 음성채널을 찾을 수 없습니다.", ephemeral=True)
         return
 
-    if not text_channel:
-        await interaction.response.send_message("❌ '자유채팅방' 텍스트채널을 찾을 수 없습니다.", ephemeral=True)
+    if not user.voice or not user.voice.channel:
+        await interaction.response.send_message("❌ 먼저 음성채널에 접속해 주세요.", ephemeral=True)
+        return
+
+    # 이미 밥 채널에 있는지 확인
+    if user.voice.channel == target_channel:
+        await interaction.response.send_message("✅ 이미 '밥좀묵겠습니다' 채널에 있습니다!", ephemeral=True)
         return
 
     try:
@@ -245,8 +238,10 @@ async def 밥(interaction: discord.Interaction):
             f"🍚 '{target_channel.name}' 채널로 이동했습니다! 20분 후 당신은 자동 퇴장처리 됩니다.",
             ephemeral=True
         )
-        await text_channel.send(f"{user.mention}님, 20분 동안 밥을 먹지 못하면 토끼록끼의 강력한 염력으로 강제퇴장 당할 수 있습니다.")
+        if text_channel:
+            await text_channel.send(f"{user.mention}님, 20분 동안 밥을 먹지 못하면 토끼록끼의 강력한 염력으로 강제퇴장 당할 수 있습니다.")
 
+        # 자동퇴장 타이머 시작
         if user.id in auto_disconnect_tasks:
             auto_disconnect_tasks[user.id].cancel()
             print(f"[타이머 취소] 기존 {user}님의 자동퇴장 타이머가 취소되었습니다.")
