@@ -86,16 +86,19 @@ async def on_voice_state_update(member, before, after):
 
             try:
                 response = supabase.table("voice_activity").insert(data).execute()
-                if response.error:
-                    print(f"Supabase 오류: {response.error.message}")
-            else:
-                print("✅ DB 저장 성공")
-                
+                if response.data:
+                    print("✅ DB 저장 성공")
+                else:
+                    print("⚠️ DB 저장 실패: 응답에 데이터 없음")
+            except Exception as e:
+                print(f"❌ Supabase 예외 발생: {e}")
+
     # 방송 종료 감지
     if before.self_stream and not after.self_stream and before.channel == after.channel:
         text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
         if text_channel:
             await text_channel.send(f"📴 {member.mention} 님 방송 종료됨")
+
 
 
 
