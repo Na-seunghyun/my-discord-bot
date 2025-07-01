@@ -7,9 +7,10 @@ import re
 import os
 import random
 import asyncio
-from datetime import datetime, timezone
-
+from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
+
+KST = timezone(timedelta(hours=9))
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -69,13 +70,13 @@ async def on_voice_state_update(member, before, after):
 
     # 입장 기록
     if before.channel is None and after.channel is not None:
-        voice_join_times[member.id] = datetime.now(timezone.utc)
+        voice_join_times[member.id] = datetime.now(KST)
 
     # 퇴장 기록
     elif before.channel is not None and after.channel is None:
         join_time = voice_join_times.pop(member.id, None)
         if join_time:
-            left_time = datetime.now(timezone.utc)
+            left_time = datetime.now(KST)
             duration = int((left_time - join_time).total_seconds())
 
             user_id = str(member.id)
