@@ -101,22 +101,27 @@ async def on_voice_state_update(member, before, after):
             except Exception as e:
                 print(f"❌ Supabase 예외 발생: {e}")
        
+global streaming_members
 
-
-    # ✅ 방송 시작 감지
+    # 방송 시작 감지 (False -> True)
     if not before.self_stream and after.self_stream and after.channel is not None:
-        text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
-        if text_channel:
-            embed = discord.Embed(
-                title="📺 방송 시작 알림!",
-                description=f"{member.mention} 님이 `{after.channel.name}` 채널에서 방송을 시작했어요!\n👀 모두 구경하러 가보세요!",
-                color=discord.Color.green()
-            )
-            embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-            embed.set_footer(text="Go Live 활성화됨")
-            await text_channel.send(embed=embed)
+        if member.id not in streaming_members:
+            streaming_members.add(member.id)
+            text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+            if text_channel:
+                embed = discord.Embed(
+                    title="📺 방송 시작 알림!",
+                    description=f"{member.mention} 님이 `{after.channel.name}` 채널에서 방송을 시작했어요!\n👀 모두 구경하러 가보세요!",
+                    color=discord.Color.green()
+                )
+                embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+                embed.set_footer(text="Go Live 활성화됨")
+                await text_channel.send(embed=embed)
 
-
+    # 방송 종료 감지 (True -> False)
+    if before.self_stream and not after.self_stream:
+        if member.id in streaming_members:
+            streaming_members.remove(member.id)
 
 @tasks.loop(minutes=30)
 async def check_voice_channels_for_streaming():
