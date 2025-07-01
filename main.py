@@ -49,12 +49,15 @@ def sql_escape(s):
         return 'NULL'
     return "'" + str(s).replace("'", "''") + "'"
 
+streaming_members = set()
 
 @bot.event
 async def on_voice_state_update(member, before, after):
     print(f"Voice state update - member: {member}, before: {before.channel if before else None}, after: {after.channel if after else None}")
     if member.bot:
         return
+        
+global streaming_members
 
     # 자동 퇴장 타이머 제거
     if member.id in auto_disconnect_tasks:
@@ -102,7 +105,7 @@ async def on_voice_state_update(member, before, after):
                 print(f"❌ Supabase 예외 발생: {e}")
        
     # ——— 방송 시작/종료 알림 처리 ———
-    global streaming_members
+    
 
     # 방송 시작 감지 (False -> True)
     if not before.self_stream and after.self_stream and after.channel is not None:
