@@ -86,34 +86,34 @@ async def on_voice_state_update(member, before, after):
                     await text_channel.send(f"{member.mention} 나도 게임하고싶어! 나 도 끼 워 줘!")
                     waiting_room_message_cache[member.id] = now
 
-# ✅ 배그 채널 첫 입장 감지 및 1시간 이상 비어있던 경우 안내
-if before.channel is None and after.channel is not None:
-    if after.channel.name in MONITORED_CHANNEL_NAMES and len(after.channel.members) == 1:
-        now = datetime.now(timezone.utc)
-        last_empty = channel_last_empty.get(after.channel.id)
+    # ✅ 배그 채널 첫 입장 감지 및 1시간 이상 비어있던 경우 안내
+    if before.channel is None and after.channel is not None:
+        if after.channel.name in MONITORED_CHANNEL_NAMES and len(after.channel.members) == 1:
+            now = datetime.now(timezone.utc)
+            last_empty = channel_last_empty.get(after.channel.id)
 
-        print(f"🚶‍♂️ '{after.channel.name}' 채널 첫 입장자: {member.display_name}")
-        if last_empty:
-            elapsed = (now - last_empty).total_seconds()
-            print(f"⏱ 마지막 비어있던 시간: {last_empty.isoformat()} (경과: {elapsed:.0f}초)")
-        else:
-            print(f"⚠️ '{after.channel.name}' 채널 마지막 비어있던 시간 정보 없음")
+            print(f"🚶‍♂️ '{after.channel.name}' 채널 첫 입장자: {member.display_name}")
+            if last_empty:
+                elapsed = (now - last_empty).total_seconds()
+                print(f"⏱ 마지막 비어있던 시간: {last_empty.isoformat()} (경과: {elapsed:.0f}초)")
+            else:
+                print(f"⚠️ '{after.channel.name}' 채널 마지막 비어있던 시간 정보 없음")
 
-        if last_empty is None or (now - last_empty).total_seconds() >= 3600:
-            text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
-            if text_channel:
-                embed = discord.Embed(
-                    title="🚀 첫 배그 포문이 열립니다!",
-                    description=(
-                        f"{member.mention} 님이 첫 배그 포문을 열려고 합니다.\n\n"
-                        "같이 해주실 인원들은 현시간 부로 G-pop 바랍니다."
-                    ),
-                    color=discord.Color.blue()
-                )
-                await text_channel.send(content='@everyone', embed=embed)
-                print("📢 G-pop 안내 메시지 전송됨 ✅")
-        else:
-            print("⛔ 1시간 미만이라 메시지 미전송")
+            if last_empty is None or (now - last_empty).total_seconds() >= 3600:
+                text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+                if text_channel:
+                    embed = discord.Embed(
+                        title="🚀 첫 배그 포문이 열립니다!",
+                        description=(
+                            f"{member.mention} 님이 첫 배그 포문을 열려고 합니다.\n\n"
+                            "같이 해주실 인원들은 현시간 부로 G-pop 바랍니다."
+                        ),
+                        color=discord.Color.blue()
+                    )
+                    await text_channel.send(content='@everyone', embed=embed)
+                    print("📢 G-pop 안내 메시지 전송됨 ✅")
+            else:
+                print("⛔ 1시간 미만이라 메시지 미전송")
 
 
     # 입장 기록
