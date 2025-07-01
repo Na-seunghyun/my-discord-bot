@@ -60,10 +60,14 @@ from datetime import datetime, timezone, timedelta
 voice_activity_cache = {}
 
 channel_last_empty = {}
+all_empty_since = None
+notified_after_empty = False
+
 
 @bot.event
 async def on_voice_state_update(member, before, after):
     global streaming_members
+    global all_empty_since, notified_after_empty
 
     print(f"Voice state update - member: {member}, before: {before.channel if before else None}, after: {after.channel if after else None}")
     if member.bot:
@@ -86,21 +90,30 @@ async def on_voice_state_update(member, before, after):
                     await text_channel.send(f"{member.mention} 나도 게임하고싶어! 나 도 끼 워 줘!")
                     waiting_room_message_cache[member.id] = now
 
-    # ✅ 배그 채널 첫 입장 감지 및 1시간 이상 비어있던 경우 안내
+    # ===== 여기부터 수정된 배그 채널 첫 입장 감지 로직 =====
     if before.channel is None and after.channel is not None:
         if after.channel.name in MONITORED_CHANNEL_NAMES and len(after.channel.members) == 1:
             now = datetime.now(timezone.utc)
-            last_empty = channel_last_empty.get(after.channel.id)
+            guild = member.guild
+            monitored_channels = [ch for ch in guild.voice_channels if ch.name in MONITORED_CHANNEL_NAMES]
 
-            print(f"🚶‍♂️ '{after.channel.name}' 채널 첫 입장자: {member.display_name}")
-            if last_empty:
-                elapsed = (now - last_empty).total_seconds()
-                print(f"⏱ 마지막 비어있던 시간: {last_empty.isoformat()} (경과: {elapsed:.0f}초)")
+            # 모든 모니터링 채널이 비어있는지 확인
+            all_empty = all(len(ch.members) == 0 for ch in monitored_channels)
+
+            if all_empty:
+                # 비어있던 시간 기록 시작 (없으면 기록)
+                if all_empty_since is None:
+                    all_empty_since = now
+                    notified_after_empty = False
+                    print(f"⚠️ 모든 모니터링 채널 비어있음 - 시간 기록 시작: {all_empty_since.isoformat()}")
             else:
-                print(f"⚠️ '{after.channel.name}' 채널 마지막 비어있던 시간 정보 없음")
+                # 한 곳이라도 사람이 있으면 기록 초기화
+                all_empty_since = None
+                notified_after_empty = False
 
-            if last_empty is None or (now - last_empty).total_seconds() >= 3600:
-                text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+            # 1시간 이상 비어있다가 메시지 미전송 상태에서 첫 입장이라면 메시지 발송
+            if all_empty_since and (now - all_empty_since).total_seconds() >= 3600 and not notified_after_empty:
+                text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
                 if text_channel:
                     embed = discord.Embed(
                         title="🚀 첫 배그 포문이 열립니다!",
@@ -112,8 +125,10 @@ async def on_voice_state_update(member, before, after):
                     )
                     await text_channel.send(content='@everyone', embed=embed)
                     print("📢 G-pop 안내 메시지 전송됨 ✅")
-            else:
-                print("⛔ 1시간 미만이라 메시지 미전송")
+                notified_after_empty = True
+                all_empty_since = None
+    # ===== 여기까지 수정된 부분 =====
+
 
 
     # 입장 기록
