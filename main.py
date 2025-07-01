@@ -51,6 +51,9 @@ def sql_escape(s):
 
 streaming_members = set()
 
+# 전역 캐시 선언 (함수 밖, 파일 최상단)
+waiting_room_message_cache = {}
+
 @bot.event
 async def on_voice_state_update(member, before, after):
     global streaming_members
@@ -64,22 +67,26 @@ async def on_voice_state_update(member, before, after):
         auto_disconnect_tasks[member.id].cancel()
         auto_disconnect_tasks.pop(member.id, None)
 
-    # 대기방(예: "대기방") 입장 시 메시지 보내기
+    # 대기방(예: "대기방") 입장 시 메시지 보내기 (중복 방지)
     if (before.channel != after.channel) and (after.channel is not None):
         if after.channel.name == "대기방":
-            text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
-            if text_channel:
-                await text_channel.send(f"{member.mention} 나도 게임하고싶어! 나 도 끼 워 줘!")
+            now = datetime.utcnow()
+            last_sent = waiting_room_message_cache.get(member.id)
+            if not last_sent or (now - last_sent) > timedelta(seconds=30):
+                text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+                if text_channel:
+                    await text_channel.send(f"{member.mention} 나도 게임하고싶어! 나 도 끼 워 줘!")
+                    waiting_room_message_cache[member.id] = now
 
     # 입장 기록
     if before.channel is None and after.channel is not None:
-        voice_join_times[member.id] = datetime.now(timezone.utc)
+        voice_join_times[member.id] = datetime.now(timezone.utc).replace(microsecond=0)
 
     # 퇴장 기록
     elif before.channel is not None and after.channel is None:
         join_time = voice_join_times.pop(member.id, None)
         if join_time:
-            left_time = datetime.now(timezone.utc)
+            left_time = datetime.now(timezone.utc).replace(microsecond=0)
             duration = int((left_time - join_time).total_seconds())
 
             user_id = str(member.id)
@@ -103,6 +110,8 @@ async def on_voice_state_update(member, before, after):
                     print("⚠️ DB 저장 실패: 응답에 데이터 없음")
             except Exception as e:
                 print(f"❌ Supabase 예외 발생: {e}")
+
+
        
     # ——— 방송 시작/종료 알림 처리 ———
 
