@@ -54,6 +54,11 @@ streaming_members = set()
 # 전역 캐시 선언 (함수 밖, 파일 최상단)
 waiting_room_message_cache = {}
 
+from datetime import datetime, timezone, timedelta
+
+# voice_activity 중복 저장 방지용 캐시 (유저별 마지막 저장 시간)
+voice_activity_cache = {}
+
 @bot.event
 async def on_voice_state_update(member, before, after):
     global streaming_members
@@ -61,16 +66,17 @@ async def on_voice_state_update(member, before, after):
     print(f"Voice state update - member: {member}, before: {before.channel if before else None}, after: {after.channel if after else None}")
     if member.bot:
         return
-        
+
     # 자동 퇴장 타이머 제거
     if member.id in auto_disconnect_tasks:
         auto_disconnect_tasks[member.id].cancel()
         auto_disconnect_tasks.pop(member.id, None)
 
-    # 대기방(예: "대기방") 입장 시 메시지 보내기 (중복 방지)
+    # 대기방 입장 메시지 중복 방지 캐시
+    now = datetime.utcnow()
+
     if (before.channel != after.channel) and (after.channel is not None):
         if after.channel.name == "대기방":
-            now = datetime.utcnow()
             last_sent = waiting_room_message_cache.get(member.id)
             if not last_sent or (now - last_sent) > timedelta(seconds=30):
                 text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
@@ -89,6 +95,13 @@ async def on_voice_state_update(member, before, after):
             left_time = datetime.now(timezone.utc).replace(microsecond=0)
             duration = int((left_time - join_time).total_seconds())
 
+            # 중복 저장 방지 체크
+            last_save_time = voice_activity_cache.get(member.id)
+            # 10초 이내에 중복 저장 방지 (필요시 조절 가능)
+            if last_save_time and (left_time - last_save_time) < timedelta(seconds=10):
+                print(f"중복 저장 방지: {member.id} - 최근 저장 시간 {last_save_time}")
+                return
+
             user_id = str(member.id)
             username = member.display_name
             joined_at = join_time.isoformat()
@@ -106,10 +119,12 @@ async def on_voice_state_update(member, before, after):
                 response = supabase.table("voice_activity").insert(data).execute()
                 if response.data:
                     print("✅ DB 저장 성공")
+                    voice_activity_cache[member.id] = left_time  # 저장 시간 업데이트
                 else:
                     print("⚠️ DB 저장 실패: 응답에 데이터 없음")
             except Exception as e:
                 print(f"❌ Supabase 예외 발생: {e}")
+
 
 
        
