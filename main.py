@@ -79,39 +79,40 @@ async def on_voice_state_update(member, before, after):
         auto_disconnect_tasks.pop(member.id, None)
 
     # 대기방 입장 메시지 중복 방지 캐시
-    now = datetime.utcnow()
+    now_utc = datetime.utcnow()
 
     if (before.channel != after.channel) and (after.channel is not None):
         if after.channel.name == "대기방":
             last_sent = waiting_room_message_cache.get(member.id)
-            if not last_sent or (now - last_sent) > timedelta(seconds=30):
+            if not last_sent or (now_utc - last_sent) > timedelta(seconds=30):
                 text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
                 if text_channel:
                     await text_channel.send(f"{member.mention} 나도 게임하고싶어! 나 도 끼 워 줘!")
-                    waiting_room_message_cache[member.id] = now
+                    waiting_room_message_cache[member.id] = now_utc
 
-    # ===== 여기부터 수정된 배그 채널 첫 입장 감지 로직 =====
+    # ===== 수정된 배그 채널 첫 입장 감지 로직 =====
+    now = datetime.now(timezone.utc)
+    guild = member.guild
+    monitored_channels = [ch for ch in guild.voice_channels if ch.name in MONITORED_CHANNEL_NAMES]
+
+    # 모든 모니터링 채널이 비어있는지 확인
+    all_empty = all(len(ch.members) == 0 for ch in monitored_channels)
+
+    # 만약 입장 시점에 모든 채널이 비어있다면 시간 기록 시작 또는 유지
+    if all_empty:
+        if all_empty_since is None:
+            all_empty_since = now
+            notified_after_empty = False
+            print(f"⚠️ 모든 모니터링 채널 비어있음 - 시간 기록 시작: {all_empty_since.isoformat()}")
+    else:
+        # 사람이 있으면 시간 기록 초기화
+        all_empty_since = None
+        notified_after_empty = False
+
+    # 입장 시점에만 아래 메시지 체크 (before.channel == None and after.channel != None)
     if before.channel is None and after.channel is not None:
         if after.channel.name in MONITORED_CHANNEL_NAMES and len(after.channel.members) == 1:
-            now = datetime.now(timezone.utc)
-            guild = member.guild
-            monitored_channels = [ch for ch in guild.voice_channels if ch.name in MONITORED_CHANNEL_NAMES]
-
-            # 모든 모니터링 채널이 비어있는지 확인
-            all_empty = all(len(ch.members) == 0 for ch in monitored_channels)
-
-            if all_empty:
-                # 비어있던 시간 기록 시작 (없으면 기록)
-                if all_empty_since is None:
-                    all_empty_since = now
-                    notified_after_empty = False
-                    print(f"⚠️ 모든 모니터링 채널 비어있음 - 시간 기록 시작: {all_empty_since.isoformat()}")
-            else:
-                # 한 곳이라도 사람이 있으면 기록 초기화
-                all_empty_since = None
-                notified_after_empty = False
-
-            # 1시간 이상 비어있다가 메시지 미전송 상태에서 첫 입장이라면 메시지 발송
+            # 1시간 이상 비어있고, 아직 메시지 발송 안했다면
             if all_empty_since and (now - all_empty_since).total_seconds() >= 3600 and not notified_after_empty:
                 text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
                 if text_channel:
@@ -126,7 +127,8 @@ async def on_voice_state_update(member, before, after):
                     await text_channel.send(content='@everyone', embed=embed)
                     print("📢 G-pop 안내 메시지 전송됨 ✅")
                 notified_after_empty = True
-                all_empty_since = None
+                # **메시지 발송 후에도 all_empty_since는 유지하여 재입장 시 중복 방지 가능하도록 함**
+
     # ===== 여기까지 수정된 부분 =====
 
 
