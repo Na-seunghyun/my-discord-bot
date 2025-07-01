@@ -98,7 +98,7 @@ async def on_voice_state_update(member, before, after):
             # 중복 저장 방지 체크
             last_save_time = voice_activity_cache.get(member.id)
             # 10초 이내에 중복 저장 방지 (필요시 조절 가능)
-            if last_save_time and (left_time - last_save_time) < timedelta(seconds=10):
+            if last_save_time and (left_time - last_save_time) < timedelta(seconds=2):
                 print(f"중복 저장 방지: {member.id} - 최근 저장 시간 {last_save_time}")
                 return
 
