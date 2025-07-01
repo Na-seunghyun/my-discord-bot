@@ -294,18 +294,18 @@ class VoiceTopButton(View):
 
     @button(label="접속시간랭킹 보기", style=discord.ButtonStyle.primary)
     async def on_click(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=False)
 
         try:
             response = supabase.rpc("get_top_voice_activity", {}).execute()
 
             if not hasattr(response, "data") or response.data is None:
-                await interaction.followup.send("❌ Supabase 응답 오류 또는 데이터 없음", ephemeral=True)
+                await interaction.followup.send("❌ Supabase 응답 오류 또는 데이터 없음", ephemeral=False)
                 return
 
             data = response.data
             if not data:
-                await interaction.followup.send("😥 기록된 접속 시간이 없습니다.", ephemeral=True)
+                await interaction.followup.send("😥 기록된 접속 시간이 없습니다.", ephemeral=False)
                 return
 
             msg = "🎤 음성 접속시간 Top 10\n"
@@ -319,10 +319,10 @@ class VoiceTopButton(View):
             except discord.errors.NotFound:
                 print("⚠️ 편집할 메시지를 찾을 수 없습니다.")
 
-            await interaction.followup.send(msg, ephemeral=True)
+            await interaction.followup.send(msg, ephemeral=False)
 
         except Exception as e:
-            await interaction.followup.send(f"❗ 오류 발생: {e}", ephemeral=True)
+            await interaction.followup.send(f"❗ 오류 발생: {e}", ephemeral=False)
 
 
 
