@@ -101,7 +101,8 @@ async def on_voice_state_update(member, before, after):
             except Exception as e:
                 print(f"❌ Supabase 예외 발생: {e}")
        
-global streaming_members
+    # ——— 방송 시작/종료 알림 처리 ———
+    global streaming_members
 
     # 방송 시작 감지 (False -> True)
     if not before.self_stream and after.self_stream and after.channel is not None:
@@ -122,6 +123,8 @@ global streaming_members
     if before.self_stream and not after.self_stream:
         if member.id in streaming_members:
             streaming_members.remove(member.id)
+        # 방송 종료 알림 메시지는 보내지 않습니다!
+
 
 @tasks.loop(minutes=30)
 async def check_voice_channels_for_streaming():
