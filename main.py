@@ -100,24 +100,8 @@ async def on_voice_state_update(member, before, after):
                     print("⚠️ DB 저장 실패: 응답에 데이터 없음")
             except Exception as e:
                 print(f"❌ Supabase 예외 발생: {e}")
-   
-    
-    # 방송 종료 감지 (임베드 메시지로 전환)
-    if before.self_stream and not after.self_stream and before.channel == after.channel:
-        text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
-        if text_channel:
-            embed = discord.Embed(
-                title="📴 방송이 종료되었습니다",
-                description=f"{member.mention} 님의 방송이 꺼졌습니다.",
-                color=discord.Color.orange()
-            )
-            embed.add_field(
-                name="안내",
-                value="실수로 꺼졌다면 다시 방송을 켜주세요! 🎥",
-                inline=False
-            )
-            embed.set_footer(text="ROGGIBOT 알림 시스템")
-            await text_channel.send(embed=embed)
+       
+
 
     # ✅ 방송 시작 감지
     if not before.self_stream and after.self_stream and after.channel is not None:
@@ -134,7 +118,7 @@ async def on_voice_state_update(member, before, after):
 
 
 
-@tasks.loop(minutes=10)
+@tasks.loop(minutes=30)
 async def check_voice_channels_for_streaming():
     for guild in bot.guilds:
         text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
