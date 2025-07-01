@@ -98,37 +98,35 @@ async def on_voice_state_update(member, before, after):
     # 모든 모니터링 채널이 비어있는지 확인
     all_empty = all(len(ch.members) == 0 for ch in monitored_channels)
 
-    # 만약 입장 시점에 모든 채널이 비어있다면 시간 기록 시작 또는 유지
-    if all_empty:
-        if all_empty_since is None:
-            all_empty_since = now
-            notified_after_empty = False
-            print(f"⚠️ 모든 모니터링 채널 비어있음 - 시간 기록 시작: {all_empty_since.isoformat()}")
-    else:
-        # 사람이 있으면 시간 기록 초기화
+    # 퇴장으로 인해 마지막 인원이 나가서 모든 채널이 비게 되었을 경우
+    if before.channel and before.channel.name in MONITORED_CHANNEL_NAMES:
+        if all(len(ch.members) == 0 for ch in monitored_channels):
+            if all_empty_since is None:
+                all_empty_since = now
+                notified_after_empty = False
+                print(f"⚠️ 모든 모니터링 채널 비어있음 - 시간 기록 시작: {all_empty_since.isoformat()}")
+
+    # 입장 시점에만 아래 메시지 체크
+    if before.channel is None and after.channel and after.channel.name in MONITORED_CHANNEL_NAMES:
+        if all_empty_since and (now - all_empty_since).total_seconds() >= 3600 and not notified_after_empty:
+            text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+            if text_channel:
+                embed = discord.Embed(
+                    title="🚀 첫 배그 포문이 열립니다!",
+                    description=(
+                        f"{member.mention} 님이 첫 배그 포문을 열려고 합니다.\n\n"
+                        "같이 해주실 인원들은 현시간 부로 G-pop 바랍니다."
+                    ),
+                    color=discord.Color.blue()
+                )
+                await text_channel.send(content='@everyone', embed=embed)
+                print("📢 G-pop 안내 메시지 전송됨 ✅")
+            notified_after_empty = True
+
+    # 모니터링 채널에 사람이 존재하면 상태 초기화
+    if not all_empty:
         all_empty_since = None
         notified_after_empty = False
-
-    # 입장 시점에만 아래 메시지 체크 (before.channel == None and after.channel != None)
-    if before.channel is None and after.channel is not None:
-        if after.channel.name in MONITORED_CHANNEL_NAMES and len(after.channel.members) == 1:
-            # 1시간 이상 비어있고, 아직 메시지 발송 안했다면
-            if all_empty_since and (now - all_empty_since).total_seconds() >= 3600 and not notified_after_empty:
-                text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
-                if text_channel:
-                    embed = discord.Embed(
-                        title="🚀 첫 배그 포문이 열립니다!",
-                        description=(
-                            f"{member.mention} 님이 첫 배그 포문을 열려고 합니다.\n\n"
-                            "같이 해주실 인원들은 현시간 부로 G-pop 바랍니다."
-                        ),
-                        color=discord.Color.blue()
-                    )
-                    await text_channel.send(content='@everyone', embed=embed)
-                    print("📢 G-pop 안내 메시지 전송됨 ✅")
-                notified_after_empty = True
-                # **메시지 발송 후에도 all_empty_since는 유지하여 재입장 시 중복 방지 가능하도록 함**
-
     # ===== 여기까지 수정된 부분 =====
 
 
