@@ -9,4 +9,15 @@ async def summon(interaction: app_commands.Interaction):
         return
 
     moved = 0
-    for other_vc in interaction.guild
+    for other_vc in interaction.guild.voice_channels:
+        if other_vc == vc:
+            continue
+        for member in other_vc.members:
+            if not member.bot:
+                try:
+                    await member.move_to(vc)
+                    moved += 1
+                except:
+                    pass
+
+    await interaction.response.send_message(f"✅ {moved}명 소환 완료", ephemeral=True)
