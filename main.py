@@ -284,7 +284,7 @@ async def 소환(interaction: discord.Interaction):
         color=discord.Color.green()
     )
     embed.add_field(name="소환된 멤버", value=moved_mentions, inline=False)
-    embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C.jpg")
+    embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
 
     await interaction.response.send_message(embed=embed)
 
