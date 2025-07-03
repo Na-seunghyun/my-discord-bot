@@ -310,7 +310,6 @@ class ChannelSelect(discord.ui.Select):
             min_values=1,
             max_values=len(options),
             options=options,
-            # custom_id에 고유값 부여 (uuid4 사용)
             custom_id=f"channel_select_{uuid.uuid4()}"
         )
 
@@ -364,7 +363,6 @@ class ChannelSelect(discord.ui.Select):
 class ChannelSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
-        # 매번 고유한 custom_id 가진 Select 인스턴스 생성
         self.add_item(ChannelSelect(CHANNEL_CHOICES))
 
 
@@ -378,9 +376,8 @@ class MemberSelect(discord.ui.Select):
         super().__init__(
             placeholder="소환할 멤버를 선택하세요 (여러 개 선택 가능)",
             min_values=1,
-            max_values=min(25, len(options)),  # 디스코드 select 최대 25개
+            max_values=min(25, len(options)),  # Discord select 최대 25개
             options=options,
-            # custom_id에 고유값 부여 (uuid4 사용)
             custom_id=f"member_select_{uuid.uuid4()}"
         )
 
@@ -422,8 +419,50 @@ class MemberSelect(discord.ui.Select):
 class MemberSelectView(discord.ui.View):
     def __init__(self, members: list[discord.Member]):
         super().__init__(timeout=60)
-        # 매번 고유한 custom_id 가진 Select 인스턴스 생성
         self.add_item(MemberSelect(members))
+
+
+# --- 슬래시 커맨드 등록 예시 ---
+
+class MyBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.members = True
+        intents.voice_states = True
+        super().__init__(command_prefix="!", intents=intents)
+        self.tree = app_commands.CommandTree(self)
+
+    async def setup_hook(self):
+        # 슬래시 명령어 동기화
+        await self.tree.sync()
+
+
+bot = MyBot()
+
+
+@bot.tree.command(name="소환", description="채널을 선택해 채널 내 멤버를 소환합니다.")
+async def 소환(interaction: discord.Interaction):
+    # 기존 채널 선택 UI 보여주기
+    await interaction.response.send_message("소환할 채널을 선택하세요:", view=ChannelSelectView(), ephemeral=True)
+
+
+@bot.tree.command(name="개별소환", description="특정 멤버만 골라서 소환합니다.")
+async def 개별소환(interaction: discord.Interaction):
+    vc = interaction.user.voice.channel if interaction.user.voice else None
+    if not vc:
+        await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
+        return
+
+    # 서버 멤버 중 음성채널에 들어와있는 멤버만 필터링 (봇 제외)
+    members = [m for m in interaction.guild.members if m.voice and m.voice.channel and not m.bot]
+
+    if not members:
+        await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
+        return
+
+    view = MemberSelectView(members)
+    await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+
 
 
 # ✅ 슬래시 명령어: 팀짜기
