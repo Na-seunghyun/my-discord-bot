@@ -9,6 +9,7 @@ import random
 import asyncio
 from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
+import uuid  # uuid 추가
 
 KST = timezone(timedelta(hours=9))
 
@@ -129,8 +130,6 @@ async def on_voice_state_update(member, before, after):
         notified_after_empty = False
     # ===== 여기까지 수정된 부분 =====
 
-
-
     # 입장 기록
     if before.channel is None and after.channel is not None:
         voice_join_times[member.id] = datetime.now(timezone.utc).replace(microsecond=0)
@@ -176,9 +175,6 @@ async def on_voice_state_update(member, before, after):
             except Exception as e:
                 print(f"❌ Supabase 예외 발생: {e}")
 
-
-
-       
     # ——— 방송 시작/종료 알림 처리 ———
 
     # 방송 시작 감지 (False -> True)
@@ -201,7 +197,6 @@ async def on_voice_state_update(member, before, after):
         if member.id in streaming_members:
             streaming_members.remove(member.id)
         # 방송 종료 알림 메시지는 보내지 않습니다!
-
 
 
 @tasks.loop(minutes=30)
@@ -276,8 +271,6 @@ async def 도움말(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-
-
 # ✅ 슬래시 명령어: 검사
 @tree.command(name="검사", description="닉네임 검사", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
@@ -295,9 +288,8 @@ async def 검사(interaction: discord.Interaction):
                 pass
     await interaction.followup.send(f"🔍 검사 완료: {count}명 문제 있음", ephemeral=True)
 
-# ✅ 슬래시 명령어: 소환
 
-import uuid  # uuid 추가
+# ✅ 슬래시 명령어: 소환
 
 EXCLUDED_CHANNELS = ["밥좀묵겠습니다", "쉼터", "클랜훈련소"]
 
@@ -434,11 +426,6 @@ class MemberSelectView(discord.ui.View):
         self.add_item(MemberSelect(members))
 
 
-
-
-
-
-
 # ✅ 슬래시 명령어: 팀짜기
 class TeamMoveView(discord.ui.View):
     def __init__(self, teams, empty_channels, origin_channel):
@@ -535,6 +522,7 @@ def format_duration(seconds: int) -> str:
 
 from discord.ui import View, button
 
+
 class VoiceTopButton(View):
     def __init__(self):
         super().__init__(timeout=180)  # 뷰 타임아웃 3분
@@ -572,9 +560,6 @@ class VoiceTopButton(View):
             await interaction.followup.send(f"❗ 오류 발생: {e}", ephemeral=False)
 
 
-
-
-
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
 async def 접속시간랭킹(interaction: discord.Interaction):
     # 1) 즉시 defer — followup 으로 버튼 메시지 전송 준비
@@ -587,11 +572,11 @@ async def 접속시간랭킹(interaction: discord.Interaction):
     )
 
 
-
-
-
-
-
+# ✅ 슬래시 명령어: 소환 (명령어 등록)
+@tree.command(name="소환", description="음성 채널 인원 소환", guild=discord.Object(id=GUILD_ID))
+async def 소환(interaction: discord.Interaction):
+    # 명령어 실행 시 ChannelSelectView 보여줌
+    await interaction.response.send_message("소환할 채널을 선택해주세요.", view=ChannelSelectView(), ephemeral=True)
 
 
 @bot.event
