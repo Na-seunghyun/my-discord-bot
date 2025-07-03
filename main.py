@@ -247,13 +247,14 @@ async def 검사(interaction: discord.Interaction):
                 pass
     await interaction.followup.send(f"🔍 검사 완료: {count}명 문제 있음", ephemeral=True)
 
-# ✅ 슬래시 명령어: 소환
 @tree.command(name="소환", description="모두 소환", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
     vc = interaction.user.voice.channel if interaction.user.voice else None
     if not vc:
         await interaction.response.send_message("❌ 음성 채널에 들어가주세요!", ephemeral=True)
         return
+
+    await interaction.response.defer(thinking=True)
 
     moved = 0
     moved_members = []
@@ -270,23 +271,23 @@ async def 소환(interaction: discord.Interaction):
                     pass
 
     if moved == 0:
-        await interaction.response.send_message("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
+        await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
         return
 
-    # 소환한 사람 멘션
     summon_user_mention = interaction.user.mention
-    # 소환된 멤버 멘션 리스트
-    moved_mentions = " ".join(m.mention for m in moved_members)
 
     embed = discord.Embed(
         title="📢 쿠치요세노쥬츠 !",
-        description=f"{summon_user_mention} 님이 {moved}명을 음성채널로 소환했습니다.",
+        description=f"{summon_user_mention} 님이 **{moved}명**을 음성채널로 소환했습니다.",
         color=discord.Color.green()
     )
-    embed.add_field(name="소환된 멤버", value=moved_mentions, inline=False)
+    # 👇 멘션 대신 명수만 표시하므로 이 필드는 삭제하거나 생략
+    # embed.add_field(name="소환된 멤버", value=moved_mentions, inline=False)
+
     embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
+
 
 
 # ✅ 슬래시 명령어: 팀짜기
