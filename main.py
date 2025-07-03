@@ -249,45 +249,94 @@ async def 검사(interaction: discord.Interaction):
 
 # ✅ 슬래시 명령어: 소환
 
-@tree.command(name="소환", description="모두 소환", guild=discord.Object(id=GUILD_ID))
+import discord
+from discord import app_commands
+from discord.ext import commands
+import asyncio
+
+EXCLUDED_CHANNELS = ["밥좀묵겠습니다", "쉼터", "클랜훈련소"]
+
+CHANNEL_CHOICES = [
+    "all",
+    "밥좀묵겠습니다", "쉼터", "클랜훈련소",
+    "게스트방", "대기방",
+    "큰맵1", "큰맵2"
+] + [f"일반{i}" for i in range(1, 17)]
+
+
+class ChannelSelect(discord.ui.Select):
+    def __init__(self, channels: list[str]):
+        options = [discord.SelectOption(label=ch) for ch in channels]
+        super().__init__(
+            placeholder="소환할 채널을 선택하세요 (여러 개 선택 가능)",
+            min_values=1,
+            max_values=len(options),
+            options=options,
+            custom_id="channel_select"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        vc = interaction.user.voice.channel if interaction.user.voice else None
+        if not vc:
+            await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
+            return
+
+        await interaction.response.defer(thinking=True)
+
+        selected = self.values
+        if "all" in selected:
+            target_channels = [
+                ch for ch in interaction.guild.voice_channels
+                if ch.name not in EXCLUDED_CHANNELS
+            ]
+            excluded_note = "\n\n❗️`all` 선택 시 `밥좀묵겠습니다`, `쉼터`, `클랜훈련소`는 제외됩니다."
+        else:
+            target_channels = [
+                ch for ch in interaction.guild.voice_channels
+                if ch.name in selected
+            ]
+            excluded_note = ""
+
+        moved = 0
+        for ch in target_channels:
+            for member in ch.members:
+                if not member.bot:
+                    try:
+                        await member.move_to(vc)
+                        moved += 1
+                        await asyncio.sleep(0.5)
+                    except Exception as e:
+                        print(f"❌ {member.display_name} 이동 실패: {e}")
+
+        if moved == 0:
+            await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="📢 쿠치요세노쥬츠 !",
+            description=f"{interaction.user.mention} 님이 **{moved}명**을 음성채널로 소환했습니다."
+                        f"{excluded_note}",
+            color=discord.Color.green()
+        )
+        embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
+        await interaction.followup.send(embed=embed)
+
+
+class ChannelSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(ChannelSelect(CHANNEL_CHOICES))
+
+
+@tree.command(name="소환", description="소환할 채널을 선택하세요", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
-    vc = interaction.user.voice.channel if interaction.user.voice else None
-    if not vc:
-        await interaction.response.send_message("❌ 음성 채널에 들어가주세요!", ephemeral=True)
-        return
-
-    # 3초 응답 제한 우회
-    await interaction.response.defer(thinking=True)
-
-    moved = 0
-    moved_members = []
-
-    for other_vc in interaction.guild.voice_channels:
-        if other_vc == vc:
-            continue
-        for member in other_vc.members:
-            if not member.bot:
-                try:
-                    await member.move_to(vc)
-                    moved += 1
-                    moved_members.append(member.display_name)
-                    await asyncio.sleep(0.5)  # 딜레이 추가 (0.3~0.5초 추천)
-                except Exception as e:
-                    print(f"❌ {member.display_name} 이동 실패: {e}")
-
-    if moved == 0:
-        await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
-        return
-
-    embed = discord.Embed(
-        title="📢 쿠치요세노쥬츠 !",
-        description=f"{interaction.user.mention} 님이 **{moved}명**을 음성채널로 소환했습니다.",
-        color=discord.Color.green()
+    await interaction.response.send_message(
+        "🎯 소환할 채널을 선택해주세요! (여러 개 선택 가능)\n\n"
+        "`all` 선택 시 `밥좀묵겠습니다`, `쉼터`, `클랜훈련소`는 제외됩니다.",
+        view=ChannelSelectView(),
+        ephemeral=True
     )
 
-    embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
-
-    await interaction.followup.send(embed=embed)
 
 
 
