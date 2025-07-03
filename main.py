@@ -312,6 +312,7 @@ CHANNEL_CHOICES = [
 ] + [f"일반{i}" for i in range(1, 17)]
 
 
+# --- 기존 채널 선택 UI ---
 class ChannelSelect(discord.ui.Select):
     def __init__(self, channels: list[str]):
         options = [discord.SelectOption(label=ch) for ch in channels]
@@ -376,14 +377,103 @@ class ChannelSelectView(discord.ui.View):
         self.add_item(ChannelSelect(CHANNEL_CHOICES))
 
 
-@tree.command(name="소환", description="소환할 채널을 선택하세요", guild=discord.Object(id=GUILD_ID))
+# --- 새로 추가: 멤버 선택 UI ---
+class MemberSelect(discord.ui.Select):
+    def __init__(self, members: list[discord.Member]):
+        options = [
+            discord.SelectOption(label=m.display_name, value=str(m.id))
+            for m in members if not m.bot
+        ]
+        super().__init__(
+            placeholder="소환할 멤버를 선택하세요 (여러 개 선택 가능)",
+            min_values=1,
+            max_values=min(25, len(options)),  # 디스코드 select 최대 25개
+            options=options,
+            custom_id="member_select"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        vc = interaction.user.voice.channel if interaction.user.voice else None
+        if not vc:
+            await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
+            return
+
+        await interaction.response.defer(thinking=True)
+
+        guild = interaction.guild
+        selected_member_ids = [int(id_) for id_ in self.values]
+        moved = 0
+
+        for member_id in selected_member_ids:
+            member = guild.get_member(member_id)
+            if member and member.voice and member.voice.channel != vc and not member.bot:
+                try:
+                    await member.move_to(vc)
+                    moved += 1
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    print(f"❌ {member.display_name} 이동 실패: {e}")
+
+        if moved == 0:
+            await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="📢 쿠치요세노쥬츠 !",
+            description=f"{interaction.user.mention} 님이 **{moved}명**을 음성채널로 소환했습니다.",
+            color=discord.Color.green()
+        )
+        embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
+        await interaction.followup.send(embed=embed)
+
+
+class MemberSelectView(discord.ui.View):
+    def __init__(self, members: list[discord.Member]):
+        super().__init__(timeout=60)
+        self.add_item(MemberSelect(members))
+
+
+# --- 모드 선택 버튼 UI ---
+class SelectModeView(discord.ui.View):
+    def __init__(self, members: list[discord.Member]):
+        super().__init__(timeout=60)
+        self.members = members
+
+        self.add_item(discord.ui.Button(label="🔹 채널 선택으로 소환", style=discord.ButtonStyle.primary, custom_id="mode_channel"))
+        self.add_item(discord.ui.Button(label="🔸 특정 멤버만 소환", style=discord.ButtonStyle.secondary, custom_id="mode_members"))
+
+    @discord.ui.button(label="🔹 채널 선택으로 소환", style=discord.ButtonStyle.primary, custom_id="mode_channel")
+    async def mode_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(
+            content="🎯 소환할 채널을 선택해주세요! (여러 개 선택 가능)\n\n"
+                    "`all` 선택 시 `밥좀묵겠습니다`, `쉼터`, `클랜훈련소`는 제외됩니다.",
+            view=ChannelSelectView()
+        )
+
+    @discord.ui.button(label="🔸 특정 멤버만 소환", style=discord.ButtonStyle.secondary, custom_id="mode_members")
+    async def mode_members(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(
+            content="👥 소환할 멤버를 선택해주세요! (최대 25명 선택 가능)",
+            view=MemberSelectView(self.members)
+        )
+
+
+@tree.command(name="소환", description="채널 또는 특정 멤버 소환", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
+    # 음성채널에 있는 멤버 목록 (봇 제외)
+    vc = interaction.user.voice.channel if interaction.user.voice else None
+    if not vc:
+        await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
+        return
+
+    members = [m for m in interaction.guild.members if not m.bot]
+
     await interaction.response.send_message(
-        "🎯 소환할 채널을 선택해주세요! (여러 개 선택 가능)\n\n"
-        "`all` 선택 시 `밥좀묵겠습니다`, `쉼터`, `클랜훈련소`는 제외됩니다.",
-        view=ChannelSelectView(),
+        "🔍 어떤 방식으로 소환하시겠어요?",
+        view=SelectModeView(members),
         ephemeral=True
     )
+
 
 
 
