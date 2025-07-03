@@ -296,11 +296,11 @@ async def 검사(interaction: discord.Interaction):
     await interaction.followup.send(f"🔍 검사 완료: {count}명 문제 있음", ephemeral=True)
 
 # ✅ 슬래시 명령어: 소환
-
 import discord
 from discord import app_commands
 from discord.ext import commands
 import asyncio
+import uuid  # uuid 추가
 
 EXCLUDED_CHANNELS = ["밥좀묵겠습니다", "쉼터", "클랜훈련소"]
 
@@ -321,7 +321,7 @@ class ChannelSelect(discord.ui.Select):
             min_values=1,
             max_values=len(options),
             options=options,
-            custom_id="channel_select"
+            custom_id=f"channel_select_{uuid.uuid4()}"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -389,7 +389,7 @@ class MemberSelect(discord.ui.Select):
             min_values=1,
             max_values=min(25, len(options)),  # 디스코드 select 최대 25개
             options=options,
-            custom_id="member_select"
+            custom_id=f"member_select_{uuid.uuid4()}"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -431,6 +431,7 @@ class MemberSelectView(discord.ui.View):
     def __init__(self, members: list[discord.Member]):
         super().__init__(timeout=60)
         self.add_item(MemberSelect(members))
+
 
 
 # --- 모드 선택 버튼 UI ---
