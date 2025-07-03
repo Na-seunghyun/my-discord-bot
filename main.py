@@ -296,10 +296,7 @@ async def 검사(interaction: discord.Interaction):
     await interaction.followup.send(f"🔍 검사 완료: {count}명 문제 있음", ephemeral=True)
 
 # ✅ 슬래시 명령어: 소환
-import discord
-from discord import app_commands
-from discord.ext import commands
-import asyncio
+
 import uuid  # uuid 추가
 
 EXCLUDED_CHANNELS = ["밥좀묵겠습니다", "쉼터", "클랜훈련소"]
@@ -321,6 +318,7 @@ class ChannelSelect(discord.ui.Select):
             min_values=1,
             max_values=len(options),
             options=options,
+            # custom_id에 고유값 부여 (uuid4 사용)
             custom_id=f"channel_select_{uuid.uuid4()}"
         )
 
@@ -374,6 +372,7 @@ class ChannelSelect(discord.ui.Select):
 class ChannelSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
+        # 매번 고유한 custom_id 가진 Select 인스턴스 생성
         self.add_item(ChannelSelect(CHANNEL_CHOICES))
 
 
@@ -389,6 +388,7 @@ class MemberSelect(discord.ui.Select):
             min_values=1,
             max_values=min(25, len(options)),  # 디스코드 select 최대 25개
             options=options,
+            # custom_id에 고유값 부여 (uuid4 사용)
             custom_id=f"member_select_{uuid.uuid4()}"
         )
 
@@ -430,50 +430,9 @@ class MemberSelect(discord.ui.Select):
 class MemberSelectView(discord.ui.View):
     def __init__(self, members: list[discord.Member]):
         super().__init__(timeout=60)
+        # 매번 고유한 custom_id 가진 Select 인스턴스 생성
         self.add_item(MemberSelect(members))
 
-
-
-# --- 모드 선택 버튼 UI ---
-class SelectModeView(discord.ui.View):
-    def __init__(self, members: list[discord.Member]):
-        super().__init__(timeout=60)
-        self.members = members
-
-        self.add_item(discord.ui.Button(label="🔹 채널 선택으로 소환", style=discord.ButtonStyle.primary, custom_id="mode_channel"))
-        self.add_item(discord.ui.Button(label="🔸 특정 멤버만 소환", style=discord.ButtonStyle.secondary, custom_id="mode_members"))
-
-    @discord.ui.button(label="🔹 채널 선택으로 소환", style=discord.ButtonStyle.primary, custom_id="mode_channel")
-    async def mode_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(
-            content="🎯 소환할 채널을 선택해주세요! (여러 개 선택 가능)\n\n"
-                    "`all` 선택 시 `밥좀묵겠습니다`, `쉼터`, `클랜훈련소`는 제외됩니다.",
-            view=ChannelSelectView()
-        )
-
-    @discord.ui.button(label="🔸 특정 멤버만 소환", style=discord.ButtonStyle.secondary, custom_id="mode_members")
-    async def mode_members(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(
-            content="👥 소환할 멤버를 선택해주세요! (최대 25명 선택 가능)",
-            view=MemberSelectView(self.members)
-        )
-
-
-@tree.command(name="소환", description="채널 또는 특정 멤버 소환", guild=discord.Object(id=GUILD_ID))
-async def 소환(interaction: discord.Interaction):
-    # 음성채널에 있는 멤버 목록 (봇 제외)
-    vc = interaction.user.voice.channel if interaction.user.voice else None
-    if not vc:
-        await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
-        return
-
-    members = [m for m in interaction.guild.members if not m.bot]
-
-    await interaction.response.send_message(
-        "🔍 어떤 방식으로 소환하시겠어요?",
-        view=SelectModeView(members),
-        ephemeral=True
-    )
 
 
 
