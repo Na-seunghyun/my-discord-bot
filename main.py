@@ -101,7 +101,7 @@ async def on_voice_state_update(member, before, after):
 
     # 퇴장으로 인해 마지막 인원이 나가서 모든 채널이 비게 되었을 경우
     if before.channel and before.channel.name in MONITORED_CHANNEL_NAMES:
-        if all(len(ch.members) == 0 for ch in monitored_channels):
+        if all_empty:
             if all_empty_since is None:
                 all_empty_since = now
                 notified_after_empty = False
@@ -234,36 +234,55 @@ async def 도움말(interaction: discord.Interaction):
 
     embed.add_field(
         name="📢 /소환",
-        value="선택한 음성 채널의 인원들을 **내가 있는 채널로 소환**합니다.\n"
-              "`all` 선택 시 `밥좀묵겠습니다`, `쉼터`, `클랜훈련소`는 제외됩니다.",
+        value=(
+            "선택한 음성 채널의 인원들을 **내가 있는 채널로 소환**합니다.\n"
+            "`all` 선택 시 `밥좀묵겠습니다`, `쉼터`, `클랜훈련소`는 제외됩니다."
+        ),
         inline=False
     )
 
     embed.add_field(
         name="🎲 /팀짜기",
-        value="현재 음성 채널 인원을 팀으로 나누고, **빈 일반 채널로 자동 분배**합니다.\n"
-              "예: 팀당 3명씩 랜덤으로 나눠 일반1, 일반2로 이동",
+        value=(
+            "현재 음성 채널 인원을 팀으로 나누고, **빈 일반 채널로 자동 분배**합니다.\n"
+            "예: 팀당 3명씩 랜덤으로 나눠 일반1, 일반2로 이동"
+        ),
         inline=False
     )
 
     embed.add_field(
         name="🍚 /밥",
-        value="`밥좀묵겠습니다` 채널로 자신을 이동시킵니다.\n"
-              "20분 이상 활동이 없으면 자동 퇴장됩니다.",
+        value=(
+            "`밥좀묵겠습니다` 채널로 자신을 이동시킵니다.\n"
+            "20분 이상 활동이 없으면 자동 퇴장됩니다."
+        ),
         inline=False
     )
 
     embed.add_field(
         name="🧪 /검사",
-        value="서버 멤버들의 **닉네임 형식을 검사**합니다.\n"
-              "올바른 닉네임: `이름/ID/두자리숫자`",
+        value=(
+            "서버 멤버들의 **닉네임 형식을 검사**합니다.\n"
+            "올바른 닉네임: `이름/ID/두자리숫자`"
+        ),
         inline=False
     )
 
     embed.add_field(
         name="📈 /접속시간랭킹",
-        value="음성 채널에서 활동한 **접속 시간 Top 10 랭킹**을 확인합니다.\n"
-              "버튼 클릭 시 접속 시간 확인 가능",
+        value=(
+            "음성 채널에서 활동한 **접속 시간 Top 10 랭킹**을 확인합니다.\n"
+            "버튼 클릭 시 접속 시간 확인 가능"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎯 /개별소환",
+        value=(
+            "음성 채널에 있는 멤버를 골라서 **내가 있는 채널로 소환**합니다.\n"
+            "여러 멤버 선택 가능"
+        ),
         inline=False
     )
 
@@ -310,7 +329,7 @@ class ChannelSelect(discord.ui.Select):
             min_values=1,
             max_values=len(options),
             options=options,
-            custom_id=f"channel_select_{uuid.uuid4()}"
+            custom_id="channel_select"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -378,7 +397,7 @@ class MemberSelect(discord.ui.Select):
             min_values=1,
             max_values=min(25, len(options)),  # Discord select 최대 25개
             options=options,
-            custom_id=f"member_select_{uuid.uuid4()}"
+            custom_id="member_select"
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -422,31 +441,14 @@ class MemberSelectView(discord.ui.View):
         self.add_item(MemberSelect(members))
 
 
-# --- 슬래시 커맨드 등록 예시 ---
-
-class MyBot(commands.Bot):
-    def __init__(self):
-        intents = discord.Intents.default()
-        intents.members = True
-        intents.voice_states = True
-        super().__init__(command_prefix="!", intents=intents)
-        self.tree = app_commands.CommandTree(self)
-
-    async def setup_hook(self):
-        # 슬래시 명령어 동기화
-        await self.tree.sync()
-
-
-bot = MyBot()
-
-
-@bot.tree.command(name="소환", description="채널을 선택해 채널 내 멤버를 소환합니다.")
+# ✅ 슬래시 명령어: 소환 (명령어 등록)
+@tree.command(name="소환", description="음성 채널 인원 소환", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
-    # 기존 채널 선택 UI 보여주기
-    await interaction.response.send_message("소환할 채널을 선택하세요:", view=ChannelSelectView(), ephemeral=True)
+    # 명령어 실행 시 ChannelSelectView 보여줌
+    await interaction.response.send_message("소환할 채널을 선택해주세요.", view=ChannelSelectView(), ephemeral=True)
 
 
-@bot.tree.command(name="개별소환", description="특정 멤버만 골라서 소환합니다.")
+@tree.command(name="개별소환", description="특정 멤버만 골라서 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 개별소환(interaction: discord.Interaction):
     vc = interaction.user.voice.channel if interaction.user.voice else None
     if not vc:
@@ -462,7 +464,6 @@ async def 개별소환(interaction: discord.Interaction):
 
     view = MemberSelectView(members)
     await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
-
 
 
 # ✅ 슬래시 명령어: 팀짜기
@@ -609,13 +610,6 @@ async def 접속시간랭킹(interaction: discord.Interaction):
         view=VoiceTopButton(),
         ephemeral=True
     )
-
-
-# ✅ 슬래시 명령어: 소환 (명령어 등록)
-@tree.command(name="소환", description="음성 채널 인원 소환", guild=discord.Object(id=GUILD_ID))
-async def 소환(interaction: discord.Interaction):
-    # 명령어 실행 시 ChannelSelectView 보여줌
-    await interaction.response.send_message("소환할 채널을 선택해주세요.", view=ChannelSelectView(), ephemeral=True)
 
 
 @bot.event
