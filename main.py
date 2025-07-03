@@ -247,7 +247,6 @@ async def 검사(interaction: discord.Interaction):
                 pass
     await interaction.followup.send(f"🔍 검사 완료: {count}명 문제 있음", ephemeral=True)
 
-
 # ✅ 슬래시 명령어: 소환
 @tree.command(name="소환", description="모두 소환", guild=discord.Object(id=GUILD_ID))
 async def 소환(interaction: discord.Interaction):
@@ -257,6 +256,7 @@ async def 소환(interaction: discord.Interaction):
         return
 
     moved = 0
+    moved_members = []
     for other_vc in interaction.guild.voice_channels:
         if other_vc == vc:
             continue
@@ -265,9 +265,28 @@ async def 소환(interaction: discord.Interaction):
                 try:
                     await member.move_to(vc)
                     moved += 1
+                    moved_members.append(member)
                 except:
                     pass
-    await interaction.response.send_message(f"📢 {moved}명 소환 완료!")
+
+    if moved == 0:
+        await interaction.response.send_message("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
+        return
+
+    # 소환한 사람 멘션
+    summon_user_mention = interaction.user.mention
+    # 소환된 멤버 멘션 리스트
+    moved_mentions = " ".join(m.mention for m in moved_members)
+
+    embed = discord.Embed(
+        title="📢 쿠치요세노쥬츠 !",
+        description=f"{summon_user_mention} 님이 {moved}명을 음성채널로 소환했습니다.",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="소환된 멤버", value=moved_mentions, inline=False)
+    embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C.jpg")
+
+    await interaction.response.send_message(embed=embed)
 
 
 # ✅ 슬래시 명령어: 팀짜기
