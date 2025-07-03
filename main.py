@@ -229,6 +229,54 @@ async def check_voice_channels_for_streaming():
                     await text_channel.send(content=mentions, embed=embed)
 
 
+@tree.command(name="도움말", description="봇 명령어 및 기능 안내", guild=discord.Object(id=GUILD_ID))
+async def 도움말(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🤖 봇 명령어 안내",
+        description="서버 관리와 음성채널 활동을 도와주는 명령어 목록입니다.",
+        color=discord.Color.blue()
+    )
+
+    embed.add_field(
+        name="📢 /소환",
+        value="선택한 음성 채널의 인원들을 **내가 있는 채널로 소환**합니다.\n"
+              "`all` 선택 시 `밥좀묵겠습니다`, `쉼터`, `클랜훈련소`는 제외됩니다.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎲 /팀짜기",
+        value="현재 음성 채널 인원을 팀으로 나누고, **빈 일반 채널로 자동 분배**합니다.\n"
+              "예: 팀당 3명씩 랜덤으로 나눠 일반1, 일반2로 이동",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🍚 /밥",
+        value="`밥좀묵겠습니다` 채널로 자신을 이동시킵니다.\n"
+              "20분 이상 활동이 없으면 자동 퇴장됩니다.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🧪 /검사",
+        value="서버 멤버들의 **닉네임 형식을 검사**합니다.\n"
+              "올바른 닉네임: `이름/ID/두자리숫자`",
+        inline=False
+    )
+
+    embed.add_field(
+        name="📈 /접속시간랭킹",
+        value="음성 채널에서 활동한 **접속 시간 Top 10 랭킹**을 확인합니다.\n"
+              "버튼 클릭 시 접속 시간 확인 가능",
+        inline=False
+    )
+
+    embed.set_footer(text="기타 문의는 관리자에게 DM 주세요!")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+
 
 # ✅ 슬래시 명령어: 검사
 @tree.command(name="검사", description="닉네임 검사", guild=discord.Object(id=GUILD_ID))
