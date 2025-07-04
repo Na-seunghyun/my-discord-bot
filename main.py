@@ -492,7 +492,8 @@ async def 개별소환(interaction: discord.Interaction):
         await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
         return
 
-    await interaction.response.send_message("소환할 멤버를 선택하세요:", view=MemberSelectView(members), ephemeral=True)
+    view = MemberSelectView(members)
+    await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
 
 
 
