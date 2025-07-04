@@ -328,7 +328,8 @@ class ChannelSelect(discord.ui.Select):
             placeholder="소환할 채널을 선택하세요 (여러 개 선택 가능)",
             min_values=1,
             max_values=len(options),
-            options=options
+            options=options,
+            row=0  # ✅ 드롭다운은 첫 줄
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -337,7 +338,7 @@ class ChannelSelect(discord.ui.Select):
 
 class ChannelConfirmButton(discord.ui.Button):
     def __init__(self, view: 'ChannelSelectView'):
-        super().__init__(label="✅ 소환하기", style=discord.ButtonStyle.green)
+        super().__init__(label="✅ 소환하기", style=discord.ButtonStyle.green, row=1)  # ✅ 버튼은 두 번째 줄
         self.parent_view = view
 
     async def callback(self, interaction: discord.Interaction):
@@ -388,7 +389,10 @@ class ChannelConfirmButton(discord.ui.Button):
             await interaction.followup.send(embed=embed)
 
         self.parent_view.stop()
-        await interaction.message.edit(view=None)
+        try:
+            await interaction.message.edit(view=None)
+        except discord.NotFound:
+            pass
 
 class ChannelSelectView(discord.ui.View):
     def __init__(self):
@@ -409,7 +413,8 @@ class MemberSelect(discord.ui.Select):
             placeholder="소환할 멤버를 선택하세요 (여러 개 선택 가능)",
             min_values=1,
             max_values=min(25, len(options)),
-            options=options
+            options=options,
+            row=0  # ✅ 드롭다운은 첫 줄
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -418,7 +423,7 @@ class MemberSelect(discord.ui.Select):
 
 class MemberConfirmButton(discord.ui.Button):
     def __init__(self, view: 'MemberSelectView'):
-        super().__init__(label="✅ 소환하기", style=discord.ButtonStyle.green)
+        super().__init__(label="✅ 소환하기", style=discord.ButtonStyle.green, row=1)  # ✅ 버튼은 두 번째 줄
         self.parent_view = view
 
     async def callback(self, interaction: discord.Interaction):
@@ -457,7 +462,10 @@ class MemberConfirmButton(discord.ui.Button):
             await interaction.followup.send(embed=embed)
 
         self.parent_view.stop()
-        await interaction.message.edit(view=None)
+        try:
+            await interaction.message.edit(view=None)
+        except discord.NotFound:
+            pass
 
 class MemberSelectView(discord.ui.View):
     def __init__(self, members: list[discord.Member]):
@@ -485,6 +493,14 @@ async def 개별소환(interaction: discord.Interaction):
         return
 
     await interaction.response.send_message("소환할 멤버를 선택하세요:", view=MemberSelectView(members), ephemeral=True)
+
+
+
+
+
+
+
+    
 
     # 서버 멤버 중 음성채널에 들어와있는 멤버만 필터링 (봇 제외)
     members = [m for m in interaction.guild.members if m.voice and m.voice.channel and not m.bot]
