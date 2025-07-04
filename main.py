@@ -493,16 +493,19 @@ async def 소환(interaction: discord.Interaction):
 async def 개별소환(interaction: discord.Interaction):
     vc = interaction.user.voice.channel if interaction.user.voice else None
     if not vc:
+        # 응답하고 바로 리턴
         await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
         return
 
     members = [m for m in interaction.guild.members if m.voice and m.voice.channel and not m.bot]
 
     if not members:
+        # 응답하고 바로 리턴
         await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
         return
 
     view = MemberSelectView(members)
+    # 이 부분이 한 번만 호출되도록 보장됨
     await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
 
 
