@@ -310,6 +310,7 @@ async def 검사(interaction: discord.Interaction):
 
 # ✅ 슬래시 명령어: 소환
 
+
 EXCLUDED_CHANNELS = ["밥좀묵겠습니다", "쉼터", "클랜훈련소"]
 
 CHANNEL_CHOICES = [
@@ -334,8 +335,11 @@ class ChannelSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         self.parent_view.selected_channels = self.values
-        # 선택 후 UI 유지하거나 수정 메시지 가능, 여기선 defer 생략
-        await interaction.response.edit_message(view=self.parent_view)
+        selected_str = ", ".join(self.values)
+        await interaction.response.edit_message(
+            content=f"선택한 채널: {selected_str}",
+            view=self.parent_view
+        )
 
 
 class ChannelConfirmButton(discord.ui.Button):
@@ -354,7 +358,7 @@ class ChannelConfirmButton(discord.ui.Button):
             await interaction.response.send_message("⚠️ 채널을 선택해주세요.", ephemeral=True)
             return
 
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(thinking=True)  # 여기서 1회 응답
 
         if "all" in selected:
             target_channels = [
@@ -387,7 +391,6 @@ class ChannelConfirmButton(discord.ui.Button):
                 color=discord.Color.green()
             )
             embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
-            # 공개 메시지로 전송
             await interaction.followup.send(embed=embed, ephemeral=False)
 
         self.parent_view.stop()
@@ -423,8 +426,12 @@ class MemberSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         self.parent_view.selected_member_ids = [int(v) for v in self.values]
-        # UI 선택 반영
-        await interaction.response.edit_message(view=self.parent_view)
+        selected_names = [option.label for option in self.options if option.value in self.values]
+        selected_str = ", ".join(selected_names)
+        await interaction.response.edit_message(
+            content=f"선택한 멤버: {selected_str}",
+            view=self.parent_view
+        )
 
 
 class MemberConfirmButton(discord.ui.Button):
@@ -443,7 +450,7 @@ class MemberConfirmButton(discord.ui.Button):
             await interaction.response.send_message("⚠️ 멤버를 선택해주세요.", ephemeral=True)
             return
 
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(thinking=True)  # 1회 응답
 
         moved = 0
         for member_id in selected_ids:
@@ -465,7 +472,6 @@ class MemberConfirmButton(discord.ui.Button):
                 color=discord.Color.green()
             )
             embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
-            # 공개 메시지로 전송
             await interaction.followup.send(embed=embed, ephemeral=False)
 
         self.parent_view.stop()
@@ -493,19 +499,16 @@ async def 소환(interaction: discord.Interaction):
 async def 개별소환(interaction: discord.Interaction):
     vc = interaction.user.voice.channel if interaction.user.voice else None
     if not vc:
-        # 응답하고 바로 리턴
         await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
         return
 
     members = [m for m in interaction.guild.members if m.voice and m.voice.channel and not m.bot]
 
     if not members:
-        # 응답하고 바로 리턴
         await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
         return
 
     view = MemberSelectView(members)
-    # 이 부분이 한 번만 호출되도록 보장됨
     await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
 
 
