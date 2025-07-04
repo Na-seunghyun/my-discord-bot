@@ -329,7 +329,7 @@ class ChannelSelect(discord.ui.Select):
             min_values=1,
             max_values=len(options),
             options=options,
-            row=0  # ✅ 드롭다운은 첫 줄
+            row=0  # 드롭다운은 첫 줄
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -338,7 +338,7 @@ class ChannelSelect(discord.ui.Select):
 
 class ChannelConfirmButton(discord.ui.Button):
     def __init__(self, view: 'ChannelSelectView'):
-        super().__init__(label="✅ 소환하기", style=discord.ButtonStyle.green, row=1)  # ✅ 버튼은 두 번째 줄
+        super().__init__(label="✅ 소환하기", style=discord.ButtonStyle.green, row=1)  # 버튼은 두 번째 줄
         self.parent_view = view
 
     async def callback(self, interaction: discord.Interaction):
@@ -352,7 +352,8 @@ class ChannelConfirmButton(discord.ui.Button):
             await interaction.response.send_message("⚠️ 채널을 선택해주세요.", ephemeral=True)
             return
 
-        await interaction.response.defer(thinking=True)
+        # 즉시 처리 시작 표시
+        await interaction.response.defer(thinking=True, ephemeral=True)
 
         if "all" in selected:
             target_channels = [
@@ -365,34 +366,37 @@ class ChannelConfirmButton(discord.ui.Button):
             ]
             excluded_note = ""
 
-        moved = 0
-        for ch in target_channels:
-            for member in ch.members:
-                if not member.bot:
-                    try:
-                        await member.move_to(vc)
-                        moved += 1
-                        await asyncio.sleep(0.5)
-                    except Exception as e:
-                        print(f"❌ {member.display_name} 이동 실패: {e}")
+        async def move_members():
+            moved = 0
+            for ch in target_channels:
+                for member in ch.members:
+                    if not member.bot:
+                        try:
+                            await member.move_to(vc)
+                            moved += 1
+                            await asyncio.sleep(0.2)  # 0.5 -> 0.2초로 단축 가능
+                        except Exception as e:
+                            print(f"❌ {member.display_name} 이동 실패: {e}")
 
-        if moved == 0:
-            await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
-        else:
-            embed = discord.Embed(
-                title="📢 쿠치요세노쥬츠 !",
-                description=f"{interaction.user.mention} 님이 **{moved}명**을 음성채널로 소환했습니다."
-                            f"{excluded_note}",
-                color=discord.Color.green()
-            )
-            embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
-            await interaction.followup.send(embed=embed)
+            if moved == 0:
+                await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
+            else:
+                embed = discord.Embed(
+                    title="📢 소 환 술 !",
+                    description=f"{interaction.user.mention} 님이 **{moved}명**을 음성채널로 소환했습니다."
+                                f"{excluded_note}",
+                    color=discord.Color.green()
+                )
+                embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
+                await interaction.followup.send(embed=embed, ephemeral=True)
 
-        self.parent_view.stop()
-        try:
-            await interaction.message.edit(view=None)
-        except discord.NotFound:
-            pass
+            self.parent_view.stop()
+            try:
+                await interaction.message.edit(view=None)
+            except discord.NotFound:
+                pass
+
+        asyncio.create_task(move_members())
 
 class ChannelSelectView(discord.ui.View):
     def __init__(self):
@@ -400,6 +404,7 @@ class ChannelSelectView(discord.ui.View):
         self.selected_channels: list[str] = []
         self.add_item(ChannelSelect(self))
         self.add_item(ChannelConfirmButton(self))
+
 
 # --- 멤버 소환 UI 구성 ---
 class MemberSelect(discord.ui.Select):
@@ -414,7 +419,7 @@ class MemberSelect(discord.ui.Select):
             min_values=1,
             max_values=min(25, len(options)),
             options=options,
-            row=0  # ✅ 드롭다운은 첫 줄
+            row=0  # 드롭다운은 첫 줄
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -423,7 +428,7 @@ class MemberSelect(discord.ui.Select):
 
 class MemberConfirmButton(discord.ui.Button):
     def __init__(self, view: 'MemberSelectView'):
-        super().__init__(label="✅ 소환하기", style=discord.ButtonStyle.green, row=1)  # ✅ 버튼은 두 번째 줄
+        super().__init__(label="✅ 소환하기", style=discord.ButtonStyle.green, row=1)  # 버튼은 두 번째 줄
         self.parent_view = view
 
     async def callback(self, interaction: discord.Interaction):
@@ -437,35 +442,38 @@ class MemberConfirmButton(discord.ui.Button):
             await interaction.response.send_message("⚠️ 멤버를 선택해주세요.", ephemeral=True)
             return
 
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(thinking=True, ephemeral=True)
 
-        moved = 0
-        for member_id in selected_ids:
-            member = interaction.guild.get_member(member_id)
-            if member and member.voice and member.voice.channel != vc and not member.bot:
-                try:
-                    await member.move_to(vc)
-                    moved += 1
-                    await asyncio.sleep(0.5)
-                except Exception as e:
-                    print(f"❌ {member.display_name} 이동 실패: {e}")
+        async def move_members():
+            moved = 0
+            for member_id in selected_ids:
+                member = interaction.guild.get_member(member_id)
+                if member and member.voice and member.voice.channel != vc and not member.bot:
+                    try:
+                        await member.move_to(vc)
+                        moved += 1
+                        await asyncio.sleep(0.2)  # 0.5초 -> 0.2초로 조절 가능
+                    except Exception as e:
+                        print(f"❌ {member.display_name} 이동 실패: {e}")
 
-        if moved == 0:
-            await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
-        else:
-            embed = discord.Embed(
-                title="📢 쿠치요세노쥬츠 !",
-                description=f"{interaction.user.mention} 님이 **{moved}명**을 음성채널로 소환했습니다.",
-                color=discord.Color.green()
-            )
-            embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
-            await interaction.followup.send(embed=embed)
+            if moved == 0:
+                await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
+            else:
+                embed = discord.Embed(
+                    title="📢 소 환 술 !",
+                    description=f"{interaction.user.mention} 님이 **{moved}명**을 음성채널로 소환했습니다.",
+                    color=discord.Color.green()
+                )
+                embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
+                await interaction.followup.send(embed=embed, ephemeral=True)
 
-        self.parent_view.stop()
-        try:
-            await interaction.message.edit(view=None)
-        except discord.NotFound:
-            pass
+            self.parent_view.stop()
+            try:
+                await interaction.message.edit(view=None)
+            except discord.NotFound:
+                pass
+
+        asyncio.create_task(move_members())
 
 class MemberSelectView(discord.ui.View):
     def __init__(self, members: list[discord.Member]):
@@ -473,6 +481,7 @@ class MemberSelectView(discord.ui.View):
         self.selected_member_ids: list[int] = []
         self.add_item(MemberSelect(members, self))
         self.add_item(MemberConfirmButton(self))
+
 
 # --- 슬래시 명령어 등록 ---
 @tree.command(name="소환", description="음성 채널 인원 소환", guild=discord.Object(id=GUILD_ID))
@@ -494,6 +503,7 @@ async def 개별소환(interaction: discord.Interaction):
 
     view = MemberSelectView(members)
     await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+
 
 
 
