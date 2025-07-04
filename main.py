@@ -495,21 +495,37 @@ async def 소환(interaction: discord.Interaction):
     await interaction.response.send_message("소환할 채널을 선택해주세요.", view=ChannelSelectView(), ephemeral=True)
 
 
-@tree.command(name="개별소환", description="특정 멤버만 골라서 소환합니다.", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="개별소환", description="특정 멤버를 선택해 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 개별소환(interaction: discord.Interaction):
+    # 1. 음성채널 입장 확인
     vc = interaction.user.voice.channel if interaction.user.voice else None
     if not vc:
-        await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
+        # 응답 여부 체크 후 응답
+        if not interaction.response.is_done():
+            await interaction.response.send_message("❌ 음성 채널에 들어가주세요!", ephemeral=True)
         return
 
+    # 2. 멤버 필터링
     members = [m for m in interaction.guild.members if m.voice and m.voice.channel and not m.bot]
-
     if not members:
-        await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
         return
 
+    # 3. View 생성
     view = MemberSelectView(members)
-    await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+
+    # 4. interaction 응답 시도 (중복응답 방지)
+    if not interaction.response.is_done():
+        try:
+            await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+        except discord.errors.InteractionResponded:
+            # 이미 응답했으면 무시 또는 로깅
+            print("interaction already responded")
+    else:
+        # 이미 응답했으면 followup 보내기 (필요 시)
+        await interaction.followup.send("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+
 
 
 
