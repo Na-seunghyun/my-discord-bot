@@ -562,7 +562,7 @@ def extract_squad_metrics(stats):
     return (avg_damage, kd, win_rate), None
 
 # ✅ 차트 이미지 생성 및 전송 함수
-async def send_stats_chart(interaction, stats, 닉네임):
+async def send_stats_chart(interaction, stats, nickname):
     modes = ["solo", "duo", "squad"]
     rounds_played = []
     labels = []
@@ -574,19 +574,40 @@ async def send_stats_chart(interaction, stats, 닉네임):
             labels.append(mode.upper())
 
     if not rounds_played:
-        await interaction.followup.send("차트를 생성할 전적 데이터가 없습니다.")
+        await interaction.followup.send("No data available to create chart.")
         return
 
-    plt.figure(figsize=(6,4))
-    bars = plt.bar(labels, rounds_played, color=['#1f77b4', '#ff7f0e', '#2ca02c'])
-    plt.title(f"{닉네임}님의 PUBG 모드별 게임 수")
-    plt.ylabel("게임 수")
-    plt.tight_layout()
+    # SQUAD 모드 데이터로 추가 통계 가져오기
+    squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
+    avg_damage = squad_stats.get("damageDealt", 0)
+    wins = squad_stats.get("wins", 0)
+    rounds = squad_stats.get("roundsPlayed", 1)
+    kills = squad_stats.get("kills", 0)
+    kd = kills / max(1, rounds - wins)
+    win_rate = (wins / max(1, rounds)) * 100
 
-    # 바 위에 숫자 표시
+    plt.figure(figsize=(8,5))
+    bars = plt.bar(labels, rounds_played, color=['#1f77b4', '#ff7f0e', '#2ca02c'])
+    plt.title(f"PUBG Game Count by Mode for {nickname}", fontsize=14, weight='bold')
+    plt.ylabel("Games Played", fontsize=12)
+    plt.ylim(0, max(rounds_played)*1.2)
+    plt.grid(axis='y', linestyle='--', alpha=0.6)
+
+    # 막대 위 숫자 표시
     for bar in bars:
         height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2, height * 1.01, f'{int(height)}', ha='center', va='bottom')
+        plt.text(bar.get_x() + bar.get_width()/2, height * 1.02, f'{int(height)}', ha='center', va='bottom', fontsize=11)
+
+    # 차트 오른쪽에 텍스트 박스 추가
+    stats_text = (
+        f"Squad Stats Summary:\n"
+        f"Avg Damage: {avg_damage:.1f}\n"
+        f"K/D Ratio: {kd:.2f}\n"
+        f"Win Rate: {win_rate:.1f}%"
+    )
+    plt.gcf().text(0.85, 0.6, stats_text, fontsize=11, bbox=dict(facecolor='lightgray', alpha=0.3, boxstyle='round,pad=0.5'))
+
+    plt.tight_layout(rect=[0,0,0.8,1])  # 오른쪽 공간 확보
 
     chart_path = "temp_chart.png"
     plt.savefig(chart_path)
