@@ -5,6 +5,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 import re
 import os
+import pytz
 import random
 import asyncio
 import requests
@@ -857,6 +858,11 @@ def get_current_kst_year_month() -> str:
     return now_kst.strftime("%Y-%m")
 
 
+def get_current_kst_time_str():
+    kst = pytz.timezone('Asia/Seoul')
+    now_kst = datetime.now(kst)
+    return now_kst.strftime("%Y-%m-%d %H:%M:%S KST")
+
 class VoiceTopButton(View):
     def __init__(self):
         super().__init__(timeout=180)
@@ -878,10 +884,15 @@ class VoiceTopButton(View):
                 await interaction.followup.send(f"😥 {year_month} 월에 기록된 접속 시간이 없습니다.", ephemeral=False)
                 return
 
-            msg = f"🎤 {year_month} 음성 접속시간 Top 10\n"
+            embed = Embed(title=f"🎤 {year_month} 음성 접속시간 Top 10", color=0x5865F2)
+            
+            # 조회 기준 시각 문자열 얻기
+            current_kst_str = get_current_kst_time_str()
+            embed.set_footer(text=f"조회 기준 시간: {current_kst_str} (한국 시간) | 접속시간은 일 시 분 초 단위")
+
             for rank, info in enumerate(data, 1):
                 time_str = format_duration(info['total_duration'])
-                msg += f"{rank}. {info['username']} — {time_str}\n"
+                embed.add_field(name=f"{rank}. {info['username']}", value=time_str, inline=False)
 
             button.disabled = True
             try:
@@ -889,7 +900,7 @@ class VoiceTopButton(View):
             except discord.errors.NotFound:
                 print("⚠️ 편집할 메시지를 찾을 수 없습니다.")
 
-            await interaction.followup.send(msg, ephemeral=False)
+            await interaction.followup.send(embed=embed, ephemeral=False)
 
         except Exception as e:
             await interaction.followup.send(f"❗ 오류 발생: {e}", ephemeral=False)
