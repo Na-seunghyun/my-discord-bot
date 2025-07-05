@@ -136,33 +136,31 @@ async def on_voice_state_update(member, before, after):
 
 
     
-    # 입장 처리
+   # 입장 처리
     if before.channel is None and after.channel is not None:
         user_id = str(member.id)
         username = member.display_name
 
         now = datetime.now(timezone.utc).replace(microsecond=0)
         print(f"✅ [입장 이벤트] {username}({user_id}) 님이 '{after.channel.name}'에 입장 at {now.isoformat()}")
-        try:
-            # 이미 열린 입장 기록 확인
-            existing = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
-            if existing.error:
-                print(f"❌ 입장 기록 조회 실패: {existing.error}")
-                return
 
-            if existing.data and len(existing.data) > 0:
+        try:
+            existing = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
+
+            if hasattr(existing, 'data') and existing.data and len(existing.data) > 0:
                 print(f"⚠️ 이미 입장 기록 존재, 중복 저장 방지: {user_id}")
                 return
 
-            # 새 입장 기록 삽입
             data = {
                 "user_id": user_id,
                 "username": username,
                 "joined_at": now.isoformat(),
                 "left_at": None,
+                "duration_sec": 0,
             }
             response = supabase.table("voice_activity").insert(data).execute()
-            if response.error:
+
+            if hasattr(response, 'error') and response.error:
                 print(f"❌ 입장 DB 저장 실패: {response.error}")
                 return
 
@@ -178,27 +176,27 @@ async def on_voice_state_update(member, before, after):
 
         now = datetime.now(timezone.utc).replace(microsecond=0)
         print(f"🛑 [퇴장 이벤트] {username}({user_id}) 님이 '{before.channel.name}'에서 퇴장 at {now.isoformat()}")
+
         try:
             records = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
-            if records.error:
-                print(f"❌ 퇴장 기록 조회 실패: {records.error}")
-                return
 
-            if records.data and len(records.data) > 0:
+            if hasattr(records, 'data') and records.data and len(records.data) > 0:
                 record = records.data[0]
-                joined_at_dt = datetime.fromisoformat(record["joined_at"])
+                joined_at_str = record.get("joined_at")
+                if not joined_at_str:
+                    print(f"⚠️ joined_at 값 없음, 퇴장 처리 불가: {user_id}")
+                    return
+
+                joined_at_dt = datetime.fromisoformat(joined_at_str)
                 duration = int((now - joined_at_dt).total_seconds())
 
                 update_data = {
                     "left_at": now.isoformat(),
                     "duration_sec": duration,
                 }
-                update_response = supabase.table("voice_activity") \
-                    .update(update_data) \
-                    .eq("id", record["id"]) \
-                    .execute()
+                update_response = supabase.table("voice_activity").update(update_data).eq("id", record["id"]).execute()
 
-                if update_response.error:
+                if hasattr(update_response, 'error') and update_response.error:
                     print(f"❌ 퇴장 DB 업데이트 실패: {update_response.error}")
                     return
 
