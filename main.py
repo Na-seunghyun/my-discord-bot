@@ -831,6 +831,9 @@ async def 밥(interaction: discord.Interaction):
 
 
 # ——— 여기부터 추가 ———
+
+from discord.ui import View, button
+
 def format_duration(seconds: int) -> str:
     days, remainder = divmod(seconds, 86400)  # 86400초 = 1일
     hours, remainder = divmod(remainder, 3600)
@@ -848,7 +851,10 @@ def format_duration(seconds: int) -> str:
     return " ".join(parts)
 
 
-from discord.ui import View, button
+def get_current_kst_year_month() -> str:
+    now_utc = datetime.utcnow()
+    now_kst = now_utc + timedelta(hours=9)  # UTC +9 = KST
+    return now_kst.strftime("%Y-%m")
 
 
 class VoiceTopButton(View):
@@ -861,7 +867,6 @@ class VoiceTopButton(View):
 
         try:
             year_month = get_current_kst_year_month()
-            # Supabase RPC 호출 시 필터 파라미터로 전달
             response = supabase.rpc("get_top_voice_activity", {"year_month": year_month}).execute()
 
             if not hasattr(response, "data") or response.data is None:
@@ -888,7 +893,6 @@ class VoiceTopButton(View):
 
         except Exception as e:
             await interaction.followup.send(f"❗ 오류 발생: {e}", ephemeral=False)
-
 
 
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
