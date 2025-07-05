@@ -157,8 +157,8 @@ async def on_voice_state_update(member, before, after):
                 .limit(1) \
                 .execute()
 
-            if existing.error:
-                print(f"❌ 입장 기록 조회 실패: {existing.error}")
+            if existing.status_code != 200:
+                print(f"❌ 입장 기록 조회 실패: 상태 코드 {existing.status_code}")
             elif existing.data and len(existing.data) > 0:
                 print(f"⚠️ 이미 입장 기록 존재, 중복 저장 방지: {user_id}")
             else:
@@ -170,8 +170,9 @@ async def on_voice_state_update(member, before, after):
                     "duration_sec": None,
                 }
                 response = supabase.table("voice_activity").insert(data).execute()
-                if response.error:
-                    print(f"❌ 입장 DB 저장 실패: {response.error}")
+
+                if response.status_code != 201:
+                    print(f"❌ 입장 DB 저장 실패: 상태 코드 {response.status_code}")
                 elif response.data:
                     print(f"✅ 입장 DB 저장 성공: {username} - {joined_at}")
                     voice_activity_cache[member.id] = join_time
@@ -180,6 +181,7 @@ async def on_voice_state_update(member, before, after):
 
         except Exception as e:
             print(f"❌ 입장 DB 저장 예외 발생: {e}")
+
 
         voice_join_times[member.id] = join_time
 
