@@ -150,12 +150,8 @@ async def on_voice_state_update(member, before, after):
         joined_at = join_time.isoformat()
 
         try:
-            # RPC 함수 호출, error 속성 존재 여부 체크
             existing = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
-
-            if hasattr(existing, "error") and existing.error:
-                print(f"❌ 입장 기록 조회 실패 (RPC): {existing.error}")
-                return
+            existing.raise_for_status()  # 예외 발생하면 except로 넘어감
 
             if existing.data and len(existing.data) > 0:
                 print(f"⚠️ 이미 입장 기록 존재, 중복 저장 방지: {user_id}")
@@ -169,10 +165,7 @@ async def on_voice_state_update(member, before, after):
             }
 
             response = supabase.table("voice_activity").insert(data).execute()
-
-            if hasattr(response, "error") and response.error:
-                print(f"❌ 입장 DB 저장 실패: {response.error}")
-                return
+            response.raise_for_status()
 
             if response.data:
                 print(f"✅ 입장 DB 저장 성공: {username} - {joined_at}")
@@ -198,12 +191,8 @@ async def on_voice_state_update(member, before, after):
         username = member.display_name
 
         try:
-            # RPC 함수 호출, error 속성 존재 여부 체크
             records = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
-
-            if hasattr(records, "error") and records.error:
-                print(f"❌ 퇴장 기록 조회 실패 (RPC): {records.error}")
-                return
+            records.raise_for_status()
 
             if records.data and len(records.data) > 0:
                 record = records.data[0]
@@ -219,10 +208,7 @@ async def on_voice_state_update(member, before, after):
                     .update(update_data) \
                     .eq("id", record["id"]) \
                     .execute()
-
-                if hasattr(update_response, "error") and update_response.error:
-                    print(f"❌ 퇴장 DB 업데이트 실패: {update_response.error}")
-                    return
+                update_response.raise_for_status()
 
                 if update_response.data:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
@@ -237,10 +223,10 @@ async def on_voice_state_update(member, before, after):
         except Exception as e:
             print(f"❌ 퇴장 DB 처리 예외 발생: {e}")
 
-        # 채널 비었을 때 시간 기록
         if before.channel and len(before.channel.members) == 0:
             channel_last_empty[before.channel.id] = left_time
             print(f"📌 '{before.channel.name}' 채널이 비었음 — 시간 기록됨")
+
 
 
 
