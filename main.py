@@ -179,7 +179,7 @@ async def on_voice_state_update(member, before, after):
 
         voice_join_times[member.id] = join_time
 
-    # 퇴장 기록
+       # 퇴장 기록
     elif before.channel is not None and after.channel is None:
         left_time = datetime.now(timezone.utc).replace(microsecond=0)
         print(f"🛑 [퇴장 이벤트] {member.display_name}({member.id}) 님이 '{before.channel.name}'에서 퇴장 at {left_time.isoformat()}")
@@ -193,11 +193,12 @@ async def on_voice_state_update(member, before, after):
         username = member.display_name
 
         try:
+            # left_at이 NULL인 가장 최근 입장 기록 1개 조회 (id 포함)
             records = supabase.table("voice_activity") \
-                .select("user_id, joined_at, left_at") \
+                .select("id, joined_at") \
                 .eq("user_id", user_id) \
                 .is_("left_at", "null") \
-                .order("joined_at", desc=True) \
+                .order("joined_at", desc=False) \
                 .limit(1) \
                 .execute()
 
@@ -211,37 +212,30 @@ async def on_voice_state_update(member, before, after):
                     "duration_sec": duration,
                 }
 
+                # id 기준으로 업데이트
                 update_response = supabase.table("voice_activity") \
                     .update(update_data) \
-                    .eq("user_id", user_id) \
-                    .eq("joined_at", record["joined_at"]) \
+                    .eq("id", record["id"]) \
                     .execute()
 
-                if update_response.data is not None:
+                if update_response.data:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
+                    voice_activity_cache[member.id] = left_time
 
-                    verify_response = supabase.table("voice_activity") \
-                        .select("left_at, duration_sec") \
-                        .eq("user_id", user_id) \
-                        .eq("joined_at", record["joined_at"]) \
-                        .execute()
-
-                    if verify_response.data and len(verify_response.data) > 0:
-                        print(f"📌 실제 저장된 퇴장 시간: {verify_response.data[0]['left_at']}")
-                        voice_activity_cache[member.id] = left_time
-                    else:
-                        print("⚠️ 업데이트 확인 실패: 데이터가 없습니다.")
                 else:
-                    print(f"⚠️ 퇴장 DB 업데이트 실패: 응답 데이터 없음")
+                    print("⚠️ 퇴장 DB 업데이트 실패: 응답 데이터 없음")
+
             else:
                 print(f"⚠️ 입장 기록을 찾을 수 없음 - {user_id}")
 
         except Exception as e:
             print(f"❌ 퇴장 DB 처리 예외 발생: {e}")
 
+        # 채널 비었을 때 기록 (기존 코드 유지)
         if before.channel and len(before.channel.members) == 0:
             channel_last_empty[before.channel.id] = left_time
             print(f"📌 '{before.channel.name}' 채널이 비었음 — 시간 기록됨")
+
 
 
 
