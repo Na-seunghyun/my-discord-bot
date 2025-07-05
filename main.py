@@ -193,12 +193,11 @@ async def on_voice_state_update(member, before, after):
         username = member.display_name
 
         try:
-            # left_at이 NULL인 가장 최근 입장 기록 1개 조회
             records = supabase.table("voice_activity") \
                 .select("user_id, joined_at, left_at") \
                 .eq("user_id", user_id) \
                 .is_("left_at", "null") \
-                .order("joined_at", desc=False) \
+                .order("joined_at", desc=True) \
                 .limit(1) \
                 .execute()
 
@@ -212,7 +211,6 @@ async def on_voice_state_update(member, before, after):
                     "duration_sec": duration,
                 }
 
-                # id 컬럼 대신 user_id와 joined_at 으로 조건 지정해 업데이트
                 update_response = supabase.table("voice_activity") \
                     .update(update_data) \
                     .eq("user_id", user_id) \
@@ -222,7 +220,6 @@ async def on_voice_state_update(member, before, after):
                 if update_response.error is None:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
 
-                    # 실제 저장 여부 재조회
                     verify_response = supabase.table("voice_activity") \
                         .select("left_at, duration_sec") \
                         .eq("user_id", user_id) \
@@ -245,6 +242,7 @@ async def on_voice_state_update(member, before, after):
         if before.channel and len(before.channel.members) == 0:
             channel_last_empty[before.channel.id] = left_time
             print(f"📌 '{before.channel.name}' 채널이 비었음 — 시간 기록됨")
+
 
 
 
