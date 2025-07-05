@@ -153,7 +153,7 @@ async def on_voice_state_update(member, before, after):
             existing = supabase.table("voice_activity") \
                 .select("*") \
                 .eq("user_id", user_id) \
-                .eq("left_at", None) \
+                .eq("left_at", "null") \
                 .limit(1) \
                 .execute()
 
@@ -169,6 +169,8 @@ async def on_voice_state_update(member, before, after):
                 "user_id": user_id,
                 "username": username,
                 "joined_at": joined_at,
+
+                
             }
             response = supabase.table("voice_activity").insert(data).execute()
 
@@ -204,7 +206,7 @@ async def on_voice_state_update(member, before, after):
             records = supabase.table("voice_activity") \
                 .select("id, joined_at") \
                 .eq("user_id", user_id) \
-                .eq("left_at", None) \
+                .eq("left_at", "null") \
                 .order("joined_at", desc=True) \
                 .limit(1) \
                 .execute()
