@@ -308,8 +308,8 @@ headers = {
     "Accept": "application/vnd.api+json"
 }
 
-RATE_LIMIT = 10  # 분당 10회
-RATE_LIMIT_INTERVAL = 60  # 초
+RATE_LIMIT = 10
+RATE_LIMIT_INTERVAL = 60
 _last_requests = []
 
 def can_make_request():
@@ -344,6 +344,7 @@ def get_player_stats(player_id, season_id):
     response.raise_for_status()
     return response.json()
 
+# ✅ 모드별 전체 전적 요약 (SOLO, DUO, SQUAD)
 def summarize_stats(stats):
     modes = ["solo", "duo", "squad"]
     lines = []
@@ -351,17 +352,80 @@ def summarize_stats(stats):
         mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
         if not mode_stats or mode_stats["roundsPlayed"] == 0:
             continue
+
+        rounds = mode_stats['roundsPlayed']
+        wins = mode_stats['wins']
+        kills = mode_stats['kills']
+        damage = mode_stats['damageDealt']
+        avg_damage = damage / rounds
+        kd = kills / max(1, rounds - wins)
+
         lines.append(f"**[{mode.upper()} 모드]**")
-        lines.append(f"- 게임 수: {mode_stats['roundsPlayed']}")
-        lines.append(f"- 승리 수: {mode_stats['wins']} ({(mode_stats['wins']/mode_stats['roundsPlayed'])*100:.2f}%)")
-        lines.append(f"- 킬 수: {mode_stats['kills']}")
-        lines.append(f"- 평균 데미지: {mode_stats['damageDealt'] / mode_stats['roundsPlayed']:.2f}")
-        lines.append(f"- K/D: {mode_stats['kills'] / max(1, (mode_stats['roundsPlayed'] - mode_stats['wins'])):.2f}")
+        lines.append(f"- 게임 수: {rounds}")
+        lines.append(f"- 승리 수: {wins} ({(wins / rounds) * 100:.2f}%)")
+        lines.append(f"- 킬 수: {kills}")
+        lines.append(f"- 평균 데미지: {avg_damage:.2f}")
+        lines.append(f"- K/D: {kd:.2f}")
+        lines.append("")  # 간격
+
     return "\n".join(lines) if lines else "전적이 존재하지 않거나 조회할 수 없습니다."
 
-# 이미 선언된 bot과 tree 객체를 사용한다고 가정
-# GUILD_ID는 선언되어 있어야 합니다.
+# ✅ 분석 메시지: 스쿼드 전적 기반
+def detailed_feedback(avg_damage, kd, win_rate):
+    messages = []
 
+    if avg_damage < 100:
+        messages.append("📉 평균 데미지가 낮습니다. 초반 교전에서 피해를 더 입히는 연습이 필요해요.")
+    elif avg_damage < 200:
+        messages.append("🎯 교전은 했지만 데미지가 낮습니다. 정확도와 무기 운용을 개선해보세요.")
+    elif avg_damage < 300:
+        messages.append("🟡 평균 데미지가 양호합니다. 중거리 전투 연습이 도움될 수 있어요.")
+    elif avg_damage < 500:
+        messages.append("🟢 평균 데미지가 높습니다! 전투 감각이 살아있네요.")
+    else:
+        messages.append("🔥 전투력이 매우 우수합니다. 거의 프로 수준이에요!")
+
+    if kd < 0.3:
+        messages.append("😢 K/D가 낮습니다. 생존을 우선시하고, 싸움을 피하는 전략도 고려해보세요.")
+    elif kd < 0.6:
+        messages.append("⚠️ K/D가 다소 낮아요. 마무리 능력 향상에 집중해보세요.")
+    elif kd < 1.0:
+        messages.append("👍 K/D가 안정적입니다. 킬 찬스를 좀 더 살려보세요.")
+    elif kd < 2.0:
+        messages.append("✅ 훌륭한 K/D입니다! 팀 교전에서 중심 역할을 하고 있네요.")
+    else:
+        messages.append("💥 매우 높은 K/D! 적극적인 플레이가 잘 통한 결과입니다.")
+
+    if win_rate == 0:
+        messages.append("😓 아직 승리가 없습니다. 후반 생존 전략을 고민해보세요.")
+    elif win_rate < 5:
+        messages.append("🛠 승률이 다소 낮습니다. 전략적인 위치 선점이 필요해요.")
+    elif win_rate < 10:
+        messages.append("📈 승률이 올라가고 있어요. 팀과의 협동이 효과적입니다.")
+    elif win_rate < 20:
+        messages.append("🏅 좋은 승률입니다! 전투와 생존의 균형이 잘 맞고 있어요.")
+    else:
+        messages.append("🥇 매우 훌륭한 승률! 안정된 실력과 전략이 돋보입니다.")
+
+    return "\n".join(messages)
+
+# ✅ 스쿼드 전적만 피드백용으로 추출
+def extract_squad_metrics(stats):
+    mode_stats = stats["data"]["attributes"]["gameModeStats"].get("squad")
+    if not mode_stats or mode_stats["roundsPlayed"] == 0:
+        return None, "❌ 스쿼드 모드 전적이 없어 분석 피드백을 제공할 수 없습니다."
+
+    rounds = mode_stats['roundsPlayed']
+    wins = mode_stats['wins']
+    kills = mode_stats['kills']
+    damage = mode_stats['damageDealt']
+    avg_damage = damage / rounds
+    kd = kills / max(1, rounds - wins)
+    win_rate = (wins / rounds) * 100
+
+    return (avg_damage, kd, win_rate), None
+
+# ✅ 슬래시 커맨드
 @tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
 async def 전적(interaction: discord.Interaction, 닉네임: str):
     await interaction.response.defer()
@@ -375,21 +439,35 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         player_id = get_player_id(닉네임)
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
+
+        # 전체 전적 요약 (SOLO, DUO, SQUAD)
         summary = summarize_stats(stats)
+
+        # SQUAD 전적 기반 피드백
+        squad_metrics, error = extract_squad_metrics(stats)
+        if squad_metrics:
+            avg_damage, kd, win_rate = squad_metrics
+            feedback = detailed_feedback(avg_damage, kd, win_rate)
+        else:
+            feedback = error
+
+        # ✅ Embed 구성: 필드 분리
+        embed = discord.Embed(
+            title=f"{닉네임}님의 PUBG 전적 요약",
+            color=discord.Color.teal()
+        )
+        embed.add_field(name="🧾 전체 전적 요약", value=summary, inline=False)
+        embed.add_field(name="📊 SQUAD 분석 피드백", value=feedback, inline=False)
+        embed.set_footer(text="PUBG API 제공")
+
+        await interaction.followup.send(embed=embed)
+
     except requests.HTTPError as e:
         await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
-        return
     except Exception as e:
         await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
-        return
 
-    embed = discord.Embed(
-        title=f"{닉네임}님의 PUBG 전적",
-        description=summary,
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text="PUBG API 제공")
-    await interaction.followup.send(embed=embed)
+
 
 
 
