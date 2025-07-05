@@ -232,7 +232,7 @@ async def on_voice_state_update(member, before, after):
                     else:
                         print("⚠️ 업데이트 확인 실패: 데이터가 없습니다.")
                 else:
-                    print(f"⚠️ 퇴장 DB 업데이트 실패: 응답 데이터 없음"))
+                    print(f"⚠️ 퇴장 DB 업데이트 실패: 응답 데이터 없음")
             else:
                 print(f"⚠️ 입장 기록을 찾을 수 없음 - {user_id}")
 
