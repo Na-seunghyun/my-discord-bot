@@ -217,13 +217,14 @@ async def on_voice_state_update(member, before, after):
                     .update(update_data) \
                     .eq("user_id", user_id) \
                     .eq("joined_at", record["joined_at"]) \
+                    .returning("*") \
                     .execute()
 
                 if update_response.data:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
                     voice_activity_cache[member.id] = left_time
                 else:
-                    print("⚠️ 퇴장 DB 업데이트 실패: 응답에 데이터 없음")
+                    print(f"⚠️ 퇴장 DB 업데이트 실패: {update_response.error}")
             else:
                 print(f"⚠️ 입장 기록을 찾을 수 없음 - {user_id}")
 
