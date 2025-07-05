@@ -169,7 +169,7 @@ async def on_voice_state_update(member, before, after):
                 "user_id": user_id,
                 "username": username,
                 "joined_at": joined_at,
-                "left_at": "None",
+                "left_at": None
                 
             }
             response = supabase.table("voice_activity").insert(data).execute()
