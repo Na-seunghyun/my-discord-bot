@@ -153,40 +153,43 @@ async def on_voice_state_update(member, before, after):
             existing = supabase.table("voice_activity") \
                 .select("*") \
                 .eq("user_id", user_id) \
-                .is_("left_at", "null") \
+                .is_("left_at", None) \
                 .limit(1) \
                 .execute()
 
-            if existing.status_code != 200:
-                print(f"❌ 입장 기록 조회 실패: 상태 코드 {existing.status_code}")
-            elif existing.data and len(existing.data) > 0:
-                print(f"⚠️ 이미 입장 기록 존재, 중복 저장 방지: {user_id}")
-            else:
-                data = {
-                    "user_id": user_id,
-                    "username": username,
-                    "joined_at": joined_at,
-                    "left_at": None,
-                    "duration_sec": None,
-                }
-                response = supabase.table("voice_activity").insert(data).execute()
+            if existing.error:
+                print(f"❌ 입장 기록 조회 실패: {existing.error}")
+                return
 
-                if response.status_code != 201:
-                    print(f"❌ 입장 DB 저장 실패: 상태 코드 {response.status_code}")
-                elif response.data:
-                    print(f"✅ 입장 DB 저장 성공: {username} - {joined_at}")
-                    voice_activity_cache[member.id] = join_time
-                else:
-                    print("⚠️ 입장 DB 저장 실패: 응답에 데이터 없음")
+            if existing.data and len(existing.data) > 0:
+                print(f"⚠️ 이미 입장 기록 존재, 중복 저장 방지: {user_id}")
+                return
+
+            data = {
+                "user_id": user_id,
+                "username": username,
+                "joined_at": joined_at,
+                "left_at": None,
+                "duration_sec": None,
+            }
+            response = supabase.table("voice_activity").insert(data).execute()
+
+            if response.error:
+                print(f"❌ 입장 DB 저장 실패: {response.error}")
+                return
+
+            if response.data:
+                print(f"✅ 입장 DB 저장 성공: {username} - {joined_at}")
+                voice_activity_cache[member.id] = join_time
+                voice_join_times[member.id] = join_time
+            else:
+                print("⚠️ 입장 DB 저장 실패: 응답에 데이터 없음")
 
         except Exception as e:
             print(f"❌ 입장 DB 저장 예외 발생: {e}")
 
 
-        voice_join_times[member.id] = join_time
-
-
-       # 퇴장 기록
+    # 퇴장 기록 처리
     elif before.channel is not None and after.channel is None:
         left_time = datetime.now(timezone.utc).replace(microsecond=0)
         print(f"🛑 [퇴장 이벤트] {member.display_name}({member.id}) 님이 '{before.channel.name}'에서 퇴장 at {left_time.isoformat()}")
@@ -200,14 +203,17 @@ async def on_voice_state_update(member, before, after):
         username = member.display_name
 
         try:
-            # left_at이 NULL인 가장 최근 입장 기록 1개 조회 (id 포함)
             records = supabase.table("voice_activity") \
                 .select("id, joined_at") \
                 .eq("user_id", user_id) \
-                .is_("left_at", "null") \
-                .order("joined_at", desc=False) \
+                .is_("left_at", None) \
+                .order("joined_at", desc=True) \
                 .limit(1) \
                 .execute()
+
+            if records.error:
+                print(f"❌ 퇴장 기록 조회 실패: {records.error}")
+                return
 
             if records.data and len(records.data) > 0:
                 record = records.data[0]
@@ -219,30 +225,33 @@ async def on_voice_state_update(member, before, after):
                     "duration_sec": duration,
                 }
 
-                # id 기준으로 업데이트
                 update_response = supabase.table("voice_activity") \
                     .update(update_data) \
                     .eq("id", record["id"]) \
                     .execute()
 
-                # 오류가 있는지 확인
-                if hasattr(update_response, "error") and update_response.error is not None:
+                if update_response.error:
                     print(f"❌ 퇴장 DB 업데이트 실패: {update_response.error}")
+                    return
 
-                elif update_response.data:
+                if update_response.data:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
                     voice_activity_cache[member.id] = left_time
+                    voice_join_times.pop(member.id, None)
+                else:
+                    print("⚠️ 퇴장 DB 업데이트 실패: 응답 데이터 없음")
 
             else:
-                print("⚠️ 퇴장 DB 업데이트 실패: 응답 데이터 없음")
+                print(f"⚠️ 입장 기록이 없음 - 퇴장 기록 업데이트 불가: {user_id}")
 
         except Exception as e:
             print(f"❌ 퇴장 DB 처리 예외 발생: {e}")
 
-        # 채널 비었을 때 기록 (기존 코드 유지)
+        # 채널 비었을 때 시간 기록
         if before.channel and len(before.channel.members) == 0:
             channel_last_empty[before.channel.id] = left_time
             print(f"📌 '{before.channel.name}' 채널이 비었음 — 시간 기록됨")
+
 
 
 
