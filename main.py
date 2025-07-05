@@ -298,6 +298,7 @@ async def 도움말(interaction: discord.Interaction):
 import discord
 import requests
 import os
+import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
 API_KEY = os.environ.get("PUBG_API_KEY")
@@ -559,6 +560,40 @@ def extract_squad_metrics(stats):
     win_rate = (wins / rounds) * 100
 
     return (avg_damage, kd, win_rate), None
+
+# ✅ 차트 이미지 생성 및 전송 함수
+async def send_stats_chart(interaction, stats, 닉네임):
+    modes = ["solo", "duo", "squad"]
+    rounds_played = []
+    labels = []
+
+    for mode in modes:
+        mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
+        if mode_stats and mode_stats["roundsPlayed"] > 0:
+            rounds_played.append(mode_stats["roundsPlayed"])
+            labels.append(mode.upper())
+
+    if not rounds_played:
+        await interaction.followup.send("차트를 생성할 전적 데이터가 없습니다.")
+        return
+
+    plt.figure(figsize=(6,4))
+    bars = plt.bar(labels, rounds_played, color=['#1f77b4', '#ff7f0e', '#2ca02c'])
+    plt.title(f"{닉네임}님의 PUBG 모드별 게임 수")
+    plt.ylabel("게임 수")
+    plt.tight_layout()
+
+    # 바 위에 숫자 표시
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, height * 1.01, f'{int(height)}', ha='center', va='bottom')
+
+    chart_path = "temp_chart.png"
+    plt.savefig(chart_path)
+    plt.close()
+
+    await interaction.followup.send(file=discord.File(chart_path))
+    os.remove(chart_path)
 
 # ✅ 슬래시 커맨드
 @tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
