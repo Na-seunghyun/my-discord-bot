@@ -133,8 +133,6 @@ async def on_voice_state_update(member, before, after):
         all_empty_since = None
         notified_after_empty = False
     # ===== 여기까지 수정된 부분 =====
-
-
     # 입장 기록 처리
     if before.channel is None and after.channel is not None:
         join_time = datetime.now(timezone.utc).replace(microsecond=0)
@@ -147,13 +145,13 @@ async def on_voice_state_update(member, before, after):
 
         user_id = str(member.id)
         username = member.display_name
-        joined_at = join_time.isoformat()
+        joined_at = join_time
 
         try:
             existing = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
 
-            if existing.status_code >= 400:
-                print(f"❌ 입장 기록 조회 실패 (RPC): {existing.message}")
+            if existing.error:
+                print(f"❌ 입장 기록 조회 실패 (RPC): {existing.error.message if hasattr(existing.error, 'message') else existing.error}")
                 return
 
             if existing.data and len(existing.data) > 0:
@@ -163,18 +161,18 @@ async def on_voice_state_update(member, before, after):
             data = {
                 "user_id": user_id,
                 "username": username,
-                "joined_at": joined_at,
+                "joined_at": joined_at.isoformat(),
                 "left_at": None,
             }
 
             response = supabase.table("voice_activity").insert(data).execute()
 
-            if response.status_code >= 400:
-                print(f"❌ 입장 DB 저장 실패: {response.message}")
+            if response.error:
+                print(f"❌ 입장 DB 저장 실패: {response.error.message if hasattr(response.error, 'message') else response.error}")
                 return
 
             if response.data:
-                print(f"✅ 입장 DB 저장 성공: {username} - {joined_at}")
+                print(f"✅ 입장 DB 저장 성공: {username} - {joined_at.isoformat()}")
                 voice_activity_cache[member.id] = join_time
                 voice_join_times[member.id] = join_time
             else:
@@ -182,6 +180,7 @@ async def on_voice_state_update(member, before, after):
 
         except Exception as e:
             print(f"❌ 입장 DB 저장 예외 발생: {e}")
+
 
     # 퇴장 기록 처리
     elif before.channel is not None and after.channel is None:
