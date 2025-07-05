@@ -134,14 +134,15 @@ async def on_voice_state_update(member, before, after):
         notified_after_empty = False
     # ===== 여기까지 수정된 부분 =====
 
-async def on_voice_state_update(member, before, after):
+
     # 입장 기록
     if before.channel is None and after.channel is not None:
         join_time = datetime.now(timezone.utc).replace(microsecond=0)
+        print(f"✅ [입장 이벤트] {member.display_name}({member.id}) 님이 '{after.channel.name}'에 입장 at {join_time.isoformat()}")
 
         last_save_time = voice_activity_cache.get(member.id)
         if last_save_time and (join_time - last_save_time) < timedelta(seconds=3):
-            print(f"중복 저장 방지 (입장): {member.id} - 최근 저장 시간 {last_save_time}")
+            print(f"⏹️ 중복 저장 방지 (입장): {member.id} - 최근 저장 시간 {last_save_time}")
             return
 
         user_id = str(member.id)
@@ -181,10 +182,11 @@ async def on_voice_state_update(member, before, after):
     # 퇴장 기록
     elif before.channel is not None and after.channel is None:
         left_time = datetime.now(timezone.utc).replace(microsecond=0)
+        print(f"🛑 [퇴장 이벤트] {member.display_name}({member.id}) 님이 '{before.channel.name}'에서 퇴장 at {left_time.isoformat()}")
 
         last_save_time = voice_activity_cache.get(member.id)
         if last_save_time and (left_time - last_save_time) < timedelta(seconds=3):
-            print(f"중복 저장 방지 (퇴장): {member.id} - 최근 저장 시간 {last_save_time}")
+            print(f"⏹️ 중복 저장 방지 (퇴장): {member.id} - 최근 저장 시간 {last_save_time}")
             return
 
         user_id = str(member.id)
@@ -208,7 +210,10 @@ async def on_voice_state_update(member, before, after):
                     "left_at": left_time.isoformat(),
                     "duration_sec": duration,
                 }
-                update_response = supabase.table("voice_activity").update(update_data).eq("id", record["id"]).execute()
+                update_response = supabase.table("voice_activity") \
+                    .update(update_data) \
+                    .eq("id", record["id"]) \
+                    .execute()
 
                 if update_response.data:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
@@ -224,6 +229,7 @@ async def on_voice_state_update(member, before, after):
         if before.channel and len(before.channel.members) == 0:
             channel_last_empty[before.channel.id] = left_time
             print(f"📌 '{before.channel.name}' 채널이 비었음 — 시간 기록됨")
+
 
 
     # ——— 방송 시작/종료 알림 처리 ———
