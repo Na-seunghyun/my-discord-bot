@@ -577,9 +577,6 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
 
-        # 전체 전적 요약 (SOLO, DUO, SQUAD)
-        summary = summarize_stats(stats)
-
         # SQUAD 전적 기반 피드백
         squad_metrics, error = extract_squad_metrics(stats)
         if squad_metrics:
@@ -588,12 +585,36 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         else:
             feedback = error
 
-        # Embed 구성: 필드 분리
+        # Embed 구성
         embed = discord.Embed(
             title=f"{닉네임}님의 PUBG 전적 요약",
             color=discord.Color.teal()
         )
-        embed.add_field(name="🧾 전체 전적 요약", value=summary, inline=False)
+
+        # SOLO / DUO / SQUAD 각각을 필드로 가로 정렬
+        for mode in ["solo", "duo", "squad"]:
+            mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
+            if not mode_stats or mode_stats["roundsPlayed"] == 0:
+                continue
+
+            rounds = mode_stats['roundsPlayed']
+            wins = mode_stats['wins']
+            kills = mode_stats['kills']
+            damage = mode_stats['damageDealt']
+            avg_damage = damage / rounds
+            kd = kills / max(1, rounds - wins)
+            win_pct = (wins / rounds) * 100
+
+            value = (
+                f"게임 수: {rounds}\n"
+                f"승리 수: {wins} ({win_pct:.2f}%)\n"
+                f"킬 수: {kills}\n"
+                f"평균 데미지: {avg_damage:.2f}\n"
+                f"K/D: {kd:.2f}"
+            )
+            embed.add_field(name=mode.upper(), value=value, inline=True)
+
+        # 분석 피드백은 아래에 세로로 표시
         embed.add_field(name="📊 SQUAD 분석 피드백", value=feedback, inline=False)
         embed.set_footer(text="PUBG API 제공")
 
@@ -603,6 +624,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
+
 
 
 
