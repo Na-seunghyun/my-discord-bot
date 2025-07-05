@@ -216,17 +216,19 @@ async def on_voice_state_update(member, before, after):
                 update_response = supabase.table("voice_activity") \
                     .update(update_data) \
                     .eq("id", record["id"]) \
+                    .returning("representation") \
                     .execute()
 
-                if update_response.data:
+                # 오류가 있는지 확인
+                if hasattr(update_response, "error") and update_response.error is not None:
+                    print(f"❌ 퇴장 DB 업데이트 실패: {update_response.error}")
+
+                elif update_response.data:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
                     voice_activity_cache[member.id] = left_time
 
-                else:
-                    print("⚠️ 퇴장 DB 업데이트 실패: 응답 데이터 없음")
-
             else:
-                print(f"⚠️ 입장 기록을 찾을 수 없음 - {user_id}")
+                print("⚠️ 퇴장 DB 업데이트 실패: 응답 데이터 없음")
 
         except Exception as e:
             print(f"❌ 퇴장 DB 처리 예외 발생: {e}")
