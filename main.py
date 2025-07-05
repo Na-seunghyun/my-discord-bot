@@ -295,8 +295,8 @@ async def 도움말(interaction: discord.Interaction):
 
 
 # ✅ 슬래시 명령어: 전적조회
-import discord
-from discord.ext import commands
+# PUBG API 전적조회 부분
+
 import requests
 import os
 
@@ -342,10 +342,9 @@ def summarize_stats(stats):
         lines.append(f"- K/D: {mode_stats['kills'] / max(1, (mode_stats['roundsPlayed'] - mode_stats['wins'])):.2f}")
     return "\n".join(lines) if lines else "전적이 존재하지 않거나 조회할 수 없습니다."
 
-intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="/", intents=intents)
+# 기존에 선언된 bot과 tree 객체 사용
 
-@bot.slash_command(name="전적", description="PUBG 닉네임으로 전적 조회")
+@tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
 async def 전적(interaction: discord.Interaction, 닉네임: str):
     await interaction.response.defer()  # 응답 지연 처리
 
@@ -359,11 +358,6 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
     await interaction.followup.send(f"**{닉네임}님의 PUBG 전적:**\n{summary}")
 
-# 봇 토큰은 환경변수로 관리하는게 좋습니다.
-DISCORD_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
-
-if __name__ == "__main__":
-    bot.run(DISCORD_TOKEN)
 
 
 
