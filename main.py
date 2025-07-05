@@ -150,10 +150,10 @@ async def on_voice_state_update(member, before, after):
         joined_at = join_time.isoformat()
 
         try:
-            # ✅ RPC 함수로 NULL 처리 우회
+            # RPC 함수 호출, error 속성 존재 여부 체크
             existing = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
 
-            if existing.error:
+            if hasattr(existing, "error") and existing.error:
                 print(f"❌ 입장 기록 조회 실패 (RPC): {existing.error}")
                 return
 
@@ -170,7 +170,7 @@ async def on_voice_state_update(member, before, after):
 
             response = supabase.table("voice_activity").insert(data).execute()
 
-            if response.error:
+            if hasattr(response, "error") and response.error:
                 print(f"❌ 입장 DB 저장 실패: {response.error}")
                 return
 
@@ -198,10 +198,10 @@ async def on_voice_state_update(member, before, after):
         username = member.display_name
 
         try:
-            # ✅ RPC 함수로 NULL 처리
+            # RPC 함수 호출, error 속성 존재 여부 체크
             records = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
 
-            if records.error:
+            if hasattr(records, "error") and records.error:
                 print(f"❌ 퇴장 기록 조회 실패 (RPC): {records.error}")
                 return
 
@@ -220,7 +220,7 @@ async def on_voice_state_update(member, before, after):
                     .eq("id", record["id"]) \
                     .execute()
 
-                if update_response.error:
+                if hasattr(update_response, "error") and update_response.error:
                     print(f"❌ 퇴장 DB 업데이트 실패: {update_response.error}")
                     return
 
