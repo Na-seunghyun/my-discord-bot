@@ -511,6 +511,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
 
 
+
 # ✅ 슬래시 명령어: 검사
 @tree.command(name="검사", description="닉네임 검사", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
