@@ -152,10 +152,8 @@ async def on_voice_state_update(member, before, after):
         try:
             existing = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
 
-            # raise_for_status() 제거
-            # 에러 체크는 .error로
-            if existing.error:
-                print(f"❌ 입장 기록 조회 실패 (RPC): {existing.error}")
+            if existing.status_code >= 400:
+                print(f"❌ 입장 기록 조회 실패 (RPC): {existing.message}")
                 return
 
             if existing.data and len(existing.data) > 0:
@@ -171,9 +169,8 @@ async def on_voice_state_update(member, before, after):
 
             response = supabase.table("voice_activity").insert(data).execute()
 
-            # raise_for_status() 제거
-            if response.error:
-                print(f"❌ 입장 DB 저장 실패: {response.error}")
+            if response.status_code >= 400:
+                print(f"❌ 입장 DB 저장 실패: {response.message}")
                 return
 
             if response.data:
@@ -202,9 +199,8 @@ async def on_voice_state_update(member, before, after):
         try:
             records = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
 
-            # raise_for_status() 제거
-            if records.error:
-                print(f"❌ 퇴장 기록 조회 실패 (RPC): {records.error}")
+            if records.status_code >= 400:
+                print(f"❌ 퇴장 기록 조회 실패 (RPC): {records.message}")
                 return
 
             if records.data and len(records.data) > 0:
@@ -222,9 +218,8 @@ async def on_voice_state_update(member, before, after):
                     .eq("id", record["id"]) \
                     .execute()
 
-                # raise_for_status() 제거
-                if update_response.error:
-                    print(f"❌ 퇴장 DB 업데이트 실패: {update_response.error}")
+                if update_response.status_code >= 400:
+                    print(f"❌ 퇴장 DB 업데이트 실패: {update_response.message}")
                     return
 
                 if update_response.data:
@@ -243,6 +238,7 @@ async def on_voice_state_update(member, before, after):
         if before.channel and len(before.channel.members) == 0:
             channel_last_empty[before.channel.id] = left_time
             print(f"📌 '{before.channel.name}' 채널이 비었음 — 시간 기록됨")
+
 
 
 
