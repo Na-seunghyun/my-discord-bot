@@ -7,6 +7,7 @@ import re
 import os
 import random
 import asyncio
+import requests
 from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 import uuid  # uuid 추가
@@ -288,6 +289,81 @@ async def 도움말(interaction: discord.Interaction):
 
     embed.set_footer(text="기타 문의는 관리자에게 DM 주세요!")
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+
+# ✅ 슬래시 명령어: 전적조회
+
+@tree.command(name="전적", description="PUBG 전적을 확인합니다", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(nickname="카카오 PUBG 닉네임")
+async def 전적(interaction: discord.Interaction, nickname: str):
+    await interaction.response.defer()  # 응답 대기
+
+    # PUBG API KEY
+    API_KEY = os.getenv("PUBG_API_KEY")
+    if not API_KEY:
+        await interaction.followup.send("❌ API 키가 설정되어 있지 않습니다.")
+        return
+
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Accept": "application/vnd.api+json"
+    }
+
+    platform = "kakao"
+    try:
+        # 1단계: 유저 정보 조회
+        res = requests.get(
+            f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}",
+            headers=headers
+        )
+        data = res.json()
+        player = data["data"][0]
+        player_id = player["id"]
+
+        # 2단계: 최근 매치 정보 가져오기
+        match_ids = player["relationships"]["matches"]["data"]
+        if not match_ids:
+            await interaction.followup.send(f"{nickname} 님의 최근 매치를 찾을 수 없습니다.")
+            return
+
+        match_id = match_ids[0]["id"]
+        match_res = requests.get(
+            f"https://api.pubg.com/shards/{platform}/matches/{match_id}",
+            headers=headers
+        )
+        match_data = match_res.json()
+
+        # 3단계: 해당 플레이어의 매치 데이터 추출
+        included = match_data["included"]
+        participant = next((item for item in included if item["type"] == "participant" and item["attributes"]["stats"]["name"] == nickname), None)
+
+        if not participant:
+            await interaction.followup.send(f"{nickname} 님의 전적 정보를 찾을 수 없습니다.")
+            return
+
+        stats = participant["attributes"]["stats"]
+
+        # 📊 결과 Embed 생성
+        embed = discord.Embed(
+            title=f"{nickname}님의 최근 전적",
+            color=discord.Color.orange()
+        )
+        embed.add_field(name="🏆 킬 수", value=stats["kills"], inline=True)
+        embed.add_field(name="💥 대미지", value=int(stats["damageDealt"]), inline=True)
+        embed.add_field(name="⏱️ 생존 시간", value=f"{int(stats['timeSurvived'])}초", inline=True)
+        embed.add_field(name="📌 순위", value=f"{stats['winPlace']}위", inline=True)
+        embed.set_footer(text="PUBG API 제공")
+
+        await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        await interaction.followup.send(f"⚠️ 전적 조회 중 오류 발생: {e}")
+
+
+
+
+
 
 
 # ✅ 슬래시 명령어: 검사
