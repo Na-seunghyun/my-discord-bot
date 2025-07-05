@@ -295,151 +295,76 @@ async def 도움말(interaction: discord.Interaction):
 
 
 # ✅ 슬래시 명령어: 전적조회
+import discord
+from discord.ext import commands
+import requests
+import os
 
-def can_make_request():
-    now = datetime.utcnow()
-    while request_times and (now - request_times[0]) > timedelta(minutes=1):
-        request_times.popleft()
-    if len(request_times) < 10:
-        request_times.append(now)
-        return True
-    return False
+API_KEY = os.environ.get("PUBG_API_KEY")
+PLATFORM = "kakao"
 
-
-PUBG_API_KEY = os.getenv("PUBG_API_KEY")
-PUBG_HEADERS = {
-    "Authorization": f"Bearer {PUBG_API_KEY}",
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
     "Accept": "application/vnd.api+json"
 }
 
-PUBG_BASE_URL = "https://api.pubg.com"
+def get_player_id(player_name):
+    url = f"https://api.pubg.com/shards/{PLATFORM}/players?filter[playerNames]={player_name}"
+    response = requests.get(url, headers=headers)
+    data = response.json()
+    return data["data"][0]["id"]
 
-async def get_pubg_player_id(nickname):
-    url = f"{PUBG_BASE_URL}/shards/kakao/players?filter[playerNames]={nickname}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=PUBG_HEADERS) as resp:
-            if resp.status == 429:
-                return "RATE_LIMIT"
-            if resp.status != 200:
-                return None
-            data = await resp.json()
-            try:
-                return data["data"][0]["id"]
-            except (KeyError, IndexError):
-                return None
+def get_season_id():
+    url = f"https://api.pubg.com/shards/{PLATFORM}/seasons"
+    response = requests.get(url, headers=headers)
+    data = response.json()
+    for season in data["data"]:
+        if season["attributes"]["isCurrentSeason"]:
+            return season["id"]
 
+def get_player_stats(player_id, season_id):
+    url = f"https://api.pubg.com/shards/{PLATFORM}/players/{player_id}/seasons/{season_id}"
+    response = requests.get(url, headers=headers)
+    return response.json()
 
-async def get_current_season_id():
-    url = f"{PUBG_BASE_URL}/shards/kakao/seasons"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=PUBG_HEADERS) as resp:
-            if resp.status != 200:
-                return None
-            data = await resp.json()
-            for season in data["data"]:
-                if season["attributes"].get("isCurrentSeason"):
-                    return season["id"]
-            return None
-
-
-async def get_player_stats(player_id, season_id):
-    url = f"{PUBG_BASE_URL}/shards/kakao/players/{player_id}/seasons/{season_id}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=PUBG_HEADERS) as resp:
-            if resp.status == 429:
-                return "RATE_LIMIT"
-            if resp.status != 200:
-                return None
-            return await resp.json()
-
-
-def merge_mode_stats(stats, mode_prefix):
-    merged = {
-        "roundsPlayed": 0,
-        "wins": 0,
-        "kills": 0,
-        "damageDealt": 0,
-    }
-    for perspective in ["fpp", "tpp"]:
-        key = f"{mode_prefix}-{perspective}"
-        mode_stats = stats.get(key)
-        if mode_stats:
-            merged["roundsPlayed"] += mode_stats.get("roundsPlayed", 0)
-            merged["wins"] += mode_stats.get("wins", 0)
-            merged["kills"] += mode_stats.get("kills", 0)
-            merged["damageDealt"] += mode_stats.get("damageDealt", 0)
-    if merged["roundsPlayed"] == 0:
-        return None
-    return merged
-
-
-@tree.command(name="전적", description="PUBG 전적을 확인합니다", guild=discord.Object(id=GUILD_ID))
-@commands.cooldown(1, 10, commands.BucketType.user)
-@app_commands.describe(nickname="카카오 PUBG 닉네임")
-async def 전적(interaction: discord.Interaction, nickname: str):
-    try:
-        await interaction.response.defer(thinking=True)
-    except discord.errors.NotFound:
-        print("Interaction 이미 만료됨, defer 실패")
-
-    # 서버 전체 요청 제한 체크
-    if not can_make_request():
-        await interaction.followup.send("🚫 요청 제한 초과: 1분에 최대 10회까지 조회할 수 있습니다. 잠시 후 다시 시도해주세요.")
-        return
-
-    player_id = await get_pubg_player_id(nickname)
-    if player_id == "RATE_LIMIT":
-        await interaction.followup.send("⚠️ PUBG API 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
-        return
-    if not player_id:
-        await interaction.followup.send(f"🔍 `{nickname}` 닉네임의 유저를 찾을 수 없습니다.")
-        return
-
-    season_id = await get_current_season_id()
-    if not season_id:
-        await interaction.followup.send("⚠️ 현재 시즌 정보를 불러오지 못했습니다.")
-        return
-
-    stats = await get_player_stats(player_id, season_id)
-    if stats == "RATE_LIMIT":
-        await interaction.followup.send("⚠️ PUBG API 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
-        return
-    if not stats:
-        await interaction.followup.send("❌ 전적 데이터를 불러오지 못했습니다.")
-        return
-
-    stats_data = stats["data"]["attributes"].get("gameModeStats", {})
-
-    embed = discord.Embed(title=f"🎮 {nickname} PUBG 전적", color=discord.Color.blue())
-    embed.set_footer(text="kakao shard / 현재 시즌 기준")
-
+def summarize_stats(stats):
     modes = ["solo", "duo", "squad"]
-    has_stats = False
-
+    lines = []
     for mode in modes:
-        merged_stats = merge_mode_stats(stats_data, mode)
-        if not merged_stats:
+        mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
+        if not mode_stats or mode_stats["roundsPlayed"] == 0:
             continue
-        has_stats = True
+        lines.append(f"**[{mode.upper()} 모드]**")
+        lines.append(f"- 게임 수: {mode_stats['roundsPlayed']}")
+        lines.append(f"- 승리 수: {mode_stats['wins']} ({(mode_stats['wins']/mode_stats['roundsPlayed'])*100:.2f}%)")
+        lines.append(f"- 킬 수: {mode_stats['kills']}")
+        lines.append(f"- 평균 데미지: {mode_stats['damageDealt'] / mode_stats['roundsPlayed']:.2f}")
+        lines.append(f"- K/D: {mode_stats['kills'] / max(1, (mode_stats['roundsPlayed'] - mode_stats['wins'])):.2f}")
+    return "\n".join(lines) if lines else "전적이 존재하지 않거나 조회할 수 없습니다."
 
-        kd = round(merged_stats["kills"] / max(1, merged_stats["roundsPlayed"] - merged_stats["wins"]), 2)
-        win_rate = round((merged_stats["wins"] / merged_stats["roundsPlayed"]) * 100, 2)
-        avg_damage = round(merged_stats["damageDealt"] / merged_stats["roundsPlayed"], 2)
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix="/", intents=intents)
 
-        desc = (
-            f"게임 수: {merged_stats['roundsPlayed']}\n"
-            f"승리 수: {merged_stats['wins']} ({win_rate}%)\n"
-            f"킬 수: {merged_stats['kills']}\n"
-            f"평균 데미지: {avg_damage}\n"
-            f"K/D: {kd}\n"
-        )
-        embed.add_field(name=f"{mode.upper()} 모드", value=desc, inline=False)
+@bot.slash_command(name="전적", description="PUBG 닉네임으로 전적 조회")
+async def 전적(interaction: discord.Interaction, 닉네임: str):
+    await interaction.response.defer()  # 응답 지연 처리
 
-    if not has_stats:
-        await interaction.followup.send("❌ 전적 데이터가 없습니다.")
-        return
+    try:
+        player_id = get_player_id(닉네임)
+        season_id = get_season_id()
+        stats = get_player_stats(player_id, season_id)
+        summary = summarize_stats(stats)
+    except Exception as e:
+        summary = f"전적 조회 중 오류가 발생했습니다: {str(e)}"
 
-    await interaction.followup.send(embed=embed)
+    await interaction.followup.send(f"**{닉네임}님의 PUBG 전적:**\n{summary}")
+
+# 봇 토큰은 환경변수로 관리하는게 좋습니다.
+DISCORD_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
+
+if __name__ == "__main__":
+    bot.run(DISCORD_TOKEN)
+
 
 
 
