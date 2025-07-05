@@ -194,7 +194,7 @@ async def on_voice_state_update(member, before, after):
 
         try:
             records = supabase.table("voice_activity") \
-                .select("id, joined_at") \  # 'id' 꼭 포함!
+                .select("id, joined_at") \  
                 .eq("user_id", user_id) \
                 .is_("left_at", "null") \
                 .order("joined_at", desc=False) \
