@@ -217,12 +217,23 @@ async def on_voice_state_update(member, before, after):
                     .update(update_data) \
                     .eq("user_id", user_id) \
                     .eq("joined_at", record["joined_at"]) \
-                    .returning("*") \
                     .execute()
 
-                if update_response.data:
+                if update_response.error is None:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
-                    voice_activity_cache[member.id] = left_time
+
+                    # 실제 저장 여부 재조회
+                    verify_response = supabase.table("voice_activity") \
+                        .select("left_at, duration_sec") \
+                        .eq("user_id", user_id) \
+                        .eq("joined_at", record["joined_at"]) \
+                        .execute()
+
+                    if verify_response.data and len(verify_response.data) > 0:
+                        print(f"📌 실제 저장된 퇴장 시간: {verify_response.data[0]['left_at']}")
+                        voice_activity_cache[member.id] = left_time
+                    else:
+                        print("⚠️ 업데이트 확인 실패: 데이터가 없습니다.")
                 else:
                     print(f"⚠️ 퇴장 DB 업데이트 실패: {update_response.error}")
             else:
@@ -234,6 +245,7 @@ async def on_voice_state_update(member, before, after):
         if before.channel and len(before.channel.members) == 0:
             channel_last_empty[before.channel.id] = left_time
             print(f"📌 '{before.channel.name}' 채널이 비었음 — 시간 기록됨")
+
 
 
 
