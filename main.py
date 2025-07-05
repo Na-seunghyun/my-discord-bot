@@ -417,12 +417,6 @@ def detailed_feedback(avg_damage, kd, win_rate):
     return "\n".join([dmg_msg, kd_msg, win_msg])
 
 # ✅ 디스코드 봇 커맨드
-from discord import app_commands
-from discord.ext import commands
-
-intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="!", intents=intents)
-tree = app_commands.CommandTree(bot)
 
 @tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
 async def 전적(interaction: discord.Interaction, 닉네임: str):
