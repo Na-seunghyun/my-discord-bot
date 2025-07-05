@@ -477,7 +477,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
         if squad_metrics:
             feedback_lines = feedback.split('\n\n')
-            dmg_feedback = feedback_lines[0].replace('📊 평균 데미지 피드백:\n', '')
+            dmg_feedback = feedback_lines[0].replace('🔫 평균 데미지 피드백:\n', '')
             kd_feedback = feedback_lines[1].replace('⚔️ K/D 피드백:\n', '')
             win_feedback = feedback_lines[2].replace('🏆 승률 피드백:\n', '')
 
