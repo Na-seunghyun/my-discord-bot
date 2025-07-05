@@ -414,7 +414,12 @@ def detailed_feedback(avg_damage, kd, win_rate):
     kd_msg = random.choice(feedback_json["kdr"][kd_key])
     win_msg = random.choice(feedback_json["winrate"][win_key])
 
-    return "\n".join([dmg_msg, kd_msg, win_msg])
+    return (
+        f"📊 평균 데미지 피드백:\n{dmg_msg}\n\n"
+        f"⚔️ K/D 피드백:\n{kd_msg}\n\n"
+        f"🏆 승률 피드백:\n{win_msg}"
+    )
+
 
 # ✅ 디스코드 봇 커맨드
 
