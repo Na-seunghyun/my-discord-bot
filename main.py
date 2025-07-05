@@ -138,6 +138,10 @@ async def on_voice_state_update(member, before, after):
     
     # 입장 처리
     if before.channel is None and after.channel is not None:
+        user_id = str(member.id)
+        username = member.display_name
+
+        now = datetime.now(timezone.utc).replace(microsecond=0)
         print(f"✅ [입장 이벤트] {username}({user_id}) 님이 '{after.channel.name}'에 입장 at {now.isoformat()}")
         try:
             # 이미 열린 입장 기록 확인
@@ -169,6 +173,10 @@ async def on_voice_state_update(member, before, after):
 
     # 퇴장 처리
     elif before.channel is not None and after.channel is None:
+        user_id = str(member.id)
+        username = member.display_name
+
+        now = datetime.now(timezone.utc).replace(microsecond=0)
         print(f"🛑 [퇴장 이벤트] {username}({user_id}) 님이 '{before.channel.name}'에서 퇴장 at {now.isoformat()}")
         try:
             records = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
