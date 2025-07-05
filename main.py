@@ -891,10 +891,13 @@ class VoiceTopButton(View):
             current_kst_str = get_current_kst_time_str()
             embed.set_footer(text=f"조회 기준 시간: {current_kst_str} (한국 시간) | 접속시간은 일 시 분 초 단위")
 
-            for rank, info in enumerate(data, 1):
-                time_str = format_duration(info['total_duration'])
-                embed.add_field(name=f"{rank}. {info['username']}", value=time_str, inline=False)
 
+            trophy_emojis = {1: "🥇", 2: "🥈", 3: "🥉"}
+            for rank, info in enumerate(data, 1):
+                emoji = trophy_emojis.get(rank, f"{rank}.")
+                time_str = format_duration(info['total_duration'])
+                embed.add_field(name=f"{emoji} {info['username']}", value=time_str, inline=False)
+            
             button.disabled = True
             try:
                 await interaction.message.edit(view=self)
