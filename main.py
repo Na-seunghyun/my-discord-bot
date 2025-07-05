@@ -561,60 +561,6 @@ def extract_squad_metrics(stats):
 
     return (avg_damage, kd, win_rate), None
 
-# ✅ 차트 이미지 생성 및 전송 함수
-async def send_stats_chart(interaction, stats, nickname):
-    modes = ["solo", "duo", "squad"]
-    rounds_played = []
-    labels = []
-
-    for mode in modes:
-        mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
-        if mode_stats and mode_stats["roundsPlayed"] > 0:
-            rounds_played.append(mode_stats["roundsPlayed"])
-            labels.append(mode.upper())
-
-    if not rounds_played:
-        await interaction.followup.send("No data available to create chart.")
-        return
-
-    # SQUAD 모드 데이터로 추가 통계 가져오기
-    squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
-    avg_damage = squad_stats.get("damageDealt", 0)
-    wins = squad_stats.get("wins", 0)
-    rounds = squad_stats.get("roundsPlayed", 1)
-    kills = squad_stats.get("kills", 0)
-    kd = kills / max(1, rounds - wins)
-    win_rate = (wins / max(1, rounds)) * 100
-
-    plt.figure(figsize=(8,5))
-    bars = plt.bar(labels, rounds_played, color=['#1f77b4', '#ff7f0e', '#2ca02c'])
-    plt.title(f"PUBG Game Count by Mode for {nickname}", fontsize=14, weight='bold')
-    plt.ylabel("Games Played", fontsize=12)
-    plt.ylim(0, max(rounds_played)*1.2)
-    plt.grid(axis='y', linestyle='--', alpha=0.6)
-
-    # 막대 위 숫자 표시
-    for bar in bars:
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2, height * 1.02, f'{int(height)}', ha='center', va='bottom', fontsize=11)
-
-    # 차트 오른쪽에 텍스트 박스 추가
-    stats_text = (
-        f"Squad Stats Summary:\n"
-        f"Avg Damage: {avg_damage:.1f}\n"
-        f"K/D Ratio: {kd:.2f}\n"
-        f"Win Rate: {win_rate:.1f}%"
-    )
-    plt.gcf().text(0.85, 0.6, stats_text, fontsize=11, bbox=dict(facecolor='lightgray', alpha=0.3, boxstyle='round,pad=0.5'))
-
-    plt.tight_layout(rect=[0,0,0.8,1])  # 오른쪽 공간 확보
-
-    chart_path = "temp_chart.png"
-    plt.savefig(chart_path)
-    plt.close()
-
-    await interaction.followup.send(file=discord.File(chart_path))
-    os.remove(chart_path)
 
 # ✅ 슬래시 커맨드
 @tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
@@ -652,9 +598,6 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         embed.set_footer(text="PUBG API 제공")
 
         await interaction.followup.send(embed=embed)
-
-        # 여기서 차트 이미지 전송 함수 호출
-        await send_stats_chart(interaction, stats, 닉네임)
 
     except requests.HTTPError as e:
         await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
