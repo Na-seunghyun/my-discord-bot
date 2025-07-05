@@ -193,12 +193,12 @@ async def on_voice_state_update(member, before, after):
         username = member.display_name
 
         try:
-            records = supabase.table("voice_activity") \
-                .select("id, joined_at") \  
-                .eq("user_id", user_id) \
-                .is_("left_at", "null") \
-                .order("joined_at", desc=False) \
-                .limit(1) \
+            records = supabase.table("voice_activity")\
+                .select("id, joined_at")\
+                .eq("user_id", user_id)\
+                .is_("left_at", "null")\
+                .order("joined_at", desc=False)\
+                .limit(1)\
                 .execute()
 
             if records.data and len(records.data) > 0:
