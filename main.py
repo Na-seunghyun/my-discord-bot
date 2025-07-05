@@ -374,12 +374,14 @@ def extract_stats(mode_stats):
 
 
 @tree.command(name="전적", description="PUBG 전적을 확인합니다", guild=discord.Object(id=GUILD_ID))
-@commands.cooldown(1, 10, commands.BucketType.user)  # 유저별 10초 쿨타임
+@commands.cooldown(1, 10, commands.BucketType.user)
 @app_commands.describe(nickname="카카오 PUBG 닉네임")
 async def 전적(interaction: discord.Interaction, nickname: str):
-    await interaction.response.defer(thinking=True)
+    try:
+        await interaction.response.defer(thinking=True)
+    except discord.errors.NotFound:
+        print("Interaction 이미 만료됨, defer 실패")
 
-    # 서버 전체 요청 제한
     if not can_make_request():
         await interaction.followup.send("🚫 요청 제한 초과: 1분에 최대 10회까지 조회할 수 있습니다. 잠시 후 다시 시도해주세요.")
         return
@@ -405,38 +407,31 @@ async def 전적(interaction: discord.Interaction, nickname: str):
         await interaction.followup.send("❌ 전적 데이터를 불러오지 못했습니다.")
         return
 
-    game_modes = ["solo", "duo", "squad"]
-    perspectives = ["tpp", "fpp"]
-
-    embed = discord.Embed(title=f"🎮 {nickname} PUBG 전적", color=discord.Color.blue())
+    embed = discord.Embed(title=f"🎮 {nickname} PUBG 스쿼드 전적", color=discord.Color.blue())
     embed.set_footer(text="kakao shard / 현재 시즌 기준")
 
     has_stats = False
+    perspectives = ["tpp", "fpp"]
     for perspective in perspectives:
-        description = ""
-        for mode in game_modes:
-            key = f"{mode}-{perspective}"
-            mode_stats = stats["data"]["attributes"]["gameModeStats"].get(key)
-            parsed = extract_stats(mode_stats)
-            if parsed:
-                has_stats = True
-                desc_part = (f"**{mode.capitalize()}**\n"
-                             f"플레이 수: {parsed['플레이 수']}\n"
-                             f"승리 수: {parsed['승리 수']}\n"
-                             f"킬: {parsed['킬']}\n"
-                             f"K/D: {parsed['K/D']}\n"
-                             f"평균 데미지: {parsed['평균 데미지']}\n"
-                             f"승률: {parsed['승률']}\n\n")
-                description += desc_part
-
-        if description:
+        key = f"squad-{perspective}"
+        mode_stats = stats["data"]["attributes"]["gameModeStats"].get(key)
+        parsed = extract_stats(mode_stats)
+        if parsed:
+            has_stats = True
+            description = (f"플레이 수: {parsed['플레이 수']}\n"
+                           f"승리 수: {parsed['승리 수']}\n"
+                           f"킬: {parsed['킬']}\n"
+                           f"K/D: {parsed['K/D']}\n"
+                           f"평균 데미지: {parsed['평균 데미지']}\n"
+                           f"승률: {parsed['승률']}\n")
             embed.add_field(name=perspective.upper(), value=description, inline=False)
 
     if not has_stats:
-        await interaction.followup.send("❌ 해당 유저의 전적 데이터가 없습니다.")
+        await interaction.followup.send("❌ 해당 유저의 스쿼드 전적 데이터가 없습니다.")
         return
 
     await interaction.followup.send(embed=embed)
+
 
 
 
