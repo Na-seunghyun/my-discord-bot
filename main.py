@@ -621,7 +621,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         else:
             feedback = error
 
-        # ✅ Embed 구성: 필드 분리
+        # Embed 구성: 필드 분리
         embed = discord.Embed(
             title=f"{닉네임}님의 PUBG 전적 요약",
             color=discord.Color.teal()
@@ -631,6 +631,9 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         embed.set_footer(text="PUBG API 제공")
 
         await interaction.followup.send(embed=embed)
+
+        # 여기서 차트 이미지 전송 함수 호출
+        await send_stats_chart(interaction, stats, 닉네임)
 
     except requests.HTTPError as e:
         await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
