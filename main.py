@@ -63,7 +63,7 @@ from datetime import datetime, timezone, timedelta
 
 # voice_activity 중복 저장 방지용 캐시 (유저별 마지막 저장 시간)
 voice_activity_cache = {}
-
+voice_join_times = {}
 channel_last_empty = {}
 all_empty_since = None
 notified_after_empty = False
