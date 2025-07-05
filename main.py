@@ -135,7 +135,7 @@ async def on_voice_state_update(member, before, after):
     # ===== 여기까지 수정된 부분 =====
 
 
-    # 입장 기록
+    # 입장 기록 처리
     if before.channel is None and after.channel is not None:
         join_time = datetime.now(timezone.utc).replace(microsecond=0)
         print(f"✅ [입장 이벤트] {member.display_name}({member.id}) 님이 '{after.channel.name}'에 입장 at {join_time.isoformat()}")
@@ -157,7 +157,9 @@ async def on_voice_state_update(member, before, after):
                 .limit(1) \
                 .execute()
 
-            if existing.data and len(existing.data) > 0:
+            if existing.error:
+                print(f"❌ 입장 기록 조회 실패: {existing.error}")
+            elif existing.data and len(existing.data) > 0:
                 print(f"⚠️ 이미 입장 기록 존재, 중복 저장 방지: {user_id}")
             else:
                 data = {
@@ -168,7 +170,9 @@ async def on_voice_state_update(member, before, after):
                     "duration_sec": None,
                 }
                 response = supabase.table("voice_activity").insert(data).execute()
-                if response.data:
+                if response.error:
+                    print(f"❌ 입장 DB 저장 실패: {response.error}")
+                elif response.data:
                     print(f"✅ 입장 DB 저장 성공: {username} - {joined_at}")
                     voice_activity_cache[member.id] = join_time
                 else:
@@ -178,6 +182,7 @@ async def on_voice_state_update(member, before, after):
             print(f"❌ 입장 DB 저장 예외 발생: {e}")
 
         voice_join_times[member.id] = join_time
+
 
        # 퇴장 기록
     elif before.channel is not None and after.channel is None:
@@ -216,7 +221,6 @@ async def on_voice_state_update(member, before, after):
                 update_response = supabase.table("voice_activity") \
                     .update(update_data) \
                     .eq("id", record["id"]) \
-                    .returning("representation") \
                     .execute()
 
                 # 오류가 있는지 확인
