@@ -884,7 +884,8 @@ class VoiceTopButton(View):
                 await interaction.followup.send(f"😥 {year_month} 월에 기록된 접속 시간이 없습니다.", ephemeral=False)
                 return
 
-            embed = Embed(title=f"🎤 {year_month} 음성 접속시간 Top 10", color=0x5865F2)
+            embed = discord.Embed(title=f"🎤 {year_month} 음성 접속시간 Top 10", color=0x5865F2)
+
             
             # 조회 기준 시각 문자열 얻기
             current_kst_str = get_current_kst_time_str()
