@@ -8,6 +8,8 @@ import os
 import random
 import asyncio
 import requests
+import aiohttp
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 import uuid  # uuid 추가
@@ -294,73 +296,147 @@ async def 도움말(interaction: discord.Interaction):
 
 # ✅ 슬래시 명령어: 전적조회
 
-@tree.command(name="전적", description="PUBG 전적을 확인합니다", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(nickname="카카오 PUBG 닉네임")
-async def 전적(interaction: discord.Interaction, nickname: str):
-    await interaction.response.defer()  # 응답 대기
+# 전역 요청 시간 기록용 큐 (서버 전체 요청 제한)
+request_times = deque()
 
-    # PUBG API KEY
-    API_KEY = os.getenv("PUBG_API_KEY")
-    if not API_KEY:
-        await interaction.followup.send("❌ API 키가 설정되어 있지 않습니다.")
-        return
+def can_make_request():
+    now = datetime.utcnow()
+    while request_times and (now - request_times[0]) > timedelta(minutes=1):
+        request_times.popleft()
+    if len(request_times) < 10:
+        request_times.append(now)
+        return True
+    return False
 
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Accept": "application/vnd.api+json"
+
+PUBG_API_KEY = os.getenv("PUBG_API_KEY")
+PUBG_HEADERS = {
+    "Authorization": f"Bearer {PUBG_API_KEY}",
+    "Accept": "application/vnd.api+json"
+}
+
+PUBG_BASE_URL = "https://api.pubg.com"
+
+async def get_pubg_player_id(nickname):
+    url = f"{PUBG_BASE_URL}/shards/kakao/players?filter[playerNames]={nickname}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=PUBG_HEADERS) as resp:
+            if resp.status == 429:
+                return "RATE_LIMIT"
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            try:
+                return data["data"][0]["id"]
+            except (KeyError, IndexError):
+                return None
+
+
+async def get_current_season_id():
+    url = f"{PUBG_BASE_URL}/shards/kakao/seasons"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=PUBG_HEADERS) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            for season in data["data"]:
+                if season["attributes"]["isCurrentSeason"]:
+                    return season["id"]
+            return None
+
+
+async def get_player_stats(player_id, season_id):
+    url = f"{PUBG_BASE_URL}/shards/kakao/players/{player_id}/seasons/{season_id}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=PUBG_HEADERS) as resp:
+            if resp.status == 429:
+                return "RATE_LIMIT"
+            if resp.status != 200:
+                return None
+            return await resp.json()
+
+
+def extract_stats(mode_stats):
+    if not mode_stats or mode_stats.get("roundsPlayed", 0) == 0:
+        return None
+    losses = mode_stats.get("losses", 0)
+    kd = round(mode_stats.get("kills", 0) / losses, 2) if losses else mode_stats.get("kills", 0)
+    win_rate = round((mode_stats.get("wins", 0) / mode_stats.get("roundsPlayed", 1)) * 100, 1)
+    avg_damage = round(mode_stats.get("damageDealt", 0) / mode_stats.get("roundsPlayed", 1), 1)
+    return {
+        "플레이 수": mode_stats.get("roundsPlayed", 0),
+        "승리 수": mode_stats.get("wins", 0),
+        "킬": mode_stats.get("kills", 0),
+        "K/D": kd,
+        "평균 데미지": avg_damage,
+        "승률": f"{win_rate}%",
     }
 
-    platform = "kakao"
-    try:
-        # 1단계: 유저 정보 조회
-        res = requests.get(
-            f"https://api.pubg.com/shards/{platform}/players?filter[playerNames]={nickname}",
-            headers=headers
-        )
-        data = res.json()
-        player = data["data"][0]
-        player_id = player["id"]
 
-        # 2단계: 최근 매치 정보 가져오기
-        match_ids = player["relationships"]["matches"]["data"]
-        if not match_ids:
-            await interaction.followup.send(f"{nickname} 님의 최근 매치를 찾을 수 없습니다.")
-            return
+@tree.command(name="전적", description="PUBG 전적을 확인합니다", guild=discord.Object(id=GUILD_ID))
+@commands.cooldown(1, 10, commands.BucketType.user)  # 유저별 10초 쿨타임
+@app_commands.describe(nickname="카카오 PUBG 닉네임")
+async def 전적(interaction: discord.Interaction, nickname: str):
+    await interaction.response.defer(thinking=True)
 
-        match_id = match_ids[0]["id"]
-        match_res = requests.get(
-            f"https://api.pubg.com/shards/{platform}/matches/{match_id}",
-            headers=headers
-        )
-        match_data = match_res.json()
+    # 서버 전체 요청 제한
+    if not can_make_request():
+        await interaction.followup.send("🚫 요청 제한 초과: 1분에 최대 10회까지 조회할 수 있습니다. 잠시 후 다시 시도해주세요.")
+        return
 
-        # 3단계: 해당 플레이어의 매치 데이터 추출
-        included = match_data["included"]
-        participant = next((item for item in included if item["type"] == "participant" and item["attributes"]["stats"]["name"] == nickname), None)
+    player_id = await get_pubg_player_id(nickname)
+    if player_id == "RATE_LIMIT":
+        await interaction.followup.send("⚠️ PUBG API 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
+        return
+    if not player_id:
+        await interaction.followup.send(f"🔍 `{nickname}` 닉네임의 유저를 찾을 수 없습니다.")
+        return
 
-        if not participant:
-            await interaction.followup.send(f"{nickname} 님의 전적 정보를 찾을 수 없습니다.")
-            return
+    season_id = await get_current_season_id()
+    if not season_id:
+        await interaction.followup.send("⚠️ 현재 시즌 정보를 불러오지 못했습니다.")
+        return
 
-        stats = participant["attributes"]["stats"]
+    stats = await get_player_stats(player_id, season_id)
+    if stats == "RATE_LIMIT":
+        await interaction.followup.send("⚠️ PUBG API 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
+        return
+    if not stats:
+        await interaction.followup.send("❌ 전적 데이터를 불러오지 못했습니다.")
+        return
 
-        # 📊 결과 Embed 생성
-        embed = discord.Embed(
-            title=f"{nickname}님의 최근 전적",
-            color=discord.Color.orange()
-        )
-        embed.add_field(name="🏆 킬 수", value=stats["kills"], inline=True)
-        embed.add_field(name="💥 대미지", value=int(stats["damageDealt"]), inline=True)
-        embed.add_field(name="⏱️ 생존 시간", value=f"{int(stats['timeSurvived'])}초", inline=True)
-        embed.add_field(name="📌 순위", value=f"{stats['winPlace']}위", inline=True)
-        embed.set_footer(text="PUBG API 제공")
+    game_modes = ["solo", "duo", "squad"]
+    perspectives = ["tpp", "fpp"]
 
-        await interaction.followup.send(embed=embed)
+    embed = discord.Embed(title=f"🎮 {nickname} PUBG 전적", color=discord.Color.blue())
+    embed.set_footer(text="kakao shard / 현재 시즌 기준")
 
-    except Exception as e:
-        await interaction.followup.send(f"⚠️ 전적 조회 중 오류 발생: {e}")
+    has_stats = False
+    for perspective in perspectives:
+        description = ""
+        for mode in game_modes:
+            key = f"{mode}-{perspective}"
+            mode_stats = stats["data"]["attributes"]["gameModeStats"].get(key)
+            parsed = extract_stats(mode_stats)
+            if parsed:
+                has_stats = True
+                desc_part = (f"**{mode.capitalize()}**\n"
+                             f"플레이 수: {parsed['플레이 수']}\n"
+                             f"승리 수: {parsed['승리 수']}\n"
+                             f"킬: {parsed['킬']}\n"
+                             f"K/D: {parsed['K/D']}\n"
+                             f"평균 데미지: {parsed['평균 데미지']}\n"
+                             f"승률: {parsed['승률']}\n\n")
+                description += desc_part
 
+        if description:
+            embed.add_field(name=perspective.upper(), value=description, inline=False)
 
+    if not has_stats:
+        await interaction.followup.send("❌ 해당 유저의 전적 데이터가 없습니다.")
+        return
+
+    await interaction.followup.send(embed=embed)
 
 
 
