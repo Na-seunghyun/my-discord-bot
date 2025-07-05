@@ -296,9 +296,6 @@ async def 도움말(interaction: discord.Interaction):
 
 # ✅ 슬래시 명령어: 전적조회
 
-# 전역 요청 시간 기록용 큐 (서버 전체 요청 제한)
-request_times = deque()
-
 def can_make_request():
     now = datetime.utcnow()
     while request_times and (now - request_times[0]) > timedelta(minutes=1):
@@ -340,7 +337,7 @@ async def get_current_season_id():
                 return None
             data = await resp.json()
             for season in data["data"]:
-                if season["attributes"]["isCurrentSeason"]:
+                if season["attributes"].get("isCurrentSeason"):
                     return season["id"]
             return None
 
@@ -356,21 +353,24 @@ async def get_player_stats(player_id, season_id):
             return await resp.json()
 
 
-def extract_stats(mode_stats):
-    if not mode_stats or mode_stats.get("roundsPlayed", 0) == 0:
-        return None
-    losses = mode_stats.get("losses", 0)
-    kd = round(mode_stats.get("kills", 0) / losses, 2) if losses else mode_stats.get("kills", 0)
-    win_rate = round((mode_stats.get("wins", 0) / mode_stats.get("roundsPlayed", 1)) * 100, 1)
-    avg_damage = round(mode_stats.get("damageDealt", 0) / mode_stats.get("roundsPlayed", 1), 1)
-    return {
-        "플레이 수": mode_stats.get("roundsPlayed", 0),
-        "승리 수": mode_stats.get("wins", 0),
-        "킬": mode_stats.get("kills", 0),
-        "K/D": kd,
-        "평균 데미지": avg_damage,
-        "승률": f"{win_rate}%",
+def merge_mode_stats(stats, mode_prefix):
+    merged = {
+        "roundsPlayed": 0,
+        "wins": 0,
+        "kills": 0,
+        "damageDealt": 0,
     }
+    for perspective in ["fpp", "tpp"]:
+        key = f"{mode_prefix}-{perspective}"
+        mode_stats = stats.get(key)
+        if mode_stats:
+            merged["roundsPlayed"] += mode_stats.get("roundsPlayed", 0)
+            merged["wins"] += mode_stats.get("wins", 0)
+            merged["kills"] += mode_stats.get("kills", 0)
+            merged["damageDealt"] += mode_stats.get("damageDealt", 0)
+    if merged["roundsPlayed"] == 0:
+        return None
+    return merged
 
 
 @tree.command(name="전적", description="PUBG 전적을 확인합니다", guild=discord.Object(id=GUILD_ID))
@@ -382,6 +382,7 @@ async def 전적(interaction: discord.Interaction, nickname: str):
     except discord.errors.NotFound:
         print("Interaction 이미 만료됨, defer 실패")
 
+    # 서버 전체 요청 제한 체크
     if not can_make_request():
         await interaction.followup.send("🚫 요청 제한 초과: 1분에 최대 10회까지 조회할 수 있습니다. 잠시 후 다시 시도해주세요.")
         return
@@ -407,27 +408,35 @@ async def 전적(interaction: discord.Interaction, nickname: str):
         await interaction.followup.send("❌ 전적 데이터를 불러오지 못했습니다.")
         return
 
-    embed = discord.Embed(title=f"🎮 {nickname} PUBG 스쿼드 전적", color=discord.Color.blue())
+    stats_data = stats["data"]["attributes"].get("gameModeStats", {})
+
+    embed = discord.Embed(title=f"🎮 {nickname} PUBG 전적", color=discord.Color.blue())
     embed.set_footer(text="kakao shard / 현재 시즌 기준")
 
+    modes = ["solo", "duo", "squad"]
     has_stats = False
-    perspectives = ["tpp", "fpp"]
-    for perspective in perspectives:
-        key = f"squad-{perspective}"
-        mode_stats = stats["data"]["attributes"]["gameModeStats"].get(key)
-        parsed = extract_stats(mode_stats)
-        if parsed:
-            has_stats = True
-            description = (f"플레이 수: {parsed['플레이 수']}\n"
-                           f"승리 수: {parsed['승리 수']}\n"
-                           f"킬: {parsed['킬']}\n"
-                           f"K/D: {parsed['K/D']}\n"
-                           f"평균 데미지: {parsed['평균 데미지']}\n"
-                           f"승률: {parsed['승률']}\n")
-            embed.add_field(name=perspective.upper(), value=description, inline=False)
+
+    for mode in modes:
+        merged_stats = merge_mode_stats(stats_data, mode)
+        if not merged_stats:
+            continue
+        has_stats = True
+
+        kd = round(merged_stats["kills"] / max(1, merged_stats["roundsPlayed"] - merged_stats["wins"]), 2)
+        win_rate = round((merged_stats["wins"] / merged_stats["roundsPlayed"]) * 100, 2)
+        avg_damage = round(merged_stats["damageDealt"] / merged_stats["roundsPlayed"], 2)
+
+        desc = (
+            f"게임 수: {merged_stats['roundsPlayed']}\n"
+            f"승리 수: {merged_stats['wins']} ({win_rate}%)\n"
+            f"킬 수: {merged_stats['kills']}\n"
+            f"평균 데미지: {avg_damage}\n"
+            f"K/D: {kd}\n"
+        )
+        embed.add_field(name=f"{mode.upper()} 모드", value=desc, inline=False)
 
     if not has_stats:
-        await interaction.followup.send("❌ 해당 유저의 스쿼드 전적 데이터가 없습니다.")
+        await interaction.followup.send("❌ 전적 데이터가 없습니다.")
         return
 
     await interaction.followup.send(embed=embed)
