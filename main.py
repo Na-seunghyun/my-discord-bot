@@ -867,7 +867,7 @@ class VoiceTopButton(View):
 
         try:
             year_month = get_current_kst_year_month()
-            response = supabase.rpc("get_top_voice_activity", {"year_month": year_month}).execute()
+            response = supabase.rpc("Top_Voice_Activity_Tracker", {"year_month": year_month}).execute()
 
             if not hasattr(response, "data") or response.data is None:
                 await interaction.followup.send("❌ Supabase 응답 오류 또는 데이터 없음", ephemeral=False)
