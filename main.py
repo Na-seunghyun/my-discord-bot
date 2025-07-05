@@ -151,7 +151,12 @@ async def on_voice_state_update(member, before, after):
 
         try:
             existing = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
-            existing.raise_for_status()  # 예외 발생하면 except로 넘어감
+
+            # raise_for_status() 제거
+            # 에러 체크는 .error로
+            if existing.error:
+                print(f"❌ 입장 기록 조회 실패 (RPC): {existing.error}")
+                return
 
             if existing.data and len(existing.data) > 0:
                 print(f"⚠️ 이미 입장 기록 존재, 중복 저장 방지: {user_id}")
@@ -165,7 +170,11 @@ async def on_voice_state_update(member, before, after):
             }
 
             response = supabase.table("voice_activity").insert(data).execute()
-            response.raise_for_status()
+
+            # raise_for_status() 제거
+            if response.error:
+                print(f"❌ 입장 DB 저장 실패: {response.error}")
+                return
 
             if response.data:
                 print(f"✅ 입장 DB 저장 성공: {username} - {joined_at}")
@@ -192,7 +201,11 @@ async def on_voice_state_update(member, before, after):
 
         try:
             records = supabase.rpc("get_active_voice_activity", {"user_id_input": user_id}).execute()
-            records.raise_for_status()
+
+            # raise_for_status() 제거
+            if records.error:
+                print(f"❌ 퇴장 기록 조회 실패 (RPC): {records.error}")
+                return
 
             if records.data and len(records.data) > 0:
                 record = records.data[0]
@@ -208,7 +221,11 @@ async def on_voice_state_update(member, before, after):
                     .update(update_data) \
                     .eq("id", record["id"]) \
                     .execute()
-                update_response.raise_for_status()
+
+                # raise_for_status() 제거
+                if update_response.error:
+                    print(f"❌ 퇴장 DB 업데이트 실패: {update_response.error}")
+                    return
 
                 if update_response.data:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
