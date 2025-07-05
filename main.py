@@ -469,7 +469,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             embed.add_field(name=mode.upper(), value=value, inline=True)
 
         # 세분화된 피드백 임베드 필드 추가
-       embed.add_field(name="📊 SQUAD 분석 피드백", value="전투 성능을 바탕으로 분석된 결과입니다.", inline=False)
+        embed.add_field(name="📊 SQUAD 분석 피드백", value="전투 성능을 바탕으로 분석된 결과입니다.", inline=False)
 
         embed.add_field(name="🔫 평균 데미지", value=f"```{dmg_msg}```", inline=False)
         embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
