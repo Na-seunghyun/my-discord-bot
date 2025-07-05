@@ -414,7 +414,7 @@ def detailed_feedback(avg_damage, kd, win_rate):
     kd_msg = random.choice(feedback_json["kdr"][kd_key])
     win_msg = random.choice(feedback_json["winrate"][win_key])
 
-    return f"""📊 평균 데미지 피드백:
+    return f"""🔫 평균 데미지 피드백:
 {dmg_msg}
 
 ⚔️ K/D 피드백:
@@ -475,17 +475,16 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             )
             embed.add_field(name=mode.upper(), value=value, inline=True)
 
-        # 피드백 문자열을 각 항목별로 나누어 꾸며서 넣기
         if squad_metrics:
             feedback_lines = feedback.split('\n\n')
+            dmg_feedback = feedback_lines[0].replace('📊 평균 데미지 피드백:\n', '')
+            kd_feedback = feedback_lines[1].replace('⚔️ K/D 피드백:\n', '')
+            win_feedback = feedback_lines[2].replace('🏆 승률 피드백:\n', '')
 
             feedback_text = (
-                f"**📊 평균 데미지 피드백**\n"
-                f"💥 {feedback_lines[0].replace('📊 평균 데미지 피드백:\n', '')}\n\n"
-                f"**⚔️ K/D 피드백**\n"
-                f"🎯 {feedback_lines[1].replace('⚔️ K/D 피드백:\n', '')}\n\n"
-                f"**🏆 승률 피드백**\n"
-                f"🔥 {feedback_lines[2].replace('🏆 승률 피드백:\n', '')}"
+                f"**🔫 평균 데미지 피드백**\n💥 {dmg_feedback}\n\n"
+                f"**⚔️ K/D 피드백**\n🎯 {kd_feedback}\n\n"
+                f"**🏆 승률 피드백**\n🔥 {win_feedback}"
             )
         else:
             feedback_text = feedback
@@ -499,6 +498,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
+
 
 
 
