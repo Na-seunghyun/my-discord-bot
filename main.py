@@ -414,14 +414,7 @@ def detailed_feedback(avg_damage, kd, win_rate):
     kd_msg = random.choice(feedback_json["kdr"][kd_key])
     win_msg = random.choice(feedback_json["winrate"][win_key])
 
-    return f"""🔫 평균 데미지 피드백:
-{dmg_msg}
-
-⚔️ K/D 피드백:
-{kd_msg}
-
-🏆 승률 피드백:
-{win_msg}"""
+    return dmg_msg, kd_msg, win_msg  # 각각 분리하여 리턴
 
 
 # ✅ 디스코드 봇 커맨드
@@ -444,9 +437,9 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         squad_metrics, error = extract_squad_metrics(stats)
         if squad_metrics:
             avg_damage, kd, win_rate = squad_metrics
-            feedback = detailed_feedback(avg_damage, kd, win_rate)
+            dmg_msg, kd_msg, win_msg = detailed_feedback(avg_damage, kd, win_rate)
         else:
-            feedback = error
+            dmg_msg = kd_msg = win_msg = error
 
         embed = discord.Embed(
             title=f"{닉네임}님의 PUBG 전적 요약",
@@ -475,21 +468,11 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             )
             embed.add_field(name=mode.upper(), value=value, inline=True)
 
-        if squad_metrics:
-            feedback_lines = feedback.split('\n\n')
-            dmg_feedback = feedback_lines[0].replace('🔫 평균 데미지 피드백:\n', '')
-            kd_feedback = feedback_lines[1].replace('⚔️ K/D 피드백:\n', '')
-            win_feedback = feedback_lines[2].replace('🏆 승률 피드백:\n', '')
+        # 세분화된 피드백 임베드 필드 추가
+        embed.add_field(name="🔫 평균 데미지 피드백", value=f"💥 {dmg_msg}", inline=False)
+        embed.add_field(name="⚔️ K/D 피드백", value=f"🎯 {kd_msg}", inline=False)
+        embed.add_field(name="🏆 승률 피드백", value=f"🔥 {win_msg}", inline=False)
 
-            feedback_text = (
-                f"**🔫 평균 데미지 피드백**\n💥 {dmg_feedback}\n\n"
-                f"**⚔️ K/D 피드백**\n🎯 {kd_feedback}\n\n"
-                f"**🏆 승률 피드백**\n🔥 {win_feedback}"
-            )
-        else:
-            feedback_text = feedback
-
-        embed.add_field(name="📊 SQUAD 분석 피드백", value=feedback_text, inline=False)
         embed.set_footer(text="PUBG API 제공")
 
         await interaction.followup.send(embed=embed)
@@ -498,6 +481,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
+
 
 
 
