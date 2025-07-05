@@ -217,7 +217,7 @@ async def on_voice_state_update(member, before, after):
                     .eq("joined_at", record["joined_at"]) \
                     .execute()
 
-                if update_response.status_code == 200:
+                if update_response.data is not None:
                     print(f"✅ 퇴장 DB 업데이트 성공: {username} - {left_time.isoformat()}")
 
                     verify_response = supabase.table("voice_activity") \
@@ -232,7 +232,7 @@ async def on_voice_state_update(member, before, after):
                     else:
                         print("⚠️ 업데이트 확인 실패: 데이터가 없습니다.")
                 else:
-                    print(f"⚠️ 퇴장 DB 업데이트 실패: 상태 코드 {update_response.status_code} - {update_response.data}")
+                    print(f"⚠️ 퇴장 DB 업데이트 실패: 응답 데이터 없음"))
             else:
                 print(f"⚠️ 입장 기록을 찾을 수 없음 - {user_id}")
 
