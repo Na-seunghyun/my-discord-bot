@@ -295,10 +295,10 @@ async def 도움말(interaction: discord.Interaction):
 
 
 # ✅ 슬래시 명령어: 전적조회
-# PUBG API 전적조회 부분
-
+import discord
 import requests
 import os
+from datetime import datetime, timedelta
 
 API_KEY = os.environ.get("PUBG_API_KEY")
 PLATFORM = "kakao"
@@ -308,15 +308,31 @@ headers = {
     "Accept": "application/vnd.api+json"
 }
 
+RATE_LIMIT = 10  # 분당 10회
+RATE_LIMIT_INTERVAL = 60  # 초
+_last_requests = []
+
+def can_make_request():
+    now = datetime.now()
+    global _last_requests
+    _last_requests = [t for t in _last_requests if (now - t).total_seconds() < RATE_LIMIT_INTERVAL]
+    return len(_last_requests) < RATE_LIMIT
+
+def register_request():
+    global _last_requests
+    _last_requests.append(datetime.now())
+
 def get_player_id(player_name):
     url = f"https://api.pubg.com/shards/{PLATFORM}/players?filter[playerNames]={player_name}"
     response = requests.get(url, headers=headers)
+    response.raise_for_status()
     data = response.json()
     return data["data"][0]["id"]
 
 def get_season_id():
     url = f"https://api.pubg.com/shards/{PLATFORM}/seasons"
     response = requests.get(url, headers=headers)
+    response.raise_for_status()
     data = response.json()
     for season in data["data"]:
         if season["attributes"]["isCurrentSeason"]:
@@ -325,6 +341,7 @@ def get_season_id():
 def get_player_stats(player_id, season_id):
     url = f"https://api.pubg.com/shards/{PLATFORM}/players/{player_id}/seasons/{season_id}"
     response = requests.get(url, headers=headers)
+    response.raise_for_status()
     return response.json()
 
 def summarize_stats(stats):
@@ -342,21 +359,38 @@ def summarize_stats(stats):
         lines.append(f"- K/D: {mode_stats['kills'] / max(1, (mode_stats['roundsPlayed'] - mode_stats['wins'])):.2f}")
     return "\n".join(lines) if lines else "전적이 존재하지 않거나 조회할 수 없습니다."
 
-# 기존에 선언된 bot과 tree 객체 사용
+# 이미 선언된 bot과 tree 객체를 사용한다고 가정
+# GUILD_ID는 선언되어 있어야 합니다.
 
 @tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
 async def 전적(interaction: discord.Interaction, 닉네임: str):
-    await interaction.response.defer()  # 응답 지연 처리
+    await interaction.response.defer()
+
+    if not can_make_request():
+        await interaction.followup.send("⚠️ API 요청 제한(분당 10회)으로 인해 잠시 후 다시 시도해주세요.", ephemeral=True)
+        return
 
     try:
+        register_request()
         player_id = get_player_id(닉네임)
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
         summary = summarize_stats(stats)
+    except requests.HTTPError as e:
+        await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
+        return
     except Exception as e:
-        summary = f"전적 조회 중 오류가 발생했습니다: {str(e)}"
+        await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
+        return
 
-    await interaction.followup.send(f"**{닉네임}님의 PUBG 전적:**\n{summary}")
+    embed = discord.Embed(
+        title=f"{닉네임}님의 PUBG 전적",
+        description=summary,
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text="PUBG API 제공")
+    await interaction.followup.send(embed=embed)
+
 
 
 
