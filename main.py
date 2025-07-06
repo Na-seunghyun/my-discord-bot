@@ -69,6 +69,24 @@ all_empty_since = None
 notified_after_empty = False
 
 
+# ✅ 여기에 추가!
+@bot.event
+async def on_ready():
+    print(f"✅ 봇 로그인됨: {bot.user}")
+
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("❌ 서버를 찾을 수 없습니다.")
+        return
+
+    bap_channel = discord.utils.get(guild.voice_channels, name="밥좀묵겠습니다")
+    if bap_channel:
+        for member in bap_channel.members:
+            if not member.bot and member.id not in auto_disconnect_tasks:
+                task = asyncio.create_task(auto_disconnect_after_timeout(member, bap_channel))
+                auto_disconnect_tasks[member.id] = task
+                print(f"🔁 봇 시작 후 {member.display_name}에게 퇴장 타이머 적용됨")
+
 @bot.event
 async def on_voice_state_update(member, before, after):
     global streaming_members
@@ -82,6 +100,22 @@ async def on_voice_state_update(member, before, after):
     if member.id in auto_disconnect_tasks:
         auto_disconnect_tasks[member.id].cancel()
         auto_disconnect_tasks.pop(member.id, None)
+
+    # 밥좀묵겠습니다 채널 자동 퇴장 및 DM 안내 처리
+    bap_channel = discord.utils.get(member.guild.voice_channels, name="밥좀묵겠습니다")
+
+    if after.channel == bap_channel and before.channel != bap_channel:
+        # DM 안내 메시지 보내기
+        try:
+            await member.send(f"🍚 {member.display_name}님, '밥좀묵겠습니다' 채널에 입장하셨습니다. 20분 후 자동 퇴장됩니다.")
+        except Exception as e:
+            print(f"DM 전송 실패: {member.display_name}님 - {e}")
+
+        # 자동 퇴장 타이머 시작
+        task = asyncio.create_task(auto_disconnect_after_timeout(member, bap_channel))
+        auto_disconnect_tasks[member.id] = task
+        print(f"⏳ {member.display_name}님 '밥좀묵겠습니다' 채널 입장 → 타이머 시작됨")
+
 
     # 대기방 입장 메시지 중복 방지 캐시
     now_utc = datetime.utcnow()
@@ -851,24 +885,6 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
 
     await interaction.response.send_message(msg, view=TeamMoveView(teams, empty_channels, vc))
 
-
-# ✅ 슬래시 명령어: 밥
-@tree.command(name="밥", description="밥좀묵겠습니다 채널로 이동", guild=discord.Object(id=GUILD_ID))
-async def 밥(interaction: discord.Interaction):
-    user = interaction.user
-    guild = interaction.guild
-    vc = discord.utils.get(guild.voice_channels, name="밥좀묵겠습니다")
-    if not vc:
-        await interaction.response.send_message("❌ 채널 없음", ephemeral=True)
-        return
-    try:
-        await user.move_to(vc)
-        await interaction.response.send_message("🍚 밥 채널로 이동 완료", ephemeral=True)
-
-        task = asyncio.create_task(auto_disconnect_after_timeout(user, vc, timeout=1200))
-        auto_disconnect_tasks[user.id] = task
-    except:
-        await interaction.response.send_message("❌ 이동 실패", ephemeral=True)
 
 
 # ——— 여기부터 추가 ———
