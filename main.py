@@ -56,6 +56,9 @@ async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
 @bot.event
 async def on_ready():
     print(f"✅ 봇 온라인: {bot.user.name}")
+
+    await asyncio.sleep(3)  # 잠깐 대기: on_voice_state_update에서 중복 실행되는 것 방지
+
     for guild in bot.guilds:
         bap_channel = discord.utils.get(guild.voice_channels, name="밥좀묵겠습니다")
         text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
@@ -64,18 +67,20 @@ async def on_ready():
             for member in bap_channel.members:
                 if member.bot:
                     continue
-                if member.id not in auto_disconnect_tasks:
-                    # DM 전송
-                    try:
-                        await member.send(
-                            f"🍚 {member.display_name}님, '밥좀묵겠습니다' 채널에 입장 중입니다. 20분 후 자동 퇴장됩니다.")
-                    except Exception as e:
-                        print(f"DM 전송 실패 (재시작 시): {member.display_name} - {e}")
+                if member.id in auto_disconnect_tasks:
+                    continue  # 이미 타이머가 있다면 중복 방지
 
-                    task = asyncio.create_task(
-                        auto_disconnect_after_timeout(member, bap_channel, text_channel))
-                    auto_disconnect_tasks[member.id] = task
-                    print(f"🔄 재시작 후 타이머 적용됨: {member.display_name}")
+                # DM 전송
+                try:
+                    await member.send(
+                        f"🍚 {member.display_name}님, '밥좀묵겠습니다' 채널에 입장 중입니다. 20분 후 자동 퇴장됩니다.")
+                except Exception as e:
+                    print(f"DM 전송 실패 (재시작 시): {member.display_name} - {e}")
+
+                task = asyncio.create_task(
+                    auto_disconnect_after_timeout(member, bap_channel, text_channel))
+                auto_disconnect_tasks[member.id] = task
+                print(f"🔄 재시작 후 타이머 적용됨: {member.display_name}")
 
 
 @bot.event
