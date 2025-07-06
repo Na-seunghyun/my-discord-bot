@@ -35,6 +35,7 @@ tree = bot.tree
 nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
 auto_disconnect_tasks = {}
 voice_join_times = {}  # user_id: join_time
+dm_sent_users = set()
 
 
 # 자동 퇴장 로직
@@ -85,7 +86,6 @@ async def on_ready():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    global streaming_members
     if member.bot:
         return
 
@@ -99,12 +99,14 @@ async def on_voice_state_update(member, before, after):
             auto_disconnect_tasks[member.id].cancel()
             auto_disconnect_tasks.pop(member.id, None)
 
-        # DM 안내
-        try:
-            await member.send(
-                f"🍚 {member.display_name}님, '밥좀묵겠습니다' 채널에 입장하셨습니다. 20분 후 자동 퇴장됩니다.")
-        except Exception as e:
-            print(f"DM 전송 실패: {member.display_name} - {e}")
+        # ✅ DM 중복 방지
+        if member.id not in dm_sent_users:
+            try:
+                await member.send(
+                    f"🍚 {member.display_name}님, '밥좀묵겠습니다' 채널에 입장하셨습니다. 20분 후 자동 퇴장됩니다.")
+                dm_sent_users.add(member.id)
+            except Exception as e:
+                print(f"DM 전송 실패: {member.display_name} - {e}")
 
         task = asyncio.create_task(auto_disconnect_after_timeout(member, bap_channel, text_channel))
         auto_disconnect_tasks[member.id] = task
@@ -116,6 +118,8 @@ async def on_voice_state_update(member, before, after):
             auto_disconnect_tasks[member.id].cancel()
             auto_disconnect_tasks.pop(member.id, None)
             print(f"❌ {member.display_name}님 퇴장 → 타이머 취소됨")
+        # ✅ 퇴장 시 DM 보낸 기록도 초기화
+        dm_sent_users.discard(member.id)
 
 
     # 대기방 입장 메시지 중복 방지 캐시
