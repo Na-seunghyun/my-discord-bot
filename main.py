@@ -876,7 +876,8 @@ async def 밥(interaction: discord.Interaction):
 from discord.ui import View, button
 
 def format_duration(seconds: int) -> str:
-    days, remainder = divmod(seconds, 86400)  # 86400초 = 1일
+    seconds = int(seconds)  # 안전하게 변환
+    days, remainder = divmod(seconds, 86400)  # 1일 = 86400초
     hours, remainder = divmod(remainder, 3600)
     minutes, seconds = divmod(remainder, 60)
 
@@ -891,12 +892,10 @@ def format_duration(seconds: int) -> str:
 
     return " ".join(parts)
 
-
 def get_current_kst_year_month() -> str:
     now_utc = datetime.utcnow()
     now_kst = now_utc + timedelta(hours=9)  # UTC +9 = KST
     return now_kst.strftime("%Y-%m")
-
 
 def get_current_kst_time_str():
     kst = pytz.timezone('Asia/Seoul')
@@ -926,18 +925,18 @@ class VoiceTopButton(View):
 
             embed = discord.Embed(title=f"🎤 {year_month} 음성 접속시간 Top 10", color=0x5865F2)
 
-            
-            # 조회 기준 시각 문자열 얻기
             current_kst_str = get_current_kst_time_str()
             embed.set_footer(text=f"조회 기준 시간: {current_kst_str} (한국 시간) | 접속시간은 일 시 분 초 단위")
 
-
             trophy_emojis = {1: "🥇", 2: "🥈", 3: "🥉"}
+
             for rank, info in enumerate(data, 1):
                 emoji = trophy_emojis.get(rank, f"{rank}.")
+                print(f"DEBUG - user: {info['username']}, total_duration raw: {info['total_duration']}")  # 디버그 출력
+
                 time_str = format_duration(info['total_duration'])
                 embed.add_field(name=f"{emoji} {info['username']}", value=time_str, inline=False)
-            
+
             button.disabled = True
             try:
                 await interaction.message.edit(view=self)
@@ -949,7 +948,6 @@ class VoiceTopButton(View):
         except Exception as e:
             await interaction.followup.send(f"❗ 오류 발생: {e}", ephemeral=False)
 
-
 @tree.command(name="접속시간랭킹", description="음성 접속시간 Top 10", guild=discord.Object(id=GUILD_ID))
 async def 접속시간랭킹(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -958,6 +956,7 @@ async def 접속시간랭킹(interaction: discord.Interaction):
         view=VoiceTopButton(),
         ephemeral=True
     )
+
 
 
 
