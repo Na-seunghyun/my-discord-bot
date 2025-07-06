@@ -36,7 +36,7 @@ nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
 auto_disconnect_tasks = {}
 voice_join_times = {}  # user_id: join_time
 dm_sent_users = set()
-
+waiting_room_message_cache = {}
 
 # 자동 퇴장 로직
 async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
@@ -501,7 +501,11 @@ def detailed_feedback(avg_damage, kd, win_rate):
 
 @tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
 async def 전적(interaction: discord.Interaction, 닉네임: str):
-    await interaction.response.defer()
+    try:
+        await interaction.response.defer()
+    except discord.NotFound:
+        print("❌ Interaction expired before defer.")
+        return
 
     if not can_make_request():
         await interaction.followup.send("⚠️ API 요청 제한(분당 10회)으로 인해 잠시 후 다시 시도해주세요.", ephemeral=True)
