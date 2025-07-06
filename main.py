@@ -38,6 +38,11 @@ voice_join_times = {}  # user_id: join_time
 dm_sent_users = set()
 waiting_room_message_cache = {}
 
+all_empty_since = None
+notified_after_empty = False
+streaming_members = set()
+
+
 # 자동 퇴장 로직
 async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
     try:
@@ -86,6 +91,7 @@ async def on_ready():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    global all_empty_since, notified_after_empty, streaming_members
     if member.bot:
         return
 
