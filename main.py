@@ -935,8 +935,11 @@ class VoiceTopButton(View):
 
             embed = discord.Embed(title=f"🎤 {year_month} 음성 접속시간 Top 10", color=0x5865F2)
 
+            
+            start_kst_str = f"{year_month}-01 00:00"
             current_kst_str = get_current_kst_time_str()
-            embed.set_footer(text=f"조회 기준 시간: {current_kst_str} (한국 시간) | 접속시간은 일 시 분 초 단위")
+            embed.set_footer(text=f"{start_kst_str}부터 {current_kst_str}까지의 음성 접속 데이터를 기준으로 조회했습니다. (한국 시간)")
+
 
             trophy_emojis = {1: "🥇", 2: "🥈", 3: "🥉"}
             for rank, info in enumerate(data, 1):
