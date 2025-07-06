@@ -919,7 +919,7 @@ class VoiceTopButton(View):
             year_month = get_current_kst_year_month()
             print(f"DEBUG: year_month parameter = {year_month}")
 
-            response = supabase.rpc("Top_Voice_Activity_Tracker", {"year_month": year_month}).execute()
+            response = supabase.rpc("top_voice_activity_tracker", {"year_month": year_month}).execute()
 
             print(f"DEBUG: supabase.rpc response = {response}")
             print(f"DEBUG: supabase.rpc response.data = {response.data}")
