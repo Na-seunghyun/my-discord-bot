@@ -15,15 +15,20 @@ from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 import uuid  # uuid 추가
 from dotenv import load_dotenv
+
 load_dotenv()
 
-print("SUPABASE_URL:", os.getenv("SUPABASE_URL"))
+
 
 
 KST = timezone(timedelta(hours=9))
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+print("SUPABASE_URL:", SUPABASE_URL)
+print("SUPABASE_KEY:", SUPABASE_KEY)
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 GUILD_ID = 1309433603331198977
