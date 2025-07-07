@@ -14,12 +14,12 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 import uuid  # uuid 추가
-from dotenv import load_dotenv
+
 
 
 
 KST = timezone(timedelta(hours=9))
-load_dotenv()
+
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
