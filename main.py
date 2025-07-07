@@ -72,15 +72,13 @@ class WelcomeButton(discord.ui.View):
 
     @discord.ui.button(label="🎈 이 멤버 환영하기!", style=discord.ButtonStyle.success)
     async def welcome_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # 1. 즉시 응답 (acknowledge) — 아무 내용 없는 응답
         await interaction.response.defer()
+        await interaction.channel.send(
+            f"🎉 {interaction.user.mention} 님이 {self.member.mention} 님을 환영했어요!",
+            allowed_mentions=discord.AllowedMentions(users=True)
+        )
 
-        # 2. followup 메시지로 원본 메시지에 답장(reply) 형태로 전체 공개 메시지 전송
-        await interaction.followup.send(
-            content=f"🎉 {interaction.user.mention} 님이 {self.member.mention} 님을 환영했어요!",
-            allowed_mentions=discord.AllowedMentions(users=True),
-            message_reference={"message_id": self.original_message.id, "channel_id": self.original_message.channel.id}
-    )
+
 
 
 
