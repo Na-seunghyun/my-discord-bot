@@ -15,6 +15,8 @@ from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 import uuid  # uuid 추가
 
+from dotenv import load_dotenv
+load_dotenv()
 
 
 
