@@ -72,11 +72,16 @@ class WelcomeButton(discord.ui.View):
 
     @discord.ui.button(label="🎈 이 멤버 환영하기!", style=discord.ButtonStyle.success)
     async def welcome_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
+        # 1. 즉시 응답 (acknowledge) — 아무 내용 없는 응답
+        await interaction.response.defer()
+
+        # 2. followup 메시지로 원본 메시지에 답장(reply) 형태로 전체 공개 메시지 전송
+        await interaction.followup.send(
             content=f"🎉 {interaction.user.mention} 님이 {self.member.mention} 님을 환영했어요!",
             reference=self.original_message.to_reference(),
             allowed_mentions=discord.AllowedMentions(users=True)
         )
+
 
 
 @bot.event
@@ -88,7 +93,7 @@ async def on_member_join(member):
             description=f"😎 {member.mention} 님이 **화려하게 입장!** 🎉\n\n누가 먼저 환영해볼까요?",
             color=discord.Color.orange()
         )
-        embed.set_thumbnail(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/minion.gif")
+        embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/minion.gif")
         embed.set_footer(text="누구보다 빠르게 남들과는 다르게!", icon_url=member.display_avatar.url)
 
         message = await channel.send(embed=embed)
