@@ -17,6 +17,8 @@ import uuid  # uuid 추가
 from dotenv import load_dotenv
 load_dotenv()
 
+print("SUPABASE_URL:", os.getenv("SUPABASE_URL"))
+
 
 KST = timezone(timedelta(hours=9))
 
