@@ -20,13 +20,19 @@ from dotenv import load_dotenv
 
 KST = timezone(timedelta(hours=9))
 load_dotenv()
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-print("SUPABASE_URL:", SUPABASE_URL)
-print("SUPABASE_KEY:", SUPABASE_KEY)
+print(f"SUPABASE_URL: {SUPABASE_URL}")
+print(f"SUPABASE_KEY: {SUPABASE_KEY}")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("환경변수가 올바르게 로드되지 않았습니다!")
+    exit(1)
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+print("Supabase 클라이언트 생성 완료")
 
 GUILD_ID = 1309433603331198977
 MONITORED_CHANNEL_NAMES = [f"일반{i}" for i in range(1, 17)] + ["큰맵1", "큰맵2"]
