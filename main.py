@@ -19,16 +19,14 @@ from dotenv import load_dotenv
 
 
 KST = timezone(timedelta(hours=9))
+load_dotenv()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-if __name__ == "__main__":
-    load_dotenv()
-    SUPABASE_URL = os.getenv("SUPABASE_URL")
-    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+print("SUPABASE_URL:", SUPABASE_URL)
+print("SUPABASE_KEY:", SUPABASE_KEY)
 
-    print("SUPABASE_URL:", SUPABASE_URL)
-    print("SUPABASE_KEY:", SUPABASE_KEY)
-
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 GUILD_ID = 1309433603331198977
 MONITORED_CHANNEL_NAMES = [f"일반{i}" for i in range(1, 17)] + ["큰맵1", "큰맵2"]
