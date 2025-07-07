@@ -56,7 +56,7 @@ waiting_room_message_cache = {}
 all_empty_since = None
 notified_after_empty = False
 streaming_members = set()
-
+invites_cache = {}
 
 
 
@@ -78,26 +78,57 @@ class WelcomeButton(discord.ui.View):
             allowed_mentions=discord.AllowedMentions(users=True)
         )
 
-
-
-
+@bot.event
+async def on_ready():
+    # 서버마다 초대 링크 캐싱
+    for guild in bot.guilds:
+        invites = await guild.invites()
+        invites_cache[guild.id] = {invite.code: invite.uses for invite in invites}
+    print("초대 캐시 초기화 완료!")
 
 @bot.event
 async def on_member_join(member):
-    channel = discord.utils.get(member.guild.text_channels, name=WELCOME_CHANNEL_NAME)
-    if channel:
-        embed = discord.Embed(
-            title="🎊 신입 멤버 출몰!",
-            description=f"😎 {member.mention} 님이 **화려하게 입장!** 🎉\n\n누가 먼저 환영해볼까요?",
-            color=discord.Color.orange()
-        )
-        embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/minion.gif")
-        embed.set_footer(text="누구보다 빠르게 남들과는 다르게!", icon_url=member.display_avatar.url)
+    guild = member.guild
+    channel = discord.utils.get(guild.text_channels, name=WELCOME_CHANNEL_NAME)
+    if not channel:
+        return
 
-        message = await channel.send(embed=embed)
-        view = WelcomeButton(member=member, original_message=message)
-        await message.edit(view=view)
+    # 초대 링크 정보 다시 받아오기
+    invites = await guild.invites()
+    old_invites = invites_cache.get(guild.id, {})
+    invites_cache[guild.id] = {invite.code: invite.uses for invite in invites}
 
+    inviter = None
+    for invite in invites:
+        # 사용횟수가 증가한 초대 링크 찾기
+        if invite.code in old_invites and invite.uses > old_invites[invite.code]:
+            inviter = invite.inviter
+            break
+
+    # 입장 시간 (KST 기준)
+    KST = timezone(timedelta(hours=9))
+    joined_time = datetime.now(tz=KST).strftime("%Y-%m-%d %H:%M:%S")
+
+    embed = discord.Embed(
+        title="🎊 신입 멤버 출몰!",
+        description=f"😎 {member.mention} 님이 **화려하게 입장!** 🎉\n\n누가 먼저 환영해볼까요?",
+        color=discord.Color.orange()
+    )
+    embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/minion.gif")
+    embed.set_footer(text="누구보다 빠르게 남들과는 다르게!", icon_url=member.display_avatar.url)
+
+    # 초대한 사람 정보 추가
+    if inviter:
+        embed.add_field(name="초대한 사람", value=inviter.mention, inline=True)
+    else:
+        embed.add_field(name="초대한 사람", value="알 수 없음", inline=True)
+
+    # 입장 시간 추가
+    embed.add_field(name="입장 시간", value=joined_time, inline=True)
+
+    message = await channel.send(embed=embed)
+    view = WelcomeButton(member=member, original_message=message)
+    await message.edit(view=view)
 
 @bot.event
 async def on_member_remove(member):
