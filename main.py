@@ -58,6 +58,66 @@ notified_after_empty = False
 streaming_members = set()
 
 
+
+
+
+WELCOME_CHANNEL_NAME = "자유채팅방"  # 자유롭게 바꿔도 됨
+
+# 🎈 환영 버튼 구성
+class WelcomeButton(discord.ui.View):
+    def __init__(self, member, original_message):
+        super().__init__(timeout=None)
+        self.member = member
+        self.original_message = original_message
+
+    @discord.ui.button(label="🎈 이 멤버 환영하기!", style=discord.ButtonStyle.success)
+    async def welcome_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(
+            content=f"🎉 {interaction.user.mention} 님이 {self.member.mention} 님을 환영했어요!",
+            reference=self.original_message.to_reference(),
+            allowed_mentions=discord.AllowedMentions(users=True)
+        )
+
+
+@bot.event
+async def on_member_join(member):
+    channel = discord.utils.get(member.guild.text_channels, name=WELCOME_CHANNEL_NAME)
+    if channel:
+        embed = discord.Embed(
+            title="🎊 신입 멤버 출몰!",
+            description=f"😎 {member.mention} 님이 **화려하게 입장!** 🎉\n\n누가 먼저 환영해볼까요?",
+            color=discord.Color.orange()
+        )
+        embed.set_thumbnail(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/minion.gif")
+        embed.set_footer(text="누구보다 빠르게 남들과는 다르게!", icon_url=member.display_avatar.url)
+
+        message = await channel.send(embed=embed)
+        view = WelcomeButton(member=member, original_message=message)
+        await message.edit(view=view)
+
+
+@bot.event
+async def on_member_remove(member):
+    channel = discord.utils.get(member.guild.text_channels, name=WELCOME_CHANNEL_NAME)
+    if channel:
+        embed = discord.Embed(
+            title="👋 멤버 탈주!",
+            description=f"💨 {member.name} 님이 조용히 서버를 떠났습니다...\n\n**그가 남긴 것은... 바로 추억뿐...** 🥲",
+            color=discord.Color.red()
+        )
+        embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/sponge.gif")
+        embed.set_footer(text="다음엔 꼭 다시 만나요!")
+
+        await channel.send(embed=embed)
+
+
+
+
+
+
+
+
+
 # 자동 퇴장 로직
 async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
     try:
