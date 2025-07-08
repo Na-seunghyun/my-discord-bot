@@ -1129,8 +1129,6 @@ async def on_ready():
     guild = discord.Object(id=GUILD_ID)
     await tree.sync(guild=guild)
     check_voice_channels_for_streaming.start()
-    monitor_voice_channels.start()  # ✅ 추가됨
-    process_play_queue.start()      # ✅ 추가됨
     print(f"✅ 봇 로그인: {bot.user}")
 
 
