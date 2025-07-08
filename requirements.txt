@@ -5,3 +5,4 @@ supabase==1.1.0
 matplotlib==3.7.1
 numpy<2
 pytz
+PyNaCl
