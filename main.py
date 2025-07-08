@@ -87,7 +87,7 @@ async def monitor_voice_channels():
                 else:
                     elapsed = now - voice_channel_join_times[channel.id]
                     if (
-                        elapsed >= timedelta(seconds=20)
+                        elapsed >= timedelta(hours=2)
                         and channel.id not in currently_processing_channels
                     ):
                         print(f"🔔 '{channel.name}' 채널 2시간 경과. 큐에 추가.")
