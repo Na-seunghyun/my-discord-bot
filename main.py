@@ -870,13 +870,9 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
 
 
-
-
-
 from collections import defaultdict
 import discord
 
-# 슬래시 커맨드 정의
 @tree.command(name="검사", description="닉네임 검사", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -900,25 +896,28 @@ async def 검사(interaction: discord.Interaction):
             if year.isdigit():
                 year_groups[year].append(member.display_name)
 
-    # 형식 오류 안내는 본인만 보이도록
+    # 형식 오류 안내 (ephemeral)
     await interaction.followup.send(f"🔍 검사 완료: {count}명 형식 오류 발견", ephemeral=True)
 
-    # 년생별 분포 Embed 구성
-    embed = discord.Embed(
-        title="📊 년생별 유저 분포",
-        description="올바른 닉네임 형식의 유저를 기준으로 분류한 결과입니다.",
-        color=discord.Color.green()
-    )
-
+    # Embed 준비
+    fields = []
     for year, members in sorted(year_groups.items(), key=lambda x: x[0]):
         member_list = ", ".join(members)
-        # Discord Embed field value는 1024자 제한이 있음
         if len(member_list) > 1024:
             member_list = member_list[:1021] + "..."
-        embed.add_field(name=f"{year}년생 ({len(members)}명)", value=member_list, inline=False)
+        fields.append((f"{year}년생 ({len(members)}명)", member_list))
 
-    # 모든 사용자가 볼 수 있도록 공개 메시지 전송
-    await interaction.channel.send(embed=embed)
+    # 25개씩 분할 전송
+    for i in range(0, len(fields), 25):
+        embed = discord.Embed(
+            title="📊 년생별 유저 분포",
+            description="올바른 닉네임 형식의 유저 분포입니다.",
+            color=discord.Color.green()
+        )
+        for name, value in fields[i:i+25]:
+            embed.add_field(name=name, value=value, inline=False)
+        await interaction.channel.send(embed=embed)
+
 
 
 
