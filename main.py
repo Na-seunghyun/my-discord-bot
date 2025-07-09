@@ -133,14 +133,19 @@ async def on_message(message):
     if any(p.search(lowered_msg) for p in BADWORD_PATTERNS):
         censored = censor_badwords_regex(msg, BADWORD_PATTERNS)
         try:
-            # 기존 메시지를 욕설 부분만 ***로 수정
-            await message.edit(content=censored)
+            await message.delete()
         except Exception as e:
-            print(f"메시지 수정 실패: {e}")
-            # 수정 실패 시 별도 메시지 출력
-            await message.channel.send(
-                f"💬 필터 적용됨: `{censored}`\n💡 오덕봇은 욕설은 자동으로 걸러주는 평화주의자입니다."
-            )
+            print(f"메시지 삭제 실패: {e}")
+
+        embed = discord.Embed(
+            title="💬 욕설 필터링 안내",
+            description=f"{message.author.mention} 님이 작성한 메시지에 욕설이 포함되어 필터링 되었습니다.\n\n"
+                        f"**필터링된 메시지:**\n{censored}",
+            color=0xFFD700  # 노란색
+        )
+        embed.set_footer(text="💡 오덕봇은 욕설은 자동으로 걸러주는 평화주의자입니다.")
+
+        await message.channel.send(embed=embed)
 
         user_id = str(message.author.id)
         warnings[user_id] = warnings.get(user_id, 0) + 1
