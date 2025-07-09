@@ -286,13 +286,15 @@ async def on_voice_state_update(member, before, after):
 
     # 퇴장 시
     elif before.channel == bap_channel and after.channel != bap_channel:
-        # 타이머가 존재할 때만 취소 (자동퇴장으로 이미 없을 수 있음)
-        if member.id in auto_disconnect_tasks:
-            auto_disconnect_tasks[member.id].cancel()
+        # 타이머가 존재하고, 아직 완료되지 않았을 때만 취소
+        task = auto_disconnect_tasks.get(member.id)
+        if task and not task.done():
+            task.cancel()
             auto_disconnect_tasks.pop(member.id, None)
-            print(f"❌ {member.display_name}님 퇴장 → 타이머 취소됨")
+            print(f"❌ {member.display_name}님 직접 퇴장 → 타이머 취소됨")
 
         dm_sent_users.discard(member.id)
+
 
 
 
