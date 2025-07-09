@@ -177,40 +177,47 @@ async def safe_send_message(channel, content, max_retries=5, delay=1):
 # 자동 퇴장 로직
 async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
     try:
-        print(f"⏳ {member.display_name}님 자동퇴장 타이머 시작 (2초 테스트용)")
-        await asyncio.sleep(2)  # 테스트용 대기시간
+        print(f"⏳ {member.display_name}님 자동퇴장 타이머 시작 (테스트 2초)")
+        await asyncio.sleep(2)  # 테스트용
 
         if member.voice and member.voice.channel == voice_channel:
             print(f"🚪 {member.display_name}님 자동퇴장 실행 중 - 퇴장 처리 시작")
             await member.move_to(None)
-            await asyncio.sleep(0.7)  # 디스코드 상태 반영 여유 두기
+            await asyncio.sleep(0.7)  # 상태 반영 시간
 
-            # text_channel이 None일 경우 다시 안전하게 찾기
+            # 안전하게 다시 채널 조회
             if text_channel is None:
                 text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
 
             print(f"🔍 찾은 text_channel: {text_channel} / 이름: {getattr(text_channel, 'name', None)}")
+
             if text_channel is None:
                 print("❌ '자유채팅방' 채널을 찾지 못했습니다!")
                 return
 
             try:
+                # 메시지 전송 전 봇 권한 체크
+                perms = text_channel.permissions_for(member.guild.me)
+                if not perms.send_messages:
+                    print("❌ 봇에게 해당 채널에 메시지 보낼 권한이 없습니다!")
+                    return
+
                 msg = await text_channel.send(f"⏰ {member.mention}님 자동 퇴장 처리되었습니다.")
                 print(f"✅ 메시지 전송 성공: {msg.id}")
             except Exception as e:
                 print(f"❗ 메시지 전송 실패: {e}")
-
         else:
             print(f"❌ {member.display_name}님이 이미 다른 채널에 있거나 음성채널 없음")
+
     except asyncio.CancelledError:
         print(f"⏹️ {member.display_name}님 타이머 취소됨")
     except Exception as e:
         print(f"❗ 예상치 못한 오류 발생: {e}")
     finally:
-        # 만약 타이머가 다른 곳에서 새로 등록되었을 경우 보호용 조건 추가 가능
         current_task = auto_disconnect_tasks.get(member.id)
         if current_task and current_task.done():
             auto_disconnect_tasks.pop(member.id, None)
+
 
 
 
