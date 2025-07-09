@@ -41,6 +41,7 @@ MONITORED_CHANNEL_NAMES = [f"일반{i}" for i in range(1, 17)] + ["큰맵1", "�
 
 intents = discord.Intents.default()
 intents.members = True
+intents.guilds = True
 intents.voice_states = True
 intents.messages = True
 intents.message_content = True
@@ -64,14 +65,136 @@ invites_cache = {}
 
 
 
+import discord
+from discord.ext import commands
+from discord import app_commands
+import re
+import json
+import os
 
-
-
-
+WARNINGS_FILE = "warnings.json"
+BADWORDS_FILE = "badwords.txt"
 
 
 
 WELCOME_CHANNEL_NAME = "자유채팅방"  # 자유롭게 바꿔도 됨
+
+
+
+
+# 욕설 리스트 정규식 패턴 로드 함수
+def load_badwords_regex(file_path="badwords.txt"):
+    regex_patterns = []
+    if not os.path.exists(file_path):
+        print(f"⚠️ 경고: {file_path} 파일이 없습니다.")
+        return regex_patterns
+    with open(file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            word = line.strip().lower()
+            if not word:
+                continue
+            pattern = ".*?".join([re.escape(ch) for ch in word])
+            regex_patterns.append(re.compile(pattern, re.IGNORECASE))
+    return regex_patterns
+
+BADWORD_PATTERNS = load_badwords_regex()
+
+# 경고 데이터 불러오기
+if os.path.exists(WARNINGS_FILE):
+    with open(WARNINGS_FILE, "r", encoding="utf-8") as f:
+        warnings = json.load(f)
+else:
+    warnings = {}
+
+def save_warnings():
+    with open(WARNINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(warnings, f, indent=4)
+
+def censor_badwords_regex(text, badword_patterns):
+    result = text
+    for pattern in badword_patterns:
+        result = pattern.sub("***", result)
+    return result
+
+@bot.event
+async def on_ready():
+    print(f"✅ 봇 온라인: {bot.user}")
+    try:
+        synced = await tree.sync()
+        print(f"🔁 슬래시 커맨드 등록됨: {len(synced)}개")
+    except Exception as e:
+        print(f"❌ 슬래시 명령 동기화 실패: {e}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    # 지정한 채널 이름 체크
+    if str(message.channel.name) != WELCOME_CHANNEL_NAME:
+        return
+
+    msg = message.content
+    lowered_msg = msg.lower()
+
+    if any(p.search(lowered_msg) for p in BADWORD_PATTERNS):
+        user_id = str(message.author.id)
+        warnings[user_id] = warnings.get(user_id, 0) + 1
+        save_warnings()
+
+        censored = censor_badwords_regex(msg, BADWORD_PATTERNS)
+        await message.channel.send(
+            f"💬 필터 적용됨: `{censored}`\n💡 오덕봇은 욕설은 자동으로 걸러주는 평화주의자입니다."
+        )
+
+    await bot.process_commands(message)
+
+# 경고 확인 슬래시 명령어
+@tree.command(name="경고확인", description="누가 몇 번 경고받았는지 확인합니다")
+async def check_warnings(interaction: discord.Interaction):
+    if not warnings:
+        await interaction.response.send_message("📢 현재까지 경고받은 유저가 없습니다.")
+        return
+
+    guild = interaction.guild
+    report = []
+
+    for user_id, count in warnings.items():
+        member = guild.get_member(int(user_id))
+        name = member.display_name if member else f"알 수 없음 ({user_id})"
+        report.append(f"{name}: {count}회")
+
+    result = "\n".join(report)
+    await interaction.response.send_message(f"📄 경고 목록:\n{result}")
+
+# 경고 초기화 슬래시 명령어 (서버 관리자 or 채널관리자 역할)
+@tree.command(name="경고초기화", description="특정 유저의 경고 횟수를 0으로 초기화합니다 (관리자 전용)")
+@app_commands.describe(user="경고를 초기화할 유저를 선택하세요")
+async def reset_warning(interaction: discord.Interaction, user: discord.Member):
+    member = interaction.user
+    has_admin = member.guild_permissions.administrator
+    has_channel_admin_role = discord.utils.get(member.roles, name="채널관리자") is not None
+
+    if not (has_admin or has_channel_admin_role):
+        await interaction.response.send_message("❌ 관리자만 사용할 수 있는 명령어입니다.", ephemeral=True)
+        return
+
+    user_id = str(user.id)
+    if user_id in warnings:
+        warnings[user_id] = 0
+        save_warnings()
+        await interaction.response.send_message(f"✅ {user.display_name}님의 경고 횟수가 초기화되었습니다.")
+    else:
+        await interaction.response.send_message(f"ℹ️ {user.display_name}님은 현재 경고 기록이 없습니다.")
+
+
+
+
+
+
+
+
+
 
 # 🎈 환영 버튼 구성
 class WelcomeButton(discord.ui.View):
