@@ -49,7 +49,7 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
-nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_()\-]+/[a-zA-Z0-9_-]+/\d{2}$")
+nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_()\-\s]+/[a-zA-Z0-9_-]+/\d{2}$")
 auto_disconnect_tasks = {}
 voice_join_times = {}  # user_id: join_time
 dm_sent_users = set()
@@ -885,7 +885,7 @@ async def 검사(interaction: discord.Interaction):
         if member.bot:
             continue
 
-        parts = (member.nick or member.name).split("/")
+        parts = [p.strip() for p in (member.nick or member.name).strip().split("/")]
         if len(parts) != 3 or not nickname_pattern.fullmatch("/".join(p.strip() for p in parts)):
             count += 1
             try:
