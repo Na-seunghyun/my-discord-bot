@@ -174,27 +174,22 @@ async def safe_send_message(channel, content, retries=3):
     # 실패 후 아무것도 하지 않음 → 로그 추가 원하면 여기에 작성
 
 # 자동 퇴장 로직
-async def auto_disconnect_after_timeout(member, voice_channel, fallback_text_channel):
+async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
     try:
-        await asyncio.sleep(2)  # 20분 대기
-
-        # 여전히 대상 채널에 있는 경우만 처리
+        print(f"⏳ {member.display_name}님 자동퇴장 타이머 시작 (20분)")
+        await asyncio.sleep(20 * 60)
         if member.voice and member.voice.channel == voice_channel:
-            await member.move_to(None)  # 퇴장 처리
-
-            # 채널을 최신 상태로 다시 탐색 (채널 이동 등 변경 고려)
-            text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방") or fallback_text_channel
-
+            print(f"🚪 {member.display_name}님 자동퇴장 실행 중")
+            await member.move_to(None)
             if text_channel:
-                await safe_send_message(
-                    text_channel,
-                    f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 자동 퇴장 처리되었습니다."
-                )
-
+                await text_channel.send(
+                    f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 자동 퇴장 처리되었습니다.")
+            print(f"🚪 {member.display_name}님 자동 퇴장 완료")
     except asyncio.CancelledError:
-        pass
+        print(f"⏹️ {member.display_name}님 타이머 취소됨")
     finally:
         auto_disconnect_tasks.pop(member.id, None)
+
 
 
 
@@ -235,21 +230,18 @@ async def on_ready():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    global all_empty_since, notified_after_empty, streaming_members
     if member.bot:
         return
 
     bap_channel = discord.utils.get(member.guild.voice_channels, name="밥좀묵겠습니다")
     text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
 
-    # 밥좀묵겠습니다 입장 시
     if after.channel == bap_channel and before.channel != bap_channel:
-        # 기존 타이머 있으면 취소
+        # 기존 타이머 있으면 반드시 취소하고 새로 만듦
         if member.id in auto_disconnect_tasks:
             auto_disconnect_tasks[member.id].cancel()
             auto_disconnect_tasks.pop(member.id, None)
 
-        # ✅ DM 중복 방지
         if member.id not in dm_sent_users:
             try:
                 await member.send(
@@ -262,14 +254,15 @@ async def on_voice_state_update(member, before, after):
         auto_disconnect_tasks[member.id] = task
         print(f"⏳ {member.display_name}님 타이머 시작됨")
 
-    # 밥좀묵겠습니다 채널에서 나갔을 때 → 타이머 취소
     elif before.channel == bap_channel and after.channel != bap_channel:
         if member.id in auto_disconnect_tasks:
             auto_disconnect_tasks[member.id].cancel()
             auto_disconnect_tasks.pop(member.id, None)
             print(f"❌ {member.display_name}님 퇴장 → 타이머 취소됨")
-        # ✅ 퇴장 시 DM 보낸 기록도 초기화
+
+        # DM 보낸 기록 초기화
         dm_sent_users.discard(member.id)
+
 
 
     # 대기방 입장 메시지 중복 방지 캐시
