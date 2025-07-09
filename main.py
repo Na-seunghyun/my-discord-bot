@@ -118,12 +118,16 @@ def censor_badwords_regex(text, badword_patterns):
 
 @bot.event
 async def on_ready():
-    print(f"✅ 봇 온라인: {bot.user}")
+    guild = discord.Object(id=GUILD_ID)
     try:
-        synced = await tree.sync()
+        synced = await tree.sync(guild=guild)
+        print(f"✅ 봇 로그인: {bot.user}")
         print(f"🔁 슬래시 커맨드 등록됨: {len(synced)}개")
     except Exception as e:
         print(f"❌ 슬래시 명령 동기화 실패: {e}")
+
+    check_voice_channels_for_streaming.start()
+
 
 @bot.event
 async def on_message(message):
@@ -150,7 +154,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # 경고 확인 슬래시 명령어
-@tree.command(name="경고확인", description="누가 몇 번 경고받았는지 확인합니다")
+@tree.command(name="경고확인", description="누가 몇 번 경고받았는지 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def check_warnings(interaction: discord.Interaction):
     if not warnings:
         await interaction.response.send_message("📢 현재까지 경고받은 유저가 없습니다.")
@@ -168,7 +172,7 @@ async def check_warnings(interaction: discord.Interaction):
     await interaction.response.send_message(f"📄 경고 목록:\n{result}")
 
 # 경고 초기화 슬래시 명령어 (서버 관리자 or 채널관리자 역할)
-@tree.command(name="경고초기화", description="특정 유저의 경고 횟수를 0으로 초기화합니다 (관리자 전용)")
+@tree.command(name="경고초기화", description="특정 유저의 경고 횟수를 0으로 초기화합니다 (관리자 전용)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(user="경고를 초기화할 유저를 선택하세요")
 async def reset_warning(interaction: discord.Interaction, user: discord.Member):
     member = interaction.user
@@ -1284,14 +1288,6 @@ async def 접속시간랭킹(interaction: discord.Interaction):
 
 
 
-
-
-@bot.event
-async def on_ready():
-    guild = discord.Object(id=GUILD_ID)
-    await tree.sync(guild=guild)
-    check_voice_channels_for_streaming.start()
-    print(f"✅ 봇 로그인: {bot.user}")
 
 
 keep_alive()
