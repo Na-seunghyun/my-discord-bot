@@ -175,28 +175,30 @@ async def safe_send_message(channel, content, max_retries=5, delay=1):
 
 
 # 자동 퇴장 로직
-async def auto_disconnect_after_timeout(member, voice_channel, text_channel_name="자유채팅방"):
+async def auto_disconnect_after_timeout(member, voice_channel):
     try:
-        print(f"⏳ {member.display_name}님 자동퇴장 타이머 시작 (20분)")
-        await asyncio.sleep(2)  # 20분 대기
+        await asyncio.sleep(2)  # 테스트용 2초 대기
+
         if member.voice and member.voice.channel == voice_channel:
-            print(f"🚪 {member.display_name}님 자동퇴장 실행 중")
             await member.move_to(None)
+            await asyncio.sleep(0.3)  # 퇴장 명령 후 잠시 대기 (디스코드 반영 대기)
 
-            # 텍스트 채널을 함수 안에서 다시 찾아서 무조건 자유채팅방으로 지정
-            text_channel = get(member.guild.text_channels, name=text_channel_name)
-            if not text_channel:
-                print(f"❌ '{text_channel_name}' 채널을 찾지 못했습니다.")
-                return
+            # 1. 텍스트 채널 찾기 + 로그 찍기
+            text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+            print(f"🔍 찾은 text_channel: {text_channel} / 이름: {getattr(text_channel, 'name', None)}")
+            if text_channel is None:
+                print("❌ '자유채팅방' 채널을 찾지 못했습니다!")
 
-            content = (
-                f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 자동 퇴장 처리되었습니다. "
-                f"(퇴장 시간: {datetime.utcnow().isoformat()} UTC)"
-            )
-            sent = await safe_send_message(text_channel, content)
-            if not sent:
-                # 재시도 실패 시 별도 로그 또는 후속처리 가능
-                print(f"❗ {member.display_name}님 자동퇴장 안내 메시지 전송 실패")
+            # 2. 메시지 보내기 + 예외 처리
+            try:
+                if text_channel:
+                    msg = await text_channel.send(f"⏰ {member.mention}님 자동 퇴장 처리되었습니다.")
+                    print(f"✅ 메시지 전송 성공: {msg.id}")
+                else:
+                    print("❌ 메시지 보낼 채널이 없습니다.")
+            except Exception as e:
+                print(f"❗ 메시지 전송 실패: {e}")
+
     except asyncio.CancelledError:
         print(f"⏹️ {member.display_name}님 타이머 취소됨")
     finally:
