@@ -74,7 +74,7 @@ WELCOME_CHANNEL_NAME = "자유채팅방"  # 자유롭게 바꿔도 됨
 
 
 # 욕설 리스트 정규식 패턴 로드 함수
-def load_badwords_regex(file_path="badwords.txt"):
+def load_badwords_regex(file_path=BADWORDS_FILE):
     regex_patterns = []
     if not os.path.exists(file_path):
         print(f"⚠️ 경고: {file_path} 파일이 없습니다.")
@@ -84,6 +84,7 @@ def load_badwords_regex(file_path="badwords.txt"):
             word = line.strip().lower()
             if not word:
                 continue
+            # 글자 사이 공백이나 특수문자 무시하는 패턴
             pattern = ".*?".join([re.escape(ch) for ch in word])
             regex_patterns.append(re.compile(pattern, re.IGNORECASE))
     return regex_patterns
@@ -101,20 +102,28 @@ def save_warnings():
     with open(WARNINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(warnings, f, indent=4)
 
+# 욕설 부분만 ***로 가리는 함수
 def censor_badwords_regex(text, badword_patterns):
-    result = text
+    censored_text = text
     for pattern in badword_patterns:
-        result = pattern.sub("***", result)
-    return result
+        censored_text = pattern.sub("***", censored_text)
+    return censored_text
 
-
+@bot.event
+async def on_ready():
+    guild = discord.Object(id=GUILD_ID)
+    try:
+        synced = await tree.sync(guild=guild)
+        print(f"✅ 봇 로그인: {bot.user}")
+        print(f"🔁 슬래시 커맨드 등록됨: {len(synced)}개")
+    except Exception as e:
+        print(f"❌ 슬래시 명령 동기화 실패: {e}")
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    # 지정한 채널 이름 체크
     if str(message.channel.name) != WELCOME_CHANNEL_NAME:
         return
 
@@ -122,14 +131,20 @@ async def on_message(message):
     lowered_msg = msg.lower()
 
     if any(p.search(lowered_msg) for p in BADWORD_PATTERNS):
+        censored = censor_badwords_regex(msg, BADWORD_PATTERNS)
+        try:
+            # 기존 메시지를 욕설 부분만 ***로 수정
+            await message.edit(content=censored)
+        except Exception as e:
+            print(f"메시지 수정 실패: {e}")
+            # 수정 실패 시 별도 메시지 출력
+            await message.channel.send(
+                f"💬 필터 적용됨: `{censored}`\n💡 오덕봇은 욕설은 자동으로 걸러주는 평화주의자입니다."
+            )
+
         user_id = str(message.author.id)
         warnings[user_id] = warnings.get(user_id, 0) + 1
         save_warnings()
-
-        censored = censor_badwords_regex(msg, BADWORD_PATTERNS)
-        await message.channel.send(
-            f"💬 필터 적용됨: `{censored}`\n💡 오덕봇은 욕설은 자동으로 걸러주는 평화주의자입니다."
-        )
 
     await bot.process_commands(message)
 
@@ -170,7 +185,6 @@ async def reset_warning(interaction: discord.Interaction, user: discord.Member):
         await interaction.response.send_message(f"✅ {user.display_name}님의 경고 횟수가 초기화되었습니다.")
     else:
         await interaction.response.send_message(f"ℹ️ {user.display_name}님은 현재 경고 기록이 없습니다.")
-
 
 
 
