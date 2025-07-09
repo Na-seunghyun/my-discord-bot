@@ -180,7 +180,7 @@ auto_kicked_members = {}  # 자동퇴장 중 멤버 ID 저장
 
 async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
     try:
-        await asyncio.sleep(20 * 60)  # 또는 테스트용 2초
+        await asyncio.sleep(2)  # 또는 테스트용 2초
         if member.voice and member.voice.channel == voice_channel:
             auto_kicked_members[member.id] = True  # 자동퇴장 시작 플래그
             await member.move_to(None)
