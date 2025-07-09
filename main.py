@@ -370,6 +370,7 @@ async def on_ready():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    global all_empty_since, notified_after_empty  # ✅ 전역 변수 선언
     if member.bot:
         return
 
