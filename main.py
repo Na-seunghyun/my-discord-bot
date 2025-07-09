@@ -161,22 +161,46 @@ async def on_member_remove(member):
 
 
 
-
+# 안전한 메시지 전송 함수
+async def safe_send_message(channel, content, retries=3):
+    for attempt in range(retries):
+        try:
+            await channel.send(content)
+            return  # 전송 성공
+        except discord.HTTPException:
+            await asyncio.sleep(1)  # 실패 시 짧은 대기 후 재시도
+        except Exception:
+            await asyncio.sleep(1)
+    # 실패 후 아무것도 하지 않음 → 로그 추가 원하면 여기에 작성
 
 # 자동 퇴장 로직
-async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
+async def auto_disconnect_after_timeout(member, voice_channel, fallback_text_channel):
     try:
-        await asyncio.sleep(20 * 60)  # 20분 대기
+        await asyncio.sleep(2)  # 20분 대기
+
+        # 여전히 대상 채널에 있는 경우만 처리
         if member.voice and member.voice.channel == voice_channel:
             await member.move_to(None)  # 퇴장 처리
+
+            # 채널을 최신 상태로 다시 탐색 (채널 이동 등 변경 고려)
+            text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방") or fallback_text_channel
+
             if text_channel:
-                await text_channel.send(
-                    f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 자동 퇴장 처리되었습니다.")
-            print(f"🚪 {member.display_name}님 자동 퇴장 완료")
+                await safe_send_message(
+                    text_channel,
+                    f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 자동 퇴장 처리되었습니다."
+                )
+
     except asyncio.CancelledError:
-        print(f"⏹️ {member.display_name}님 타이머 취소됨")
+        pass
     finally:
         auto_disconnect_tasks.pop(member.id, None)
+
+
+
+
+
+
 
 
 @bot.event
