@@ -177,7 +177,7 @@ async def safe_send_message(channel, content, retries=3):
 async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
     try:
         print(f"⏳ {member.display_name}님 자동퇴장 타이머 시작 (20분)")
-        await asyncio.sleep(20 * 60)
+        await asyncio.sleep(2)
         if member.voice and member.voice.channel == voice_channel:
             print(f"🚪 {member.display_name}님 자동퇴장 실행 중")
             await member.move_to(None)
