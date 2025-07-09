@@ -177,7 +177,7 @@ async def safe_send_message(channel, content, max_retries=5, delay=1):
 # 자동 퇴장 로직
 async def auto_disconnect_after_timeout(member, voice_channel, text_channel_name="자유채팅방"):
     try:
-        await asyncio.sleep(20 * 60)  # 20분
+        await asyncio.sleep(2)  # 20분
         if member.voice and member.voice.channel == voice_channel:
             await member.move_to(None)
 
