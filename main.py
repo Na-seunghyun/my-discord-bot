@@ -175,48 +175,31 @@ async def safe_send_message(channel, content, max_retries=5, delay=1):
 
 
 # 자동 퇴장 로직
+auto_disconnect_tasks = {}
+auto_kicked_members = {}  # 자동퇴장 중 멤버 ID 저장
+
 async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
     try:
-        print(f"⏳ {member.display_name}님 자동퇴장 타이머 시작 (테스트 2초)")
-        await asyncio.sleep(2)  # 테스트용
-
+        await asyncio.sleep(20 * 60)  # 또는 테스트용 2초
         if member.voice and member.voice.channel == voice_channel:
-            print(f"🚪 {member.display_name}님 자동퇴장 실행 중 - 퇴장 처리 시작")
+            auto_kicked_members[member.id] = True  # 자동퇴장 시작 플래그
             await member.move_to(None)
-            await asyncio.sleep(0.7)  # 상태 반영 시간
+            await asyncio.sleep(0.3)  # 안전한 딜레이
 
-            # 안전하게 다시 채널 조회
+            # 메시지 보내기
             if text_channel is None:
                 text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
 
-            print(f"🔍 찾은 text_channel: {text_channel} / 이름: {getattr(text_channel, 'name', None)}")
+            if text_channel:
+                await text_channel.send(f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 자동 퇴장 처리되었습니다.")
+            print(f"🚪 {member.display_name}님 자동 퇴장 완료")
 
-            if text_channel is None:
-                print("❌ '자유채팅방' 채널을 찾지 못했습니다!")
-                return
-
-            try:
-                # 메시지 전송 전 봇 권한 체크
-                perms = text_channel.permissions_for(member.guild.me)
-                if not perms.send_messages:
-                    print("❌ 봇에게 해당 채널에 메시지 보낼 권한이 없습니다!")
-                    return
-
-                msg = await text_channel.send(f"⏰ {member.mention}님 자동 퇴장 처리되었습니다.")
-                print(f"✅ 메시지 전송 성공: {msg.id}")
-            except Exception as e:
-                print(f"❗ 메시지 전송 실패: {e}")
-        else:
-            print(f"❌ {member.display_name}님이 이미 다른 채널에 있거나 음성채널 없음")
+            auto_kicked_members.pop(member.id, None)
 
     except asyncio.CancelledError:
         print(f"⏹️ {member.display_name}님 타이머 취소됨")
-    except Exception as e:
-        print(f"❗ 예상치 못한 오류 발생: {e}")
     finally:
-        current_task = auto_disconnect_tasks.get(member.id)
-        if current_task and current_task.done():
-            auto_disconnect_tasks.pop(member.id, None)
+        auto_disconnect_tasks.pop(member.id, None)
 
 
 
@@ -286,12 +269,17 @@ async def on_voice_state_update(member, before, after):
 
     # 퇴장 시
     elif before.channel == bap_channel and after.channel != bap_channel:
-        # 타이머가 존재하고, 아직 완료되지 않았을 때만 취소
-        task = auto_disconnect_tasks.get(member.id)
-        if task and not task.done():
-            task.cancel()
-            auto_disconnect_tasks.pop(member.id, None)
-            print(f"❌ {member.display_name}님 직접 퇴장 → 타이머 취소됨")
+        if auto_kicked_members.get(member.id):
+            # 자동퇴장으로 발생한 퇴장, 타이머 취소하지 않고 플래그만 제거
+            auto_kicked_members.pop(member.id, None)
+            print(f"🚪 {member.display_name}님 자동퇴장 이벤트 감지 - 타이머 유지")
+        else:
+            # 사람이 직접 나간 경우에만 타이머 취소
+            task = auto_disconnect_tasks.get(member.id)
+            if task and not task.done():
+                task.cancel()
+                auto_disconnect_tasks.pop(member.id, None)
+                print(f"❌ {member.display_name}님 직접 퇴장 → 타이머 취소됨")
 
         dm_sent_users.discard(member.id)
 
