@@ -71,7 +71,6 @@ invites_cache = {}
 
 
 
-
 WELCOME_CHANNEL_NAME = "자유채팅방"  # 자유롭게 바꿔도 됨
 
 # 🎈 환영 버튼 구성
@@ -91,10 +90,10 @@ class WelcomeButton(discord.ui.View):
 
 @bot.event
 async def on_ready():
-    # 서버마다 초대 링크 캐싱
+    # 서버마다 초대 링크 캐싱 (invite 객체 그대로 저장)
     for guild in bot.guilds:
         invites = await guild.invites()
-        invites_cache[guild.id] = {invite.code: invite.uses for invite in invites}
+        invites_cache[guild.id] = {invite.code: invite for invite in invites}
     print("초대 캐시 초기화 완료!")
 
 @bot.event
@@ -105,14 +104,14 @@ async def on_member_join(member):
         return
 
     # 초대 링크 정보 다시 받아오기
-    invites = await guild.invites()
+    new_invites = await guild.invites()
     old_invites = invites_cache.get(guild.id, {})
-    invites_cache[guild.id] = {invite.code: invite.uses for invite in invites}
+    invites_cache[guild.id] = {invite.code: invite for invite in new_invites}
 
     inviter = None
-    for invite in invites:
-        # 사용횟수가 증가한 초대 링크 찾기
-        if invite.code in old_invites and invite.uses > old_invites[invite.code]:
+    for invite in new_invites:
+        old_invite = old_invites.get(invite.code)
+        if old_invite and invite.uses > old_invite.uses:
             inviter = invite.inviter
             break
 
@@ -128,9 +127,10 @@ async def on_member_join(member):
     embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/minion.gif")
     embed.set_footer(text="누구보다 빠르게 남들과는 다르게!", icon_url=member.display_avatar.url)
 
-    # 초대한 사람 정보 추가
+    # 초대한 사람 정보 추가 (확실히 표시)
     if inviter:
-        embed.add_field(name="초대한 사람", value=inviter.mention, inline=True)
+        # 닉네임과 멘션 둘 다 표시
+        embed.add_field(name="초대한 사람", value=f"{inviter.mention} (`{inviter.display_name}`)", inline=True)
     else:
         embed.add_field(name="초대한 사람", value="알 수 없음", inline=True)
 
