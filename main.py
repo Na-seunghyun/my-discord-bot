@@ -62,16 +62,6 @@ invites_cache = {}
 
 
 
-
-
-
-import discord
-from discord.ext import commands
-from discord import app_commands
-import re
-import json
-import os
-
 WARNINGS_FILE = "warnings.json"
 BADWORDS_FILE = "badwords.txt"
 
@@ -116,17 +106,6 @@ def censor_badwords_regex(text, badword_patterns):
         result = pattern.sub("***", result)
     return result
 
-@bot.event
-async def on_ready():
-    guild = discord.Object(id=GUILD_ID)
-    try:
-        synced = await tree.sync(guild=guild)
-        print(f"✅ 봇 로그인: {bot.user}")
-        print(f"🔁 슬래시 커맨드 등록됨: {len(synced)}개")
-    except Exception as e:
-        print(f"❌ 슬래시 명령 동기화 실패: {e}")
-
-    check_voice_channels_for_streaming.start()
 
 
 @bot.event
@@ -1285,6 +1264,21 @@ async def 접속시간랭킹(interaction: discord.Interaction):
         view=VoiceTopButton(),
         ephemeral=True
     )
+
+
+
+
+@bot.event
+async def on_ready():
+    guild = discord.Object(id=GUILD_ID)
+    try:
+        synced = await tree.sync(guild=guild)
+        print(f"✅ 봇 로그인: {bot.user}")
+        print(f"🔁 슬래시 커맨드 등록됨: {len(synced)}개")
+    except Exception as e:
+        print(f"❌ 슬래시 명령 동기화 실패: {e}")
+
+    check_voice_channels_for_streaming.start()
 
 
 
