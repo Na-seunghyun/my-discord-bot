@@ -49,7 +49,7 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
-nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/\d{2}$")
+nickname_pattern = re.compile(r"^[가-힣a-zA-Z0-9_()\-]+/[a-zA-Z0-9_-]+/\d{2}$")
 auto_disconnect_tasks = {}
 voice_join_times = {}  # user_id: join_time
 dm_sent_users = set()
