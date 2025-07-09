@@ -165,35 +165,38 @@ async def safe_send_message(channel, content, max_retries=5, delay=1):
     for attempt in range(max_retries):
         try:
             msg = await channel.send(content)
-            print(f"✅ 메시지 전송 성공: {msg.id}")
+            print(f"✅ 메시지 전송 성공 (ID: {msg.id})")
             return True
-        except discord.HTTPException as e:
-            print(f"⚠️ 메시지 전송 실패 {attempt+1}회차: {e}")
+        except Exception as e:
+            print(f"⚠️ 메시지 전송 실패 {attempt + 1}회차: {e}")
             await asyncio.sleep(delay)
-    print(f"❌ 메시지 전송 완전 실패: {content[:30]}...")
+    print("❌ 메시지 전송 완전 실패")
     return False
 
 
 # 자동 퇴장 로직
 async def auto_disconnect_after_timeout(member, voice_channel, text_channel_name="자유채팅방"):
     try:
-        await asyncio.sleep(2)  # 20분
+        print(f"⏳ {member.display_name}님 자동퇴장 타이머 시작 (20분)")
+        await asyncio.sleep(2)  # 20분 대기
         if member.voice and member.voice.channel == voice_channel:
+            print(f"🚪 {member.display_name}님 자동퇴장 실행 중")
             await member.move_to(None)
 
-            # 최신 채널 다시 찾기 (안정성 위해)
-            text_channel = discord.utils.get(member.guild.text_channels, name=text_channel_name)
+            # 텍스트 채널을 함수 안에서 다시 찾아서 무조건 자유채팅방으로 지정
+            text_channel = get(member.guild.text_channels, name=text_channel_name)
             if not text_channel:
-                print(f"❌ 채널 '{text_channel_name}' 을(를) 찾지 못했습니다.")
+                print(f"❌ '{text_channel_name}' 채널을 찾지 못했습니다.")
                 return
 
-            content = (f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 "
-                       f"자동 퇴장 처리되었습니다. (퇴장 시간: {datetime.utcnow().isoformat()} UTC)")
+            content = (
+                f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 자동 퇴장 처리되었습니다. "
+                f"(퇴장 시간: {datetime.utcnow().isoformat()} UTC)"
+            )
             sent = await safe_send_message(text_channel, content)
             if not sent:
-                # 필요시 별도 로깅, 알림 추가 가능
-                print(f"❗ 중요: 자동퇴장 알림 메시지 전송 실패 - {member.display_name}")
-
+                # 재시도 실패 시 별도 로그 또는 후속처리 가능
+                print(f"❗ {member.display_name}님 자동퇴장 안내 메시지 전송 실패")
     except asyncio.CancelledError:
         print(f"⏹️ {member.display_name}님 타이머 취소됨")
     finally:
