@@ -878,25 +878,16 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 win_pct = (wins / rounds * 100) if rounds > 0 else 0
 
                 value = (
-                    f"티어: {tier} {sub_tier}티어\n"
-                    f"랭크 포인트: {rank_point}\n"
-                    f"게임 수: {rounds}\n"
-                    f"승리 수: {wins} ({win_pct:.2f}%)\n"
-                    f"킬 수: {kills}\n"
-                    f"K/D: {kd:.2f}"
+                    "```fix\n"
+                    f"티어          │ {tier} {sub_tier}티어\n"
+                    f"랭크 포인트  │ {rank_point}\n"
+                    f"게임 수      │ {rounds}\n"
+                    f"승리 수      │ {wins} ({win_pct:.2f}%)\n"
+                    f"킬 수       │ {kills}\n"
+                    f"K/D         │ {kd:.2f}\n"
+                    "```"
                 )
                 embed.add_field(name=f"🏅 {mode.upper()} 랭크 전적", value=value, inline=False)
-
-                # 스쿼드 랭크일 경우, 피드백 필드 추가
-                if mode == "squad" and rounds > 0:
-                    # 랭크 API에 avg_damage 정보가 없으니 0으로 처리 (필요시 계산 로직 수정 가능)
-                    avg_damage_rank = 0
-                    dmg_msg_r, kd_msg_r, win_msg_r = detailed_feedback(avg_damage_rank, kd, win_pct)
-
-                    embed.add_field(name="📊 SQUAD 랭크 분석 피드백", value="랭크 전적 기반 분석 결과입니다.", inline=False)
-                    embed.add_field(name="🔫 평균 데미지 (랭크)", value=f"```{dmg_msg_r}```", inline=False)
-                    embed.add_field(name="⚔️ K/D (랭크)", value=f"```{kd_msg_r}```", inline=False)
-                    embed.add_field(name="🏆 승률 (랭크)", value=f"```{win_msg_r}```", inline=False)
 
         else:
             embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
