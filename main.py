@@ -816,23 +816,22 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         player_id = get_player_id(닉네임)
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
+        ranked_stats = get_player_ranked_stats(player_id, season_id)  # 랭크 전적 호출
 
-        # 분석 피드백
+        # 일반 스쿼드 전적 피드백
         squad_metrics, error = extract_squad_metrics(stats)
         if squad_metrics:
             avg_damage, kd, win_rate = squad_metrics
             dmg_msg, kd_msg, win_msg = detailed_feedback(avg_damage, kd, win_rate)
         else:
             dmg_msg = kd_msg = win_msg = error
-            
-        # 랭크 전적 추가 호출
-        ranked_stats = get_player_ranked_stats(player_id, season_id)
-        
+
         embed = discord.Embed(
             title=f"{닉네임}님의 PUBG 전적 요약",
             color=discord.Color.blue()
         )
 
+        # 일반 전적 필드 추가
         for mode in ["solo", "duo", "squad"]:
             mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
             if not mode_stats or mode_stats["roundsPlayed"] == 0:
@@ -855,14 +854,13 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             )
             embed.add_field(name=mode.upper(), value=value, inline=True)
 
-        # 세분화된 피드백 임베드 필드 추가
+        # 일반 스쿼드 피드백 임베드 필드
         embed.add_field(name="📊 SQUAD 분석 피드백", value="전투 성능을 바탕으로 분석된 결과입니다.", inline=False)
-
         embed.add_field(name="🔫 평균 데미지", value=f"```{dmg_msg}```", inline=False)
         embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
         embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
 
-        # 랭크 전적 임베드 필드 추가
+        # 랭크 전적 임베드 필드 추가 및 랭크 스쿼드 피드백 생성
         if ranked_stats and "data" in ranked_stats:
             ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
             for mode in ["solo", "duo", "squad"]:
@@ -888,6 +886,18 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                     f"K/D: {kd:.2f}"
                 )
                 embed.add_field(name=f"🏅 {mode.upper()} 랭크 전적", value=value, inline=False)
+
+                # 스쿼드 랭크일 경우, 피드백 필드 추가
+                if mode == "squad" and rounds > 0:
+                    # 랭크 API에 avg_damage 정보가 없으니 0으로 처리 (필요시 계산 로직 수정 가능)
+                    avg_damage_rank = 0
+                    dmg_msg_r, kd_msg_r, win_msg_r = detailed_feedback(avg_damage_rank, kd, win_pct)
+
+                    embed.add_field(name="📊 SQUAD 랭크 분석 피드백", value="랭크 전적 기반 분석 결과입니다.", inline=False)
+                    embed.add_field(name="🔫 평균 데미지 (랭크)", value=f"```{dmg_msg_r}```", inline=False)
+                    embed.add_field(name="⚔️ K/D (랭크)", value=f"```{kd_msg_r}```", inline=False)
+                    embed.add_field(name="🏆 승률 (랭크)", value=f"```{win_msg_r}```", inline=False)
+
         else:
             embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
 
