@@ -788,6 +788,14 @@ def detailed_feedback(avg_damage, kd, win_rate):
 
     return dmg_msg, kd_msg, win_msg  # 각각 분리하여 리턴
 
+def get_player_ranked_stats(player_id, season_id):
+    url = f"https://api.pubg.com/shards/{PLATFORM}/players/{player_id}/seasons/{season_id}/ranked"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return None
+
 
 # ✅ 디스코드 봇 커맨드
 
@@ -816,7 +824,10 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             dmg_msg, kd_msg, win_msg = detailed_feedback(avg_damage, kd, win_rate)
         else:
             dmg_msg = kd_msg = win_msg = error
-
+            
+        # 랭크 전적 추가 호출
+        ranked_stats = get_player_ranked_stats(player_id, season_id)
+        
         embed = discord.Embed(
             title=f"{닉네임}님의 PUBG 전적 요약",
             color=discord.Color.blue()
@@ -851,6 +862,34 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
         embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
 
+        # 랭크 전적 임베드 필드 추가
+        if ranked_stats and "data" in ranked_stats:
+            ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
+            for mode in ["solo", "duo", "squad"]:
+                mode_rank = ranked_modes.get(mode)
+                if not mode_rank:
+                    continue
+
+                tier = mode_rank.get("currentTier", {}).get("tier", "Unknown")
+                sub_tier = mode_rank.get("currentTier", {}).get("subTier", "")
+                rank_point = mode_rank.get("currentRankPoint", 0)
+                rounds = mode_rank.get("roundsPlayed", 0)
+                wins = mode_rank.get("wins", 0)
+                kills = mode_rank.get("kills", 0)
+                kd = mode_rank.get("kda", 0)
+                win_pct = (wins / rounds * 100) if rounds > 0 else 0
+
+                value = (
+                    f"티어: {tier} {sub_tier}티어\n"
+                    f"랭크 포인트: {rank_point}\n"
+                    f"게임 수: {rounds}\n"
+                    f"승리 수: {wins} ({win_pct:.2f}%)\n"
+                    f"킬 수: {kills}\n"
+                    f"K/D: {kd:.2f}"
+                )
+                embed.add_field(name=f"🏅 {mode.upper()} 랭크 전적", value=value, inline=False)
+        else:
+            embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
 
         embed.set_footer(text="PUBG API 제공")
 
