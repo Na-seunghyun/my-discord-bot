@@ -883,11 +883,6 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 embed.add_field(name=f"🏅 {mode.upper()} 승리 수", value=f"{wins} ({win_pct:.2f}%)", inline=True)
                 embed.add_field(name=f"🏅 {mode.upper()} 킬 수", value=str(kills), inline=True)
                 embed.add_field(name=f"🏅 {mode.upper()} K/D", value=f"{kd:.2f}", inline=True)
-
-        else:
-            embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
-
-
         else:
             embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
 
