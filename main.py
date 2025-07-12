@@ -860,7 +860,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
         embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
 
-        # 랭크 전적 임베드 필드 추가 및 랭크 스쿼드 피드백 생성
+        # 랭크 전적 임베드 필드 추가 (항목별 필드 분리)
         if ranked_stats and "data" in ranked_stats:
             ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
             for mode in ["solo", "duo", "squad"]:
@@ -877,17 +877,16 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 kd = mode_rank.get("kda", 0)
                 win_pct = (wins / rounds * 100) if rounds > 0 else 0
 
-                value = (
-                    "```fix\n"
-                    f"티어          │ {tier} {sub_tier}티어\n"
-                    f"랭크 포인트  │ {rank_point}\n"
-                    f"게임 수      │ {rounds}\n"
-                    f"승리 수      │ {wins} ({win_pct:.2f}%)\n"
-                    f"킬 수       │ {kills}\n"
-                    f"K/D         │ {kd:.2f}\n"
-                    "```"
-                )
-                embed.add_field(name=f"🏅 {mode.upper()} 랭크 전적", value=value, inline=False)
+                embed.add_field(name=f"🏅 {mode.upper()} 랭크 티어", value=f"{tier} {sub_tier}티어", inline=True)
+                embed.add_field(name=f"🏅 {mode.upper()} 랭크 포인트", value=str(rank_point), inline=True)
+                embed.add_field(name=f"🏅 {mode.upper()} 게임 수", value=str(rounds), inline=True)
+                embed.add_field(name=f"🏅 {mode.upper()} 승리 수", value=f"{wins} ({win_pct:.2f}%)", inline=True)
+                embed.add_field(name=f"🏅 {mode.upper()} 킬 수", value=str(kills), inline=True)
+                embed.add_field(name=f"🏅 {mode.upper()} K/D", value=f"{kd:.2f}", inline=True)
+
+        else:
+            embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
+
 
         else:
             embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
