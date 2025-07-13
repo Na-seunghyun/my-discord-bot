@@ -200,6 +200,9 @@ async def reset_warning(interaction: discord.Interaction, user: discord.Member):
 
 
 # 🎈 환영 버튼 구성
+import random
+import discord
+
 class WelcomeButton(discord.ui.View):
     def __init__(self, member, original_message):
         super().__init__(timeout=None)
@@ -209,10 +212,51 @@ class WelcomeButton(discord.ui.View):
     @discord.ui.button(label="🎈 이 멤버 환영하기!", style=discord.ButtonStyle.success)
     async def welcome_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        await interaction.channel.send(
-            f"🎉 {interaction.user.mention} 님이 {self.member.mention} 님을 환영했어요!",
-            allowed_mentions=discord.AllowedMentions(users=True)
+
+        messages = [
+            f"🎉 {interaction.user.mention} 님이 {self.member.mention} 님을 환영하며 춤을 춥니다! 🕺💃",
+            f"⚡️ {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 파워빔을 쏩니다! ✨",
+            f"☕️ {interaction.user.mention} 님이 {self.member.mention} 님을 위해 커피 한 잔 준비했어요 😎",
+            f"🪄 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영의 마법을 부렸어요!",
+            f"🎆 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 폭죽을 터뜨렸어요!",
+            f"🔥 {interaction.user.mention} 님이 {self.member.mention} 님과 환영 댄스 배틀을 시작합니다!",
+            f"🍔 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 햄버거를 건네줬어요!",
+            f"🎤 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 세레나데를 불러줬어요!",
+            f"🌀 {interaction.user.mention} 님이 {self.member.mention} 님 환영 빙글빙글 돌았어요!",
+            f"🚩 {interaction.user.mention} 님이 {self.member.mention} 님 환영 깃발을 흔들었어요!"
+        ]
+
+        gifs = [
+            "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif",  # 파티 폭죽
+            "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif",  # 환영 애니메이션
+            "https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif",  # 하트 애니메이션
+            "https://media.giphy.com/media/5GoVLqeAOo6PK/giphy.gif",      # 댄스하는 곰
+            "https://media.giphy.com/media/111ebonMs90YLu/giphy.gif",     # 고양이 춤
+            "https://media.giphy.com/media/26BRzozg4TCBXv6QU/giphy.gif",  # 불꽃놀이
+            "https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif",  # 축하 댄스
+            "https://media.giphy.com/media/l41lFw057lAJQMwg0/giphy.gif",  # 환영 서클
+            "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif", # 춤추는 사람
+            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif"  # 귀여운 춤추는 강아지
+        ]
+
+        selected_message = random.choice(messages)
+        selected_gif = random.choice(gifs)
+
+        embed = discord.Embed(
+            description=selected_message,
+            color=discord.Color.random()
         )
+        embed.set_image(url=selected_gif)
+        embed.set_footer(text="환영해주셔서 감사합니다! 🎉")
+
+        await interaction.channel.send(embed=embed)
+
+
+
+
+
+
+
 
 @bot.event
 async def on_ready():
