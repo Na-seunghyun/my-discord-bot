@@ -1222,41 +1222,27 @@ async def 소환(interaction: discord.Interaction):
 
 @tree.command(name="개별소환", description="특정 멤버를 선택해 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 개별소환(interaction: discord.Interaction):
+    # 최초 응답: 응답 지연 상태로 표시 (ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+
     # 1. 음성채널 입장 확인
     vc = interaction.user.voice.channel if interaction.user.voice else None
     if not vc:
-        try:
-            if not interaction.response.is_done():
-                await interaction.response.send_message("❌ 음성 채널에 들어가주세요!", ephemeral=True)
-            else:
-                await interaction.followup.send("❌ 음성 채널에 들어가주세요!", ephemeral=True)
-        except discord.errors.InteractionResponded:
-            await interaction.followup.send("❌ 음성 채널에 들어가주세요!", ephemeral=True)
+        await interaction.followup.send("❌ 음성 채널에 들어가주세요!", ephemeral=True)
         return
 
-    # 2. 멤버 필터링
+    # 2. 멤버 필터링 (봇 제외, 음성 채널에 있는 멤버)
     members = [m for m in interaction.guild.members if m.voice and m.voice.channel and not m.bot]
     if not members:
-        try:
-            if not interaction.response.is_done():
-                await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
-            else:
-                await interaction.followup.send("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
-        except discord.errors.InteractionResponded:
-            await interaction.followup.send("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
+        await interaction.followup.send("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
         return
 
-    # 3. View 생성
+    # 3. View 생성 (선택 UI)
     view = MemberSelectView(members)
 
-    # 4. interaction 응답 시도 (중복응답 방지)
-    try:
-        if not interaction.response.is_done():
-            await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
-        else:
-            await interaction.followup.send("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
-    except discord.errors.InteractionResponded:
-        await interaction.followup.send("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+    # 4. 실제 메시지 전송 (followup)
+    await interaction.followup.send("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+
 
 
 
