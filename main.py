@@ -1181,11 +1181,7 @@ class MemberConfirmButton(discord.ui.Button):
         if not interaction.response.is_done():
             await interaction.response.defer(thinking=True)
 
-        # ... 나머지 코드 ...
-
-
         moved_members = []
-
         for member_id in selected_ids:
             member = interaction.guild.get_member(member_id)
             if member and member.voice and member.voice.channel.id != vc.id and not member.bot:
@@ -1215,6 +1211,7 @@ class MemberConfirmButton(discord.ui.Button):
             await interaction.message.edit(view=None)
         except discord.NotFound:
             pass
+
 
 
 class MemberSelectView(discord.ui.View):
