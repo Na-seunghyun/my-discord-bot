@@ -1225,31 +1225,39 @@ async def 개별소환(interaction: discord.Interaction):
     # 1. 음성채널 입장 확인
     vc = interaction.user.voice.channel if interaction.user.voice else None
     if not vc:
-        # 응답 여부 체크 후 응답
-        if not interaction.response.is_done():
-            await interaction.response.send_message("❌ 음성 채널에 들어가주세요!", ephemeral=True)
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ 음성 채널에 들어가주세요!", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ 음성 채널에 들어가주세요!", ephemeral=True)
+        except discord.errors.InteractionResponded:
+            await interaction.followup.send("❌ 음성 채널에 들어가주세요!", ephemeral=True)
         return
 
     # 2. 멤버 필터링
     members = [m for m in interaction.guild.members if m.voice and m.voice.channel and not m.bot]
     if not members:
-        if not interaction.response.is_done():
-            await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
+            else:
+                await interaction.followup.send("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
+        except discord.errors.InteractionResponded:
+            await interaction.followup.send("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
         return
 
     # 3. View 생성
     view = MemberSelectView(members)
 
     # 4. interaction 응답 시도 (중복응답 방지)
-    if not interaction.response.is_done():
-        try:
+    try:
+        if not interaction.response.is_done():
             await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
-        except discord.errors.InteractionResponded:
-            # 이미 응답했으면 무시 또는 로깅
-            print("interaction already responded")
-    else:
-        # 이미 응답했으면 followup 보내기 (필요 시)
+        else:
+            await interaction.followup.send("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+    except discord.errors.InteractionResponded:
         await interaction.followup.send("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+
 
 
 
