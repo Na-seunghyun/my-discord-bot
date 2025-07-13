@@ -797,7 +797,14 @@ def get_player_ranked_stats(player_id, season_id):
         return None
 
 
-# ✅ 디스코드 봇 커맨드
+#  ✅  랭크 티어 이미지 경로 반환 함수
+def get_rank_image_path(tier: str, sub_tier: str = "") -> str:
+    tier = tier.capitalize()
+    filename = f"{tier}-{sub_tier}.png" if sub_tier else f"{tier}.png"
+    path = os.path.join("rank-image", filename)
+    if os.path.exists(path):
+        return path
+    return os.path.join("rank-image", "Unranked.png")
 
 @tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
 async def 전적(interaction: discord.Interaction, 닉네임: str):
@@ -860,7 +867,12 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
         embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
 
-        # 랭크 전적 임베드 필드 추가 (항목별 필드 분리)
+        # 랭크 썸네일용 대표 티어 추적
+        best_rank_score = -1
+        best_rank_tier = "Unranked"
+        best_rank_sub_tier = ""
+
+        # 랭크 전적 임베드 필드 추가
         if ranked_stats and "data" in ranked_stats:
             ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
             for mode in ["solo", "duo", "squad"]:
@@ -883,12 +895,22 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 embed.add_field(name=f"🏅 {mode.upper()} 승리 수", value=f"{wins} ({win_pct:.2f}%)", inline=True)
                 embed.add_field(name=f"🏅 {mode.upper()} 킬 수", value=str(kills), inline=True)
                 embed.add_field(name=f"🏅 {mode.upper()} K/D", value=f"{kd:.2f}", inline=True)
+
+                # 가장 높은 랭크 이미지용
+                if rank_point > best_rank_score:
+                    best_rank_score = rank_point
+                    best_rank_tier = tier
+                    best_rank_sub_tier = sub_tier
         else:
             embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
 
-        embed.set_footer(text="PUBG API 제공")
+        # 랭크 이미지 설정
+        image_path = get_rank_image_path(best_rank_tier, best_rank_sub_tier)
+        image_file = discord.File(image_path, filename="rank.png")
+        embed.set_thumbnail(url="attachment://rank.png")
 
-        await interaction.followup.send(embed=embed)
+        embed.set_footer(text="PUBG API 제공")
+        await interaction.followup.send(embed=embed, file=image_file)
 
     except requests.HTTPError as e:
         await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
