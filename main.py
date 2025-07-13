@@ -1164,18 +1164,25 @@ class MemberConfirmButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         vc = interaction.user.voice.channel if interaction.user.voice else None
         if not vc:
-            await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ 먼저 음성 채널에 들어가주세요!", ephemeral=True)
             return
 
         selected_ids = self.parent_view.selected_member_ids
         if not selected_ids:
-            await interaction.response.send_message("⚠️ 멤버를 선택해주세요.", ephemeral=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("⚠️ 멤버를 선택해주세요.", ephemeral=True)
+            else:
+                await interaction.followup.send("⚠️ 멤버를 선택해주세요.", ephemeral=True)
             return
 
-        try:
+        if not interaction.response.is_done():
             await interaction.response.defer(thinking=True)
-        except discord.errors.InteractionResponded:
-            pass
+
+        # ... 나머지 코드 ...
+
 
         moved_members = []
 
@@ -1226,23 +1233,31 @@ async def 소환(interaction: discord.Interaction):
 
 @tree.command(name="개별소환", description="특정 멤버를 선택해 소환합니다.", guild=discord.Object(id=GUILD_ID))
 async def 개별소환(interaction: discord.Interaction):
-    try:
+    if not interaction.response.is_done():
         await interaction.response.defer(ephemeral=True)
-    except discord.errors.InteractionResponded:
-        pass
 
     vc = interaction.user.voice.channel if interaction.user.voice else None
     if not vc:
-        await interaction.followup.send("❌ 음성 채널에 들어가주세요!", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message("❌ 음성 채널에 들어가주세요!", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ 음성 채널에 들어가주세요!", ephemeral=True)
         return
 
     members = [m for m in interaction.guild.members if m.voice and m.voice.channel and not m.bot]
     if not members:
-        await interaction.followup.send("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
+        else:
+            await interaction.followup.send("⚠️ 음성채널에 있는 멤버가 없습니다.", ephemeral=True)
         return
 
     view = MemberSelectView(members)
-    await interaction.followup.send("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+
+    if not interaction.response.is_done():
+        await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
+    else:
+        await interaction.followup.send("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
 
 
 
