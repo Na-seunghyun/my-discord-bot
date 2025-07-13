@@ -1028,7 +1028,7 @@ class ChannelConfirmButton(discord.ui.Button):
             await interaction.response.send_message("⚠️ 채널을 선택해주세요.", ephemeral=True)
             return
 
-        await interaction.response.defer(thinking=True)  # 여기서 1회 응답
+        await interaction.response.defer(thinking=True)
 
         if "all" in selected:
             target_channels = [
@@ -1041,23 +1041,31 @@ class ChannelConfirmButton(discord.ui.Button):
             ]
             excluded_note = ""
 
-        moved = 0
+        moved_members = []
+
         for ch in target_channels:
             for member in ch.members:
-                if not member.bot:
-                    try:
-                        await member.move_to(vc)
-                        moved += 1
-                        await asyncio.sleep(0.5)
-                    except Exception as e:
-                        print(f"❌ {member.display_name} 이동 실패: {e}")
+                if member.bot:
+                    continue
+                if member.voice and member.voice.channel.id == vc.id:
+                    continue  # 나와 같은 채널은 스킵
+                try:
+                    await member.move_to(vc)
+                    moved_members.append(member.display_name)
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    print(f"❌ {member.display_name} 이동 실패: {e}")
 
-        if moved == 0:
+        if not moved_members:
             await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
         else:
             embed = discord.Embed(
                 title="📢 쿠치요세노쥬츠 !",
-                description=f"{interaction.user.mention} 님이 **{moved}명**을 음성채널로 소환했습니다.{excluded_note}",
+                description=(
+                    f"{interaction.user.mention} 님이 **{len(moved_members)}명**을 음성채널로 소환했습니다.\n\n"
+                    + "\n".join(f"▸ {name}" for name in moved_members)
+                    + excluded_note
+                ),
                 color=discord.Color.green()
             )
             embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
@@ -1120,25 +1128,28 @@ class MemberConfirmButton(discord.ui.Button):
             await interaction.response.send_message("⚠️ 멤버를 선택해주세요.", ephemeral=True)
             return
 
-        await interaction.response.defer(thinking=True)  # 1회 응답
+        await interaction.response.defer(thinking=True)
 
-        moved = 0
+        moved_members = []
         for member_id in selected_ids:
             member = interaction.guild.get_member(member_id)
-            if member and member.voice and member.voice.channel != vc and not member.bot:
+            if member and member.voice and member.voice.channel.id != vc.id and not member.bot:
                 try:
                     await member.move_to(vc)
-                    moved += 1
+                    moved_members.append(member.display_name)
                     await asyncio.sleep(0.5)
                 except Exception as e:
                     print(f"❌ {member.display_name} 이동 실패: {e}")
 
-        if moved == 0:
+        if not moved_members:
             await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
         else:
             embed = discord.Embed(
                 title="📢 쿠치요세노쥬츠 !",
-                description=f"{interaction.user.mention} 님이 **{moved}명**을 음성채널로 소환했습니다.",
+                description=(
+                    f"{interaction.user.mention} 님이 **{len(moved_members)}명**을 음성채널로 소환했습니다.\n\n"
+                    + "\n".join(f"▸ {name}" for name in moved_members)
+                ),
                 color=discord.Color.green()
             )
             embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/123123.gif")
