@@ -1303,11 +1303,15 @@ async def 검사(interaction: discord.Interaction):
         parts = [p.strip() for p in (member.nick or member.name).strip().split("/")]
         if len(parts) == 3 and nickname_pattern.fullmatch("/".join(parts)):
             name, game_id, year = parts
-            valid_members.append({"name": name, "game_id": game_id, "discord_id": member.id})
+            valid_members.append({
+                "name": name.strip(),
+                "game_id": game_id.strip(),
+                "discord_id": member.id
+            })
 
-    # JSON으로 저장
     with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
         json.dump(valid_members, f, ensure_ascii=False, indent=2)
+
 
 
 
@@ -1752,16 +1756,32 @@ async def 접속시간랭킹(interaction: discord.Interaction):
 
 
 
-
+import os
+import json
+import asyncio
 from discord.ext import tasks
+import discord
 
 @tasks.loop(minutes=10)
 async def auto_collect_pubg_stats():
     try:
+        # valid_pubg_ids.json 파일 없으면 자동 생성
+        if not os.path.exists("valid_pubg_ids.json"):
+            with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
+                json.dump([], f, ensure_ascii=False, indent=2)
+            print("🆕 valid_pubg_ids.json 파일을 새로 생성했습니다.")
+
+        # 파일 읽기
         with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
             members = json.load(f)
 
-        # 최근 검사한 인덱스를 기억
+        # game_id 있는 멤버만 필터링
+        valid_members = [m for m in members if m.get("game_id")]
+        if not valid_members:
+            print("⚠️ 유효한 배그 닉네임을 가진 멤버가 없습니다.")
+            return
+
+        # 최근 검사 인덱스 읽기
         index_file = "auto_index.txt"
         if os.path.exists(index_file):
             with open(index_file, "r") as f:
@@ -1769,14 +1789,18 @@ async def auto_collect_pubg_stats():
         else:
             start_idx = 0
 
-        batch_size = 3  # 10분에 3명씩 검사
-        for i in range(start_idx, min(start_idx + batch_size, len(members))):
-            m = members[i]
-            nickname = m["game_id"]
+        batch_size = 3
+
+        for i in range(batch_size):
+            idx = (start_idx + i) % len(valid_members)
+            m = valid_members[idx]
+            nickname = m["game_id"].strip()  # 공백 제거
+
             try:
                 if not can_make_request():
                     break
                 register_request()
+
                 player_id = get_player_id(nickname)
                 season_id = get_season_id()
                 stats = get_player_stats(player_id, season_id)
@@ -1793,11 +1817,10 @@ async def auto_collect_pubg_stats():
                         description=f"{m['name']}님의 전적 데이터가 자동으로 저장되었습니다!",
                         color=discord.Color.green()
                     )
-                    embed.add_field(name="배그 닉네임", value=m["game_id"], inline=True)
+                    embed.add_field(name="배그 닉네임", value=nickname, inline=True)
                     embed.set_footer(text="※ 오덕봇 자동 수집 기능으로 저장됨")
 
                     try:
-                        # 멘션 포함 전송
                         user = await bot.fetch_user(m["discord_id"])
                         await channel.send(content=f"{user.mention}", embed=embed)
                     except Exception as e:
@@ -1805,14 +1828,16 @@ async def auto_collect_pubg_stats():
 
             except Exception as e:
                 print(f"❌ 저장 실패 ({nickname}): {e}")
+
             await asyncio.sleep(5)
 
-        next_idx = (start_idx + batch_size) % len(members)
+        next_idx = (start_idx + batch_size) % len(valid_members)
         with open(index_file, "w") as f:
             f.write(str(next_idx))
 
     except Exception as e:
         print(f"❗ 자동 수집 오류: {e}")
+
 
 
 
