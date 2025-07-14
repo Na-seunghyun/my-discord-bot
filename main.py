@@ -106,9 +106,10 @@ def add_balance(user_id, amount):
     current = get_balance(user_id)
     set_balance(user_id, current + amount)
 
-
-
-
+@tasks.loop(hours=1)
+async def auto_update_valid_ids():
+    for guild in bot.guilds:
+        await update_valid_pubg_ids(guild)
 
 
 
@@ -164,6 +165,27 @@ async def on_ready():
         print(f"🔁 슬래시 커맨드 등록됨: {len(synced)}개")
     except Exception as e:
         print(f"❌ 슬래시 명령 동기화 실패: {e}")
+
+
+
+
+
+@bot.event
+async def on_member_update(before, after):
+    if before.nick != after.nick:
+        print(f"🔄 닉네임 변경 감지: {before.display_name} → {after.display_name}")
+        await update_valid_pubg_ids(after.guild)
+
+
+
+
+
+
+
+
+
+
+
 
 @bot.event
 async def on_message(message):
@@ -512,7 +534,7 @@ async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
 
             # 메시지 보내기
             if text_channel is None:
-                text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+                text_channel = discord.utils.get(member.guild.text_channels, name="봇알림")
 
             if text_channel:
                 await text_channel.send(f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 자동 퇴장 처리되었습니다.")
@@ -539,12 +561,13 @@ async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
 @bot.event
 async def on_ready():
     print(f"✅ 봇 온라인: {bot.user.name}")
+    auto_update_valid_ids.start()  # ✅ 이 줄 추가!
 
     await asyncio.sleep(3)  # 잠깐 대기: on_voice_state_update에서 중복 실행되는 것 방지
 
     for guild in bot.guilds:
         bap_channel = discord.utils.get(guild.voice_channels, name="밥좀묵겠습니다")
-        text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+        text_channel = discord.utils.get(guild.text_channels, name="봇알림")
 
         if bap_channel:
             for member in bap_channel.members:
@@ -573,7 +596,7 @@ async def on_voice_state_update(member, before, after):
         return
 
     bap_channel = discord.utils.get(member.guild.voice_channels, name="밥좀묵겠습니다")
-    text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+    text_channel = discord.utils.get(member.guild.text_channels, name="봇알림")
 
     # 입장 시
     if after.channel == bap_channel and before.channel != bap_channel:
@@ -619,7 +642,7 @@ async def on_voice_state_update(member, before, after):
         if after.channel.name == "대기방":
             last_sent = waiting_room_message_cache.get(member.id)
             if not last_sent or (now_utc - last_sent) > timedelta(seconds=30):
-                text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+                text_channel = discord.utils.get(member.guild.text_channels, name="봇알림")
                 if text_channel:
                     await text_channel.send(f"{member.mention} 나도 게임하고싶어! 나 도 끼 워 줘!")
                     waiting_room_message_cache[member.id] = now_utc
@@ -643,7 +666,7 @@ async def on_voice_state_update(member, before, after):
     # 입장 시점에만 아래 메시지 체크
     if before.channel is None and after.channel and after.channel.name in MONITORED_CHANNEL_NAMES:
         if all_empty_since and (now - all_empty_since).total_seconds() >= 3600 and not notified_after_empty:
-            text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+            text_channel = discord.utils.get(guild.text_channels, name="봇알림")
             if text_channel:
                 embed = discord.Embed(
                     title="🚀 첫 배그 포문이 열립니다!",
@@ -754,7 +777,7 @@ async def on_voice_state_update(member, before, after):
     if not before.self_stream and after.self_stream and after.channel is not None:
         if member.id not in streaming_members:
             streaming_members.add(member.id)
-            text_channel = discord.utils.get(member.guild.text_channels, name="자유채팅방")
+            text_channel = discord.utils.get(member.guild.text_channels, name="봇알림")
             if text_channel:
                 embed = discord.Embed(
                     title="📺 방송 시작 알림!",
@@ -775,7 +798,7 @@ async def on_voice_state_update(member, before, after):
 @tasks.loop(minutes=30)
 async def check_voice_channels_for_streaming():
     for guild in bot.guilds:
-        text_channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+        text_channel = discord.utils.get(guild.text_channels, name="봇알림")
         if not text_channel:
             continue
 
@@ -921,11 +944,11 @@ def get_player_stats(player_id, season_id):
     response.raise_for_status()
     return response.json()
 
-def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None):
-    season_id = get_season_id()  # 현재 시즌 ID 가져오기
-
+def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None, discord_id=None):
+    season_id = get_season_id()
     data_to_save = {
         "nickname": nickname,
+        "discord_id": str(discord_id),
         "timestamp": datetime.now().isoformat()
     }
 
@@ -954,7 +977,6 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None)
             "kills": kills
         }
 
-
     if ranked_stats and "data" in ranked_stats:
         ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
         squad_rank = ranked_modes.get("squad")
@@ -976,22 +998,21 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None)
             stored_season_id = None
             leaderboard = []
 
-        # 시즌이 바뀌었으면 초기화
         if stored_season_id != season_id:
             leaderboard = []
 
-        # 동일 닉네임이면 기존 데이터 제거 후 갱신
-        leaderboard = [p for p in leaderboard if p["nickname"] != nickname]
+        leaderboard = [
+            p for p in leaderboard
+            if p.get("nickname") != nickname and p.get("discord_id") != str(discord_id)
+        ]
         leaderboard.append(data_to_save)
 
         with open(leaderboard_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "season_id": season_id,
-                "players": leaderboard
-            }, f, ensure_ascii=False, indent=2)
-
+            json.dump({"season_id": season_id, "players": leaderboard}, f, ensure_ascii=False, indent=2)
+        print(f"✅ 저장 성공: {nickname}")
     except Exception as e:
-        print(f"❌ 저장 중 오류: {e}")
+        print(f"❌ 저장 실패: {nickname} | 이유: {e}")
+
 
 
 
@@ -1150,7 +1171,8 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         best_rank_sub_tier = ""
 
         # ✅ 이 줄 추가하세요
-        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats)
+        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id)
+
 
         # 랭크 전적 임베드 필드 추가
         if ranked_stats and "data" in ranked_stats:
@@ -1303,9 +1325,45 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
 
 
+async def update_valid_pubg_ids(guild):
+    valid_members = []
+    for member in guild.members:
+        if member.bot:
+            continue
+        parts = (member.nick or member.name).strip().split("/")
+        if len(parts) == 3 and nickname_pattern.fullmatch("/".join(p.strip() for p in parts)):
+            name, game_id, _ = [p.strip() for p in parts]
+            is_guest = "(게스트)" in (member.nick or member.name)
+            valid_members.append({
+                "name": name,
+                "game_id": game_id,
+                "discord_id": member.id,
+                "is_guest": is_guest
+            })
+    with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
+        json.dump(valid_members, f, ensure_ascii=False, indent=2)
+    print(f"✅ valid_pubg_ids.json 갱신 완료 (총 {len(valid_members)}명)")
 
 
+async def update_valid_pubg_ids(guild):
+    valid_members = []
+    for member in guild.members:
+        if member.bot:
+            continue
+        parts = (member.nick or member.name).strip().split("/")
+        if len(parts) == 3 and nickname_pattern.fullmatch("/".join(p.strip() for p in parts)):
+            name, game_id, _ = [p.strip() for p in parts]
+            is_guest = "(게스트)" in (member.nick or member.name)
+            valid_members.append({
+                "name": name,
+                "game_id": game_id,
+                "discord_id": member.id,
+                "is_guest": is_guest
+            })
 
+    with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
+        json.dump(valid_members, f, ensure_ascii=False, indent=2)
+    print("✅ valid_pubg_ids.json 자동 갱신 완료")
 
 
 
@@ -1340,29 +1398,10 @@ async def 검사(interaction: discord.Interaction):
     await interaction.followup.send(f"🔍 검사 완료: {count}명 형식 오류 발견", ephemeral=True)
 
 
+    await update_valid_pubg_ids(interaction.guild)
 
 
 
-
-    
-    valid_members = []
-    for member in interaction.guild.members:
-        if member.bot:
-            continue
-        parts = [p.strip() for p in (member.nick or member.name).strip().split("/")]
-        if len(parts) == 3 and nickname_pattern.fullmatch("/".join(parts)):
-            name, game_id, year = parts
-            is_guest = "(게스트)" in (member.nick or member.name)  # 닉네임에 '(게스트)' 포함 여부 체크
-            valid_members.append({
-                "name": name.strip(),
-                "game_id": game_id.strip(),
-                "discord_id": member.id,
-                "is_guest": is_guest
-            })
-
-
-    with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
-        json.dump(valid_members, f, ensure_ascii=False, indent=2)
 
 
 
