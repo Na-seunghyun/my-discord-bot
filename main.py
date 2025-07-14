@@ -1807,7 +1807,6 @@ async def 접속시간랭킹(interaction: discord.Interaction):
     )
 
 
-
 import os
 import json
 import asyncio
@@ -1815,8 +1814,11 @@ from datetime import datetime
 from discord.ext import tasks
 import discord
 
+failed_members = []  # 실패한 멤버를 저장하는 리스트 (멤버 dict 형태)
+
 @tasks.loop(seconds=0)  # 내부에서 sleep으로 텀 조절
 async def auto_collect_pubg_stats():
+    global failed_members
     try:
         # valid_pubg_ids.json 파일 없으면 자동 생성
         if not os.path.exists("valid_pubg_ids.json"):
@@ -1868,6 +1870,9 @@ async def auto_collect_pubg_stats():
             save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats)
             print(f"✅ 저장 완료: {nickname}")
 
+            # 저장 성공 시 실패 리스트에서 해당 멤버 제거 (discord_id 기준)
+            failed_members = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
+
             if channel:
                 embed = discord.Embed(
                     title="📦 전적 자동 저장 완료!",
@@ -1886,6 +1891,10 @@ async def auto_collect_pubg_stats():
         except Exception as e:
             # 조회 실패도 로그만 남기고 패스 (사이클 진행에 영향 없음)
             print(f"❌ 저장 실패 ({nickname}): {e}")
+
+            # 실패 리스트에 이미 있으면 중복 추가 방지
+            if not any(fm["discord_id"] == m["discord_id"] for fm in failed_members):
+                failed_members.append(m)
 
         # 인덱스는 실패 여부와 무관하게 항상 증가 및 저장
         next_idx = (start_idx + 1) % len(valid_members)
@@ -1910,6 +1919,18 @@ async def auto_collect_pubg_stats():
             else:
                 print("오늘은 이미 알림을 보냈습니다.")
 
+            # 실패 멤버 리스트 출력 및 파일 저장
+            if failed_members:
+                fail_names = [fm["name"] for fm in failed_members]
+                print(f"⚠️ 저장 실패한 멤버 리스트: {fail_names}")
+
+                with open("failed_members.json", "w", encoding="utf-8") as f:
+                    json.dump(failed_members, f, ensure_ascii=False, indent=2)
+            else:
+                print("👍 저장 실패한 멤버 없습니다.")
+
+            failed_members.clear()
+
             print("✔️ 모든 멤버 조회 완료, 3시간 대기")
             await asyncio.sleep(60 * 60 * 3)  # 3시간 대기
         else:
@@ -1919,6 +1940,7 @@ async def auto_collect_pubg_stats():
     except Exception as e:
         print(f"❗ 자동 수집 오류: {e}")
         await asyncio.sleep(60)  # 에러 발생 시 1분 대기
+
 
 
 
