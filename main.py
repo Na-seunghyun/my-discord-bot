@@ -2262,16 +2262,80 @@ async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금�
 
 @bot.event
 async def on_ready():
-    guild = discord.Object(id=GUILD_ID)
+    print(f"✅ 봇 로그인: {bot.user} ({bot.user.id})")
+
+    # 슬래시 명령 동기화
+    guild_obj = discord.Object(id=GUILD_ID)
     try:
-        synced = await tree.sync(guild=guild)
-        print(f"✅ 봇 로그인: {bot.user}")
+        synced = await tree.sync(guild=guild_obj)
         print(f"🔁 슬래시 커맨드 등록됨: {len(synced)}개")
     except Exception as e:
         print(f"❌ 슬래시 명령 동기화 실패: {e}")
 
-    check_voice_channels_for_streaming.start()
-    auto_collect_pubg_stats.start()  # ⬅️ 이 줄을 여기 추가
+    # 초대 캐시 초기화
+    invites_cache.clear()
+    for guild in bot.guilds:
+        try:
+            invites = await guild.invites()
+            invites_cache[guild.id] = {invite.code: invite for invite in invites}
+        except Exception as e:
+            print(f"❌ 초대 캐시 실패 ({guild.name}): {e}")
+    print("📨 초대 캐시 초기화 완료!")
+
+    # 자동 닉네임 검사 및 저장
+    target_guild = discord.utils.get(bot.guilds, id=GUILD_ID)
+    if target_guild:
+        try:
+            print("🔄 valid_pubg_ids.json 자동 갱신 중...")
+            await update_valid_pubg_ids(target_guild)
+            print("✅ valid_pubg_ids.json 자동 갱신 완료")
+        except Exception as e:
+            print(f"❌ 유효 닉네임 자동 갱신 실패: {e}")
+    else:
+        print(f"❌ GUILD_ID {GUILD_ID}에 해당하는 서버를 찾을 수 없습니다.")
+
+    # 자동 전적 수집 루프 시작
+    try:
+        auto_collect_pubg_stats.start()
+        print("📦 전적 자동 수집 루프 시작됨")
+    except RuntimeError:
+        print("⚠️ auto_collect_pubg_stats 루프는 이미 실행 중입니다.")
+
+    # 기타 루프
+    try:
+        check_voice_channels_for_streaming.start()
+    except Exception as e:
+        print(f"❌ check_voice_channels_for_streaming 루프 실행 실패: {e}")
+
+    try:
+        auto_update_valid_ids.start()
+    except Exception:
+        print("⚠️ auto_update_valid_ids 루프는 이미 실행 중일 수 있음.")
+
+    # 음성 채널 자동 퇴장 타이머
+    await asyncio.sleep(3)  # 중복 방지를 위한 대기
+    for guild in bot.guilds:
+        bap_channel = discord.utils.get(guild.voice_channels, name="밥좀묵겠습니다")
+        text_channel = discord.utils.get(guild.text_channels, name="봇알림")
+
+        if bap_channel:
+            for member in bap_channel.members:
+                if member.bot:
+                    continue
+                if member.id in auto_disconnect_tasks:
+                    continue
+
+                try:
+                    await member.send(
+                        f"🍚 {member.display_name}님, '밥좀묵겠습니다' 채널에 입장 중입니다. 20분 후 자동 퇴장됩니다.")
+                except Exception as e:
+                    print(f"DM 전송 실패 (재시작 시): {member.display_name} - {e}")
+
+                task = asyncio.create_task(
+                    auto_disconnect_after_timeout(member, bap_channel, text_channel))
+                auto_disconnect_tasks[member.id] = task
+                print(f"🔄 재시작 후 타이머 적용됨: {member.display_name}")
+
 
 
 
