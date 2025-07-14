@@ -1811,6 +1811,7 @@ async def 접속시간랭킹(interaction: discord.Interaction):
 import os
 import json
 import asyncio
+import datetime
 from discord.ext import tasks
 import discord
 
@@ -1849,6 +1850,9 @@ async def auto_collect_pubg_stats():
         m = valid_members[start_idx]
         nickname = m["game_id"].strip()  # 공백 제거
 
+        # 채널 미리 할당 (notify 시점에도 필요)
+        channel = discord.utils.get(bot.get_all_channels(), name="자동수집")
+
         try:
             if not can_make_request():
                 print("⏳ 요청 제한으로 대기 중")
@@ -1864,8 +1868,6 @@ async def auto_collect_pubg_stats():
             save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats)
             print(f"✅ 저장 완료: {nickname}")
 
-            # 자유채팅방 채널 찾기
-            channel = discord.utils.get(bot.get_all_channels(), name="자동수집")
             if channel:
                 embed = discord.Embed(
                     title="📦 전적 자동 저장 완료!",
@@ -1882,15 +1884,16 @@ async def auto_collect_pubg_stats():
                     print(f"❌ 멘션 전송 실패: {e}")
 
         except Exception as e:
+            # 조회 실패도 로그만 남기고 패스 (사이클 진행에 영향 없음)
             print(f"❌ 저장 실패 ({nickname}): {e}")
 
-        # 다음 인덱스 계산
+        # 인덱스는 실패 여부와 무관하게 항상 증가 및 저장
         next_idx = (start_idx + 1) % len(valid_members)
         with open(index_file, "w") as f:
             f.write(str(next_idx))
 
         if next_idx == 0:
-            # 모든 멤버 조회 완료 → 하루 1회 알림 발송 및 3시간 대기
+            # 한 사이클 완료 → 하루 1회 알림 및 3시간 대기
             today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
             notify_file = "last_notify_date.txt"
 
@@ -1916,6 +1919,13 @@ async def auto_collect_pubg_stats():
     except Exception as e:
         print(f"❗ 자동 수집 오류: {e}")
         await asyncio.sleep(60)  # 에러 발생 시 1분 대기
+
+
+
+
+
+
+
 
 daily_claims = {}
 
