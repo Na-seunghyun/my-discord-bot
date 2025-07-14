@@ -68,6 +68,52 @@ BADWORDS_FILE = "badwords.txt"
 
 
 
+
+
+# 🎲 도박 기능용 상수 및 유틸
+BALANCE_FILE = "balance.json"
+
+def ensure_balance_file():
+    if not os.path.exists(BALANCE_FILE):
+        with open(BALANCE_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+
+def load_balances():
+    ensure_balance_file()
+    with open(BALANCE_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_balances(data):
+    # 1,000명 이상 시 가장 오래된 데이터 제거 (최대 1000명 유지)
+    if len(data) > 1000:
+        data = dict(sorted(data.items(), key=lambda x: x[1].get("last_updated", ""), reverse=True)[:1000])
+    with open(BALANCE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+def get_balance(user_id):
+    data = load_balances()
+    return data.get(str(user_id), {}).get("amount", 0)
+
+def set_balance(user_id, amount):
+    data = load_balances()
+    data[str(user_id)] = {
+        "amount": amount,
+        "last_updated": datetime.utcnow().isoformat()
+    }
+    save_balances(data)
+
+def add_balance(user_id, amount):
+    current = get_balance(user_id)
+    set_balance(user_id, current + amount)
+
+
+
+
+
+
+
+
+
 WELCOME_CHANNEL_NAME = "자유채팅방"  # 자유롭게 바꿔도 됨
 
 
@@ -1871,6 +1917,30 @@ async def auto_collect_pubg_stats():
         print(f"❗ 자동 수집 오류: {e}")
         await asyncio.sleep(60)  # 에러 발생 시 1분 대기
 
+
+# 💰 하루에 한 번 돈을 지급받는 명령어
+daily_claims = {}
+
+@tree.command(name="돈줘", description="하루에 한 번 5000원 지급", guild=discord.Object(id=GUILD_ID))
+async def 돈줘(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    today = datetime.now(KST).date()
+
+    if daily_claims.get(user_id) == today:
+        await interaction.response.send_message("❌ 오늘은 이미 받으셨습니다! 내일 다시 시도해주세요.", ephemeral=True)
+        return
+
+    add_balance(user_id, 5000)
+    daily_claims[user_id] = today
+    await interaction.response.send_message("💰 5000원이 지급되었습니다. 도박은 책임감 있게!", ephemeral=True)
+
+
+@tree.command(name="잔액", description="유저의 현재 보유 금액을 확인합니다", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(대상="조회할 유저 (선택사항)")
+async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
+    user = 대상 or interaction.user
+    balance = get_balance(user.id)
+    await interaction.response.send_message(f"💵 {user.display_name}님의 잔액은 **{balance}원**입니다.", ephemeral=True)
 
 
 
