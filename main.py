@@ -387,10 +387,14 @@ async def on_member_join(member):
                 inviter = guild.get_member(inviter_id)
             break
 
-    # 임베드 작성
+    # 입장 시간
     KST = timezone(timedelta(hours=9))
-    joined_time = datetime.now(tz=KST).strftime("%Y-%m-%d %H:%M:%S")
+    joined_dt = datetime.now(tz=KST)
+    timestamp = int(joined_dt.timestamp())
+    formatted_time = joined_dt.strftime("%Y-%m-%d %H:%M:%S")
+    relative_time = f"<t:{timestamp}:R>"  # 예: 1분 전
 
+    # 임베드 작성
     embed = discord.Embed(
         title="🎊 신입 멤버 출몰!",
         description=f"😎 {member.mention} 님이 **화려하게 입장!** 🎉",
@@ -404,11 +408,12 @@ async def on_member_join(member):
     else:
         embed.add_field(name="초대한 사람", value="알 수 없음", inline=True)
 
-    embed.add_field(name="입장 시간", value=joined_time, inline=True)
+    embed.add_field(name="입장 시간", value=f"{formatted_time} ({relative_time})", inline=True)
 
     message = await channel.send(embed=embed)
     view = WelcomeButton(member=member, original_message=message)
     await message.edit(view=view)
+
 
 
 
