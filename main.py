@@ -2034,6 +2034,37 @@ class LotteryView(View):
 
 
 
+@tree.command(name="도박순위", description="도박 잔액 순위 TOP 10", guild=discord.Object(id=GUILD_ID))
+async def 도박순위(interaction: discord.Interaction):
+    data = load_balances()
+    sorted_list = sorted(data.items(), key=lambda x: x[1].get("amount", 0), reverse=True)[:10]
+
+    embed = discord.Embed(title="💰 도박 순위 TOP 10", color=discord.Color.gold())
+    for rank, (uid, info) in enumerate(sorted_list, start=1):
+        try:
+            user = await bot.fetch_user(int(uid))
+            name = user.display_name
+        except:
+            name = f"Unknown({uid})"
+        embed.add_field(name=f"{rank}위 - {name}", value=f"{info['amount']}원", inline=False)
+
+    await interaction.response.send_message(embed=embed)
+
+
+
+@tree.command(name="돈지급", description="관리자가 유저에게 돈을 지급합니다", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(대상="돈을 지급할 유저", 금액="지급할 금액")
+async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금액: int):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ 이 명령어는 관리자만 사용할 수 있습니다.", ephemeral=True)
+
+    if 금액 <= 0:
+        return await interaction.response.send_message("❌ 1원 이상만 지급할 수 있습니다.", ephemeral=True)
+
+    add_balance(str(대상.id), 금액)
+    await interaction.response.send_message(f"✅ {대상.mention}님에게 {금액}원을 지급했습니다.", ephemeral=True)
+
+
 
 @bot.event
 async def on_ready():
