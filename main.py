@@ -2193,15 +2193,18 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
     # 베팅 차감
     add_balance(user_id, -베팅액)
 
+    # 슬래시 명령 처리 중이라는 응답 먼저 보내기
+    await interaction.response.defer()
+
     # 초기 메시지 전송
-    message = await interaction.response.send_message("🎰 슬롯머신 작동 중...", wait=True)
+    message = await interaction.followup.send("🎰 슬롯머신 작동 중...", wait=True)
 
     # 애니메이션 효과: 한 칸씩 보여주기
     result = []
     for i in range(5):
         result.append(random.choice(symbols))
         display = " | ".join(result + ["⬜"] * (5 - len(result)))
-        await message.edit_original_response(content=f"🎰 **슬롯머신 작동 중...**\n| {display} |")
+        await message.edit(content=f"🎰 **슬롯머신 작동 중...**\n| {display} |")
         await asyncio.sleep(0.7)
 
     result_str = " | ".join(result)
@@ -2231,11 +2234,12 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
     current_balance = get_balance(user_id)
 
     # 최종 메시지 업데이트
-    await message.edit_original_response(
+    await message.edit(
         content=(
             f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n{outcome}\n💵 현재 잔액: {current_balance:,}원"
         )
     )
+
 
 
 
