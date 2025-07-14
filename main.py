@@ -2073,9 +2073,14 @@ class LotteryButton(Button):
 class LotteryView(View):
     def __init__(self, user_id, 베팅액):
         super().__init__(timeout=30)
+        self.stopped = False
         correct = random.choice(["🎯", "🍀", "🎲"])
         for symbol in ["🎯", "🍀", "🎲"]:
             self.add_item(LotteryButton(label=symbol, correct_slot=correct, 베팅액=베팅액, user_id=user_id))
+
+    def stop(self):
+        self.stopped = True
+        return super().stop()
 
 @tree.command(name="복권", description="복권 3개 중 하나를 선택해보세요", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
