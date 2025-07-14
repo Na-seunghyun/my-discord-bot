@@ -944,7 +944,22 @@ def get_player_stats(player_id, season_id):
     response.raise_for_status()
     return response.json()
 
+
+import time
+
+recent_saves = {}
+
+
 def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None, discord_id=None):
+    key = f"{nickname}_{discord_id}"
+    now = time.time()
+    
+    # 30초 이내에 같은 사용자 저장 시 무시
+    if key in recent_saves and now - recent_saves[key] < 30:
+        print(f"⏹ 중복 저장 방지: {nickname}")
+        return
+    recent_saves[key] = now
+
     season_id = get_season_id()
     data_to_save = {
         "nickname": nickname,
