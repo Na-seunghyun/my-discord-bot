@@ -1767,7 +1767,6 @@ import json
 import asyncio
 from discord.ext import tasks
 import discord
-import datetime
 
 @tasks.loop(seconds=0)  # 내부에서 sleep으로 텀 조절
 async def auto_collect_pubg_stats():
