@@ -2054,6 +2054,47 @@ async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액:
     )
     await interaction.response.send_message(embed=embed)
 
+from discord.ui import View, Button
+
+class LotteryButton(Button):
+    def __init__(self, label, correct_slot, 베팅액, user_id):
+        super().__init__(label=label, style=discord.ButtonStyle.primary)
+        self.correct_slot = correct_slot
+        self.베팅액 = 베팅액
+        self.user_id = user_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("❌ 본인만 참여할 수 있습니다.", ephemeral=True)
+        if self.view.stopped:
+            return await interaction.response.send_message("❌ 이미 복권이 종료되었습니다.", ephemeral=True)
+
+        self.view.stop()
+        embed = discord.Embed(color=discord.Color.green())
+
+        if self.label == self.correct_slot:
+            add_balance(self.user_id, self.베팅액 * 2)
+            embed.title = "🎉 당첨!"
+            embed.description = f"축하합니다! **{self.베팅액 * 2:,}원**을 획득했습니다!"
+        else:
+            embed.title = "💔 꽝!"
+            embed.description = f"아쉽지만 탈락입니다.\n**{self.베팅액:,}원**을 잃었습니다."
+
+        embed.set_footer(text=f"현재 잔액: {get_balance(self.user_id):,}원")
+        await interaction.response.edit_message(embed=embed, view=None)
+
+class LotteryView(View):
+    def __init__(self, user_id, 베팅액):
+        super().__init__(timeout=30)
+        self.stopped = False
+        correct = random.choice(["🎯", "🍀", "🎲"])
+        for symbol in ["🎯", "🍀", "🎲"]:
+            self.add_item(LotteryButton(label=symbol, correct_slot=correct, 베팅액=베팅액, user_id=user_id))
+
+    def stop(self):
+        self.stopped = True
+        return super().stop()
+
 
 @tree.command(name="복권", description="복권 3개 중 하나를 선택해보세요", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
