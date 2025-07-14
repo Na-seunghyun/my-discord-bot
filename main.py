@@ -1816,14 +1816,14 @@ import discord
 
 failed_members = []
 
-
-# 시작 시 실패 멤버 불러오기
 if os.path.exists("failed_members.json"):
     with open("failed_members.json", "r", encoding="utf-8") as f:
         try:
             failed_members = json.load(f)
-        except:
+        except Exception:
             failed_members = []
+
+daily_claims = {}
 
 @tree.command(name="저장실패", description="저장에 실패한 멤버들을 조회합니다.", guild=discord.Object(id=GUILD_ID))
 async def 저장실패(interaction: discord.Interaction):
@@ -1951,8 +1951,6 @@ async def auto_collect_pubg_stats():
 
 
 
-
-daily_claims = {}
 
 
 @tree.command(name="돈줘", description="하루에 한 번 5000원 지급", guild=discord.Object(id=GUILD_ID))
