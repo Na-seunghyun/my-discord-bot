@@ -1935,6 +1935,14 @@ KST = timezone(timedelta(hours=9))
 daily_claims = {}
 
 
+def create_embed(title: str, description: str, color: discord.Color, user_id: str = None) -> discord.Embed:
+    embed = discord.Embed(title=title, description=description, color=color)
+    if user_id:
+        embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
+    return embed
+
+
+
 # ✅ 돈줘
 @tree.command(name="돈줘", description="하루에 한 번 5000원 지급", guild=discord.Object(id=GUILD_ID))
 async def 돈줘(interaction: discord.Interaction):
