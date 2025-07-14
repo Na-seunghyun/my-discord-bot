@@ -1236,6 +1236,19 @@ async def 시즌랭킹(interaction: discord.Interaction):
         embed.add_field(name="🥇 랭크 포인트", value="\n".join(rank_msg), inline=False)
 
     embed.set_footer(text="※ 기준: 저장된 유저의 현재 시즌 전적")
+    
+       # ⬇️ 여기 기존 한 줄을 아래 try~except 블록으로 바꿔줘
+    try:
+        with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
+            valid_members = json.load(f)
+        embed.set_footer(
+            text=f"※ 기준: 저장된 유저 {len(players)}명 / 총 적합 인원 {len(valid_members)}명"
+        )
+    except:
+        embed.set_footer(
+            text="※ 기준: 저장된 유저 전적"
+        )
+
     await interaction.followup.send(embed=embed)
 
 
@@ -1276,6 +1289,33 @@ async def 검사(interaction: discord.Interaction):
     # 형식 오류 안내 (ephemeral)
     await interaction.followup.send(f"🔍 검사 완료: {count}명 형식 오류 발견", ephemeral=True)
 
+
+
+
+
+
+    
+    # 닉네임 형식이 맞는 유저들 저장
+    valid_members = []
+    for member in interaction.guild.members:
+        if member.bot:
+            continue
+        parts = [p.strip() for p in (member.nick or member.name).strip().split("/")]
+        if len(parts) == 3 and nickname_pattern.fullmatch("/".join(parts)):
+            name, game_id, year = parts
+            valid_members.append({"name": name, "game_id": game_id, "discord_id": member.id})
+
+    # JSON으로 저장
+    with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
+        json.dump(valid_members, f, ensure_ascii=False, indent=2)
+
+
+
+
+
+
+    
+    
     # Embed 준비
     fields = []
     for year, members in sorted(year_groups.items(), key=lambda x: x[0]):
@@ -1713,6 +1753,70 @@ async def 접속시간랭킹(interaction: discord.Interaction):
 
 
 
+from discord.ext import tasks
+
+@tasks.loop(minutes=10)
+async def auto_collect_pubg_stats():
+    try:
+        with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
+            members = json.load(f)
+
+        # 최근 검사한 인덱스를 기억
+        index_file = "auto_index.txt"
+        if os.path.exists(index_file):
+            with open(index_file, "r") as f:
+                start_idx = int(f.read().strip())
+        else:
+            start_idx = 0
+
+        batch_size = 3  # 10분에 3명씩 검사
+        for i in range(start_idx, min(start_idx + batch_size, len(members))):
+            m = members[i]
+            nickname = m["game_id"]
+            try:
+                if not can_make_request():
+                    break
+                register_request()
+                player_id = get_player_id(nickname)
+                season_id = get_season_id()
+                stats = get_player_stats(player_id, season_id)
+                ranked_stats = get_player_ranked_stats(player_id, season_id)
+                squad_metrics, _ = extract_squad_metrics(stats)
+                save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats)
+                print(f"✅ 저장 완료: {nickname}")
+
+                # 자유채팅방 채널 찾기
+                channel = discord.utils.get(bot.get_all_channels(), name="자유채팅방")
+                if channel:
+                    embed = discord.Embed(
+                        title="📦 전적 자동 저장 완료!",
+                        description=f"{m['name']}님의 전적 데이터가 자동으로 저장되었습니다!",
+                        color=discord.Color.green()
+                    )
+                    embed.add_field(name="배그 닉네임", value=m["game_id"], inline=True)
+                    embed.set_footer(text="※ 오덕봇 자동 수집 기능으로 저장됨")
+
+                    try:
+                        # 멘션 포함 전송
+                        user = await bot.fetch_user(m["discord_id"])
+                        await channel.send(content=f"{user.mention}", embed=embed)
+                    except Exception as e:
+                        print(f"❌ 멘션 전송 실패: {e}")
+
+            except Exception as e:
+                print(f"❌ 저장 실패 ({nickname}): {e}")
+            await asyncio.sleep(5)
+
+        next_idx = (start_idx + batch_size) % len(members)
+        with open(index_file, "w") as f:
+            f.write(str(next_idx))
+
+    except Exception as e:
+        print(f"❗ 자동 수집 오류: {e}")
+
+
+
+
 @bot.event
 async def on_ready():
     guild = discord.Object(id=GUILD_ID)
@@ -1724,7 +1828,7 @@ async def on_ready():
         print(f"❌ 슬래시 명령 동기화 실패: {e}")
 
     check_voice_channels_for_streaming.start()
-
+    auto_collect_pubg_stats.start()  # ⬅️ 이 줄을 여기 추가
 
 
 
