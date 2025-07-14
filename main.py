@@ -156,18 +156,6 @@ def censor_badwords_regex(text, badword_patterns):
         censored_text = pattern.sub("***", censored_text)
     return censored_text
 
-@bot.event
-async def on_ready():
-    guild = discord.Object(id=GUILD_ID)
-    try:
-        synced = await tree.sync(guild=guild)
-        print(f"✅ 봇 로그인: {bot.user}")
-        print(f"🔁 슬래시 커맨드 등록됨: {len(synced)}개")
-    except Exception as e:
-        print(f"❌ 슬래시 명령 동기화 실패: {e}")
-
-
-
 
 
 @bot.event
@@ -435,14 +423,6 @@ class WelcomeButton(discord.ui.View):
 
 
 @bot.event
-async def on_ready():
-    # 서버마다 초대 링크 캐싱 (invite 객체 그대로 저장)
-    for guild in bot.guilds:
-        invites = await guild.invites()
-        invites_cache[guild.id] = {invite.code: invite for invite in invites}
-    print("초대 캐시 초기화 완료!")
-
-@bot.event
 async def on_member_join(member):
     guild = member.guild
     channel = discord.utils.get(guild.text_channels, name=WELCOME_CHANNEL_NAME)
@@ -556,37 +536,6 @@ async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
 
 
 
-
-
-@bot.event
-async def on_ready():
-    print(f"✅ 봇 온라인: {bot.user.name}")
-    auto_update_valid_ids.start()  # ✅ 이 줄 추가!
-
-    await asyncio.sleep(3)  # 잠깐 대기: on_voice_state_update에서 중복 실행되는 것 방지
-
-    for guild in bot.guilds:
-        bap_channel = discord.utils.get(guild.voice_channels, name="밥좀묵겠습니다")
-        text_channel = discord.utils.get(guild.text_channels, name="봇알림")
-
-        if bap_channel:
-            for member in bap_channel.members:
-                if member.bot:
-                    continue
-                if member.id in auto_disconnect_tasks:
-                    continue  # 이미 타이머가 있다면 중복 방지
-
-                # DM 전송
-                try:
-                    await member.send(
-                        f"🍚 {member.display_name}님, '밥좀묵겠습니다' 채널에 입장 중입니다. 20분 후 자동 퇴장됩니다.")
-                except Exception as e:
-                    print(f"DM 전송 실패 (재시작 시): {member.display_name} - {e}")
-
-                task = asyncio.create_task(
-                    auto_disconnect_after_timeout(member, bap_channel, text_channel))
-                auto_disconnect_tasks[member.id] = task
-                print(f"🔄 재시작 후 타이머 적용됨: {member.display_name}")
 
 
 @bot.event
