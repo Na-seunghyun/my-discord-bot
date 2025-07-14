@@ -270,138 +270,50 @@ class WelcomeButton(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
 
         messages = [
-            f"🎉 {interaction.user.mention} 님이 {self.member.mention} 님을 환영하며 춤을 춥니다! 🕺💃",
-            f"⚡️ {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 파워빔을 쏩니다! ✨",
-            f"☕️ {interaction.user.mention} 님이 {self.member.mention} 님을 위해 커피 한 잔 준비했어요 😎",
-            f"🪄 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영의 마법을 부렸어요!",
-            f"🎆 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 폭죽을 터뜨렸어요!",
-            f"🔥 {interaction.user.mention} 님이 {self.member.mention} 님과 환영 댄스 배틀을 시작합니다!",
-            f"🍔 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 햄버거를 건네줬어요!",
-            f"🎤 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 세레나데를 불러줬어요!",
-            f"🌀 {interaction.user.mention} 님이 {self.member.mention} 님 환영 빙글빙글 돌았어요!",
-            f"🚩 {interaction.user.mention} 님이 {self.member.mention} 님 환영 깃발을 흔들었어요!"
+            f"🎉 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 폭죽을 터뜨렸어요!",
+            f"🕺 {interaction.user.mention} 님과 {self.member.mention} 님이 환영 댄스를 춥니다!",
+            f"🎤 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 노래를 불러줍니다!",
+            f"🍪 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 쿠키를 건넸어요!",
+            f"🌟 {interaction.user.mention} 님이 {self.member.mention} 님을 위한 별빛을 뿌렸습니다!",
+            f"🚀 {interaction.user.mention} 님이 {self.member.mention} 님을 우주로 환영합니다!",
+            f"🪄 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 마법을 부렸어요!",
+            f"📸 {interaction.user.mention} 님이 {self.member.mention} 님과 환영 셀카 찰칵!",
+            f"🍔 {interaction.user.mention} 님이 {self.member.mention} 님에게 버거 한 입!",
+            f"💃 {interaction.user.mention} 님이 {self.member.mention} 님을 위해 춤을 춰요!",
+            f"🎈 {interaction.user.mention} 님이 {self.member.mention} 님을 향해 풍선을 날렸어요!",
+            f"🔥 {interaction.user.mention} 님과 {self.member.mention} 님이 불꽃처럼 반가워요!",
+            f"⚡ {interaction.user.mention} 님이 {self.member.mention} 님을 향해 전기처럼 빠르게 환영!",
+            f"🧁 {interaction.user.mention} 님이 {self.member.mention} 님에게 환영 컵케이크 선물!",
+            f"🧡 {interaction.user.mention} 님이 {self.member.mention} 님에게 따뜻한 마음을 전했어요!",
+            f"🎶 {interaction.user.mention} 님이 {self.member.mention} 님을 위한 환영 멜로디를 틀었어요!",
+            f"🍕 {interaction.user.mention} 님이 {self.member.mention} 님에게 피자를 한 조각!",
+            f"🪅 {interaction.user.mention} 님이 {self.member.mention} 님 환영 파티를 열었어요!",
+            f"🎮 {interaction.user.mention} 님이 {self.member.mention} 님과 게임으로 환영을 표현했어요!",
+            f"☀️ {interaction.user.mention} 님이 {self.member.mention} 님에게 햇살 같은 환영을 보냅니다!"
         ]
 
         gifs = [
+            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
             "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif",
             "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif",
-            "https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif",
             "https://media.giphy.com/media/5GoVLqeAOo6PK/giphy.gif",
-            "https://media.giphy.com/media/111ebonMs90YLu/giphy.gif",
-            "https://media.giphy.com/media/26BRzozg4TCBXv6QU/giphy.gif",
-            "https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif",
-            "https://media.giphy.com/media/l41lFw057lAJQMwg0/giphy.gif",
-            "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif",
-            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
-            "https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif",
             "https://media.giphy.com/media/3o7TKtnuHOHHUjR38Y/giphy.gif",
-            "https://media.giphy.com/media/l0HlBo7eyXzSZkJri/giphy.gif",
-            "https://media.giphy.com/media/26gsqQxPQXHBiBEUU/giphy.gif",
-            "https://media.giphy.com/media/l0MYB8Ory7Hqefo9a/giphy.gif",
-            "https://media.giphy.com/media/3o7aCSPqXE5C6T8tBC/giphy.gif",
-            "https://media.giphy.com/media/3o6ozuLELxY7ykWgSG/giphy.gif",
-            "https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif",
-            "https://media.giphy.com/media/xT5LMHxhOfscxPfIfm/giphy.gif",
-            "https://media.giphy.com/media/l4pTfx2qLszoacZRS/giphy.gif",
-            "https://media.giphy.com/media/3oEjHP8ELRNNlnlLGM/giphy.gif",
-            "https://media.giphy.com/media/l4FGr3zBK98WhyoNA/giphy.gif",
-            "https://media.giphy.com/media/xT9IgIc0lryrxvqVGM/giphy.gif",
-            "https://media.giphy.com/media/3o7aD6SGtWx28WFSUE/giphy.gif",
-            "https://media.giphy.com/media/l0MYt5d4fvVXWfCXu/giphy.gif",
-            "https://media.giphy.com/media/xT0BKmtQGLbumr5RCM/giphy.gif",
-            "https://media.giphy.com/media/3o7TKuXju0u3dRFVMU/giphy.gif",
-            "https://media.giphy.com/media/l0MYyQ8PaoC0DfiK0/giphy.gif",
-            "https://media.giphy.com/media/3o7aCSPqXE5C6T8tBC/giphy.gif",
-            "https://media.giphy.com/media/26gsqQxPQXHBiBEUU/giphy.gif",
-            "https://media.giphy.com/media/26BRzozg4TCBXv6QU/giphy.gif",
-            "https://media.giphy.com/media/l0MYB8Ory7Hqefo9a/giphy.gif",
-            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
-            "https://media.giphy.com/media/xT0BKmtQGLbumr5RCM/giphy.gif",
-            "https://media.giphy.com/media/3o7TKtnuHOHHUjR38Y/giphy.gif",
-            "https://media.giphy.com/media/l41lFw057lAJQMwg0/giphy.gif",
-            "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif",
-            "https://media.giphy.com/media/3o7aD6PEzM2kx0Wn8c/giphy.gif",
-            "https://media.giphy.com/media/3ohs7Ys8MLv7bRifGU/giphy.gif"
-            "https://media.giphy.com/media/l41lFw057lAJQMwg0/giphy.gif",
-            "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif",
-            "https://media.giphy.com/media/3o7aD6PEzM2kx0Wn8c/giphy.gif",
-            "https://media.giphy.com/media/3ohs7Ys8MLv7bRifGU/giphy.gif",
-            "https://media.giphy.com/media/l0MYyQ8PaoC0DfiK0/giphy.gif",
-            "https://media.giphy.com/media/xT5LMHxhOfscxPfIfm/giphy.gif",
-            "https://media.giphy.com/media/l4FGr3zBK98WhyoNA/giphy.gif",
-            "https://media.giphy.com/media/3o7aCSPqXE5C6T8tBC/giphy.gif",
-            "https://media.giphy.com/media/xT0BKmtQGLbumr5RCM/giphy.gif",
-            "https://media.giphy.com/media/3o7TKuXju0u3dRFVMU/giphy.gif",
-            "https://media.giphy.com/media/l0MYt5d4fvVXWfCXu/giphy.gif",
-            "https://media.giphy.com/media/26BRzozg4TCBXv6QU/giphy.gif",
-            "https://media.giphy.com/media/26gsqQxPQXHBiBEUU/giphy.gif",
-            "https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif",
-            "https://media.giphy.com/media/5GoVLqeAOo6PK/giphy.gif",
-            "https://media.giphy.com/media/111ebonMs90YLu/giphy.gif",
             "https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif",
-            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
-            "https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif",
-            "https://media.giphy.com/media/3o7TKtnuHOHHUjR38Y/giphy.gif",
-            "https://media.giphy.com/media/l0HlBo7eyXzSZkJri/giphy.gif",
-            "https://media.giphy.com/media/l0MYB8Ory7Hqefo9a/giphy.gif",
-            "https://media.giphy.com/media/xT9IgIc0lryrxvqVGM/giphy.gif",
-            "https://media.giphy.com/media/3o7aD6SGtWx28WFSUE/giphy.gif",
-            "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif",
-            "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif",
-            "https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif",
-            "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif",
-            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
-            "https://media.giphy.com/media/26gsqQxPQXHBiBEUU/giphy.gif",
-            "https://media.giphy.com/media/26BRzozg4TCBXv6QU/giphy.gif",
-            "https://media.giphy.com/media/3o7aCSPqXE5C6T8tBC/giphy.gif",
-            "https://media.giphy.com/media/l41lFw057lAJQMwg0/giphy.gif",
-            "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif",
-            "https://media.giphy.com/media/3o7aD6PEzM2kx0Wn8c/giphy.gif",
-            "https://media.giphy.com/media/3ohs7Ys8MLv7bRifGU/giphy.gif",
-            "https://media.giphy.com/media/l4pTfx2qLszoacZRS/giphy.gif",
             "https://media.giphy.com/media/3oEjHP8ELRNNlnlLGM/giphy.gif",
-            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
-            "https://media.giphy.com/media/111ebonMs90YLu/giphy.gif"
+            "https://media.giphy.com/media/l4pTfx2qLszoacZRS/giphy.gif",
             "https://media.giphy.com/media/3o6Zt6ML6BklcajjsA/giphy.gif",
-            "https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif",
+            "https://media.giphy.com/media/3oEduSbSGpGaRX2Vri/giphy.gif",
             "https://media.giphy.com/media/3oz8xLd9DJq2l2VFtu/giphy.gif",
-            "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif",
-            "https://media.giphy.com/media/3oEduSbSGpGaRX2Vri/giphy.gif",
-            "https://media.giphy.com/media/26gsqQxPQXHBiBEUU/giphy.gif",
-            "https://media.giphy.com/media/l0HlBo7eyXzSZkJri/giphy.gif",
-            "https://media.giphy.com/media/xT0BKmtQGLbumr5RCM/giphy.gif",
-            "https://media.giphy.com/media/3o6ZsZZ0iXyPr6iCWk/giphy.gif",
-            "https://media.giphy.com/media/l3vR7WPE1h8aQhvzC/giphy.gif",
-            "https://media.giphy.com/media/26AOsZgMufZnoJXLG/giphy.gif",
-            "https://media.giphy.com/media/xT9IgIc0lryrxvqVGM/giphy.gif",
-            "https://media.giphy.com/media/l0MYyQ8PaoC0DfiK0/giphy.gif",
-            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
-            "https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif",
-            "https://media.giphy.com/media/3ohs7Ys8MLv7bRifGU/giphy.gif",
-            "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif",
-            "https://media.giphy.com/media/l41lFw057lAJQMwg0/giphy.gif",
-            "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif",
-            "https://media.giphy.com/media/3o7aD6PEzM2kx0Wn8c/giphy.gif",
-            "https://media.giphy.com/media/3o7TKuXju0u3dRFVMU/giphy.gif",
-            "https://media.giphy.com/media/26BRzozg4TCBXv6QU/giphy.gif",
             "https://media.giphy.com/media/3o7aD6SGtWx28WFSUE/giphy.gif",
+            "https://media.giphy.com/media/l0MYyQ8PaoC0DfiK0/giphy.gif",
             "https://media.giphy.com/media/l0MYB8Ory7Hqefo9a/giphy.gif",
-            "https://media.giphy.com/media/3o7aCSPqXE5C6T8tBC/giphy.gif",
-            "https://media.giphy.com/media/5GoVLqeAOo6PK/giphy.gif",
-            "https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif",
-            "https://media.giphy.com/media/111ebonMs90YLu/giphy.gif",
-            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
             "https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif",
-            "https://media.giphy.com/media/3o7TKtnuHOHHUjR38Y/giphy.gif",
-            "https://media.giphy.com/media/l0MYt5d4fvVXWfCXu/giphy.gif",
-            "https://media.giphy.com/media/3oEduSbSGpGaRX2Vri/giphy.gif",
             "https://media.giphy.com/media/26gsqQxPQXHBiBEUU/giphy.gif",
-            "https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif",
+            "https://media.giphy.com/media/l4HlBo7eyXzSZkJri/giphy.gif",
             "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif",
-            "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
-            "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif"
+            "https://media.giphy.com/media/xT5LMHxhOfscxPfIfm/giphy.gif",
+            "https://media.giphy.com/media/l41lFw057lAJQMwg0/giphy.gif"
         ]
-
 
         selected_message = random.choice(messages)
         selected_gif = random.choice(gifs)
@@ -411,9 +323,10 @@ class WelcomeButton(discord.ui.View):
             color=discord.Color.random()
         )
         embed.set_image(url=selected_gif)
-        embed.set_footer(text="with_토끼록끼 환영 많이 해주세요! 🎉")
+        embed.set_footer(text="🧸 with_토끼록끼 | 따뜻한 환영을 전해요!")
 
         await interaction.followup.send(embed=embed, ephemeral=False)
+
 
 
 
@@ -1303,30 +1216,12 @@ async def update_valid_pubg_ids(guild):
                 "discord_id": member.id,
                 "is_guest": is_guest
             })
-    with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
-        json.dump(valid_members, f, ensure_ascii=False, indent=2)
-    print(f"✅ valid_pubg_ids.json 갱신 완료 (총 {len(valid_members)}명)")
-
-
-async def update_valid_pubg_ids(guild):
-    valid_members = []
-    for member in guild.members:
-        if member.bot:
-            continue
-        parts = (member.nick or member.name).strip().split("/")
-        if len(parts) == 3 and nickname_pattern.fullmatch("/".join(p.strip() for p in parts)):
-            name, game_id, _ = [p.strip() for p in parts]
-            is_guest = "(게스트)" in (member.nick or member.name)
-            valid_members.append({
-                "name": name,
-                "game_id": game_id,
-                "discord_id": member.id,
-                "is_guest": is_guest
-            })
 
     with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
         json.dump(valid_members, f, ensure_ascii=False, indent=2)
-    print("✅ valid_pubg_ids.json 자동 갱신 완료")
+
+    print(f"✅ valid_pubg_ids.json 자동 갱신 완료 (총 {len(valid_members)}명)")
+
 
 
 
