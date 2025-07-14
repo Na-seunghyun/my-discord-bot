@@ -883,10 +883,15 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None)
         "timestamp": datetime.now().isoformat()
     }
 
-    if squad_metrics and stats:
-        avg_damage, kd, win_rate = squad_metrics
+    if stats:
         rounds_played = stats["data"]["attributes"]["gameModeStats"].get("squad", {}).get("roundsPlayed", 0)
         kills = stats["data"]["attributes"]["gameModeStats"].get("squad", {}).get("kills", 0)
+    else:
+        rounds_played = 0
+        kills = 0
+
+    if squad_metrics:
+        avg_damage, kd, win_rate = squad_metrics
         data_to_save["squad"] = {
             "avg_damage": avg_damage,
             "kd": kd,
@@ -894,6 +899,15 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None)
             "rounds_played": rounds_played,
             "kills": kills
         }
+    else:
+        data_to_save["squad"] = {
+            "avg_damage": 0,
+            "kd": 0,
+            "win_rate": 0,
+            "rounds_played": rounds_played,
+            "kills": kills
+        }
+
 
     if ranked_stats and "data" in ranked_stats:
         ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
