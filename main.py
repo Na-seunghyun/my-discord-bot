@@ -1910,11 +1910,13 @@ async def auto_collect_pubg_stats():
                     await channel.send(content=f"{user.mention}", embed=embed)
                 except Exception as e:
                     print(f"❌ 유저 멘션 실패: {e}")
-
         except Exception as e:
             print(f"❌ 저장 실패: {nickname} | 이유: {e}")
             if not any(fm["discord_id"] == m["discord_id"] for fm in failed_members):
                 failed_members.append(m)
+                # 실패 멤버 즉시 파일 저장
+                with open("failed_members.json", "w", encoding="utf-8") as f:
+                    json.dump(failed_members, f, ensure_ascii=False, indent=2)
 
         # 인덱스 업데이트
         next_idx = (start_idx + 1) % len(valid_members)
@@ -1938,24 +1940,12 @@ async def auto_collect_pubg_stats():
             else:
                 print("오늘 이미 알림을 보냄")
 
-            # 실패 멤버 저장 또는 제거
-            if failed_members:
-                with open("failed_members.json", "w", encoding="utf-8") as f:
-                    json.dump(failed_members, f, ensure_ascii=False, indent=2)
-                print(f"⚠️ 실패 멤버 저장됨 ({len(failed_members)}명)")
-            else:
-                if os.path.exists("failed_members.json"):
-                    os.remove("failed_members.json")
-                    print("🗑️ 실패 멤버 파일 삭제됨")
+            # 실패 멤버 파일 관련 처리 삭제
+            # failed_members.clear() 도 제거하여 사이클 중 실패 데이터 유지
 
-            failed_members.clear()
             await asyncio.sleep(60 * 60 * 3)
         else:
             await asyncio.sleep(60)
-
-    except Exception as e:
-        print(f"❗ 루프 에러: {e}")
-        await asyncio.sleep(60)
 
 
 
