@@ -1918,8 +1918,6 @@ async def auto_collect_pubg_stats():
         await asyncio.sleep(60)  # 에러 발생 시 1분 대기
 
 
-# 💰 하루에 한 번 돈을 지급받는 명령어
-daily_claims = {}
 
 @tree.command(name="돈줘", description="하루에 한 번 5000원 지급", guild=discord.Object(id=GUILD_ID))
 async def 돈줘(interaction: discord.Interaction):
@@ -1927,12 +1925,23 @@ async def 돈줘(interaction: discord.Interaction):
     today = datetime.now(KST).date()
 
     if daily_claims.get(user_id) == today:
-        await interaction.response.send_message("❌ 오늘은 이미 받으셨습니다! 내일 다시 시도해주세요.", ephemeral=True)
-        return
+        embed = discord.Embed(
+            title="❌ 이미 수령하셨습니다",
+            description="오늘은 이미 받으셨습니다! 내일 다시 시도해주세요.",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
 
     add_balance(user_id, 5000)
     daily_claims[user_id] = today
-    await interaction.response.send_message("💰 5000원이 지급되었습니다. 도박은 책임감 있게!", ephemeral=True)
+
+    embed = discord.Embed(
+        title="💰 돈이 지급되었습니다!",
+        description="하루 한 번! 5,000원이 지급되었습니다.\n도박은 책임감 있게!",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 
 @tree.command(name="잔액", description="유저의 현재 보유 금액을 확인합니다", guild=discord.Object(id=GUILD_ID))
@@ -1940,11 +1949,14 @@ async def 돈줘(interaction: discord.Interaction):
 async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     user = 대상 or interaction.user
     balance = get_balance(user.id)
-    await interaction.response.send_message(f"💵 {user.display_name}님의 잔액은 **{balance}원**입니다.", ephemeral=True)
 
+    embed = discord.Embed(
+        title="💵 잔액 확인",
+        description=f"{user.mention}님의 현재 잔액은\n**{balance:,}원** 입니다.",
+        color=discord.Color.blue()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
-import random
 
 @tree.command(name="도박", description="알로항 스타일로 도박해보세요 (베팅 성공확률 30–70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 500원부터 도박할 수 있습니다")
@@ -1953,32 +1965,38 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     bal = get_balance(user_id)
 
     if 베팅액 < 500:
-        return await interaction.response.send_message("❌ 최소 베팅액은 500원입니다.", ephemeral=True)
+        embed = discord.Embed(
+            title="❌ 베팅 실패",
+            description="최소 베팅 금액은 500원입니다.",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
+
     if bal < 베팅액:
-        return await interaction.response.send_message(f"💸 잔액이 부족합니다. 현재 잔액: {bal}원", ephemeral=True)
+        embed = discord.Embed(
+            title="💸 잔액 부족",
+            description=f"현재 잔액: {bal}원\n베팅액: {베팅액}원",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
 
     await interaction.response.defer(thinking=True, ephemeral=True)
 
-    # 30~70% 범위에서 성공 확률 생성
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
     if roll <= success_chance:
-        # 성공: 베팅액만큼 이익 (2배 지급 구조에서 순이익 베팅액)
         add_balance(user_id, 베팅액)
-        outcome = "🎉 성공!"
-        change = f"+{베팅액}원"
+        result = ("🎉 **도박 성공!**", f"성공확률: {success_chance}%\n굴린 값: {roll}\n**+{베팅액}원 획득!**")
+        color = discord.Color.green()
     else:
-        # 실패: 베팅액 손실
         add_balance(user_id, -베팅액)
-        outcome = "💀 실패!"
-        change = f"-{베팅액}원"
+        result = ("💀 **도박 실패!**", f"성공확률: {success_chance}%\n굴린 값: {roll}\n**-{베팅액}원 손실...**")
+        color = discord.Color.red()
 
-    new_bal = get_balance(user_id)
-    await interaction.followup.send(
-        f"{outcome} (성공확률 {success_chance}%, 굴린값 {roll})\n"
-        f"{change}, 현재 잔액: {new_bal}원"
-    )
+    embed = discord.Embed(title=result[0], description=result[1], color=color)
+    embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
+    await interaction.followup.send(embed=embed)
 
 
 @tree.command(name="송금", description="다른 유저에게 금액을 보냅니다", guild=discord.Object(id=GUILD_ID))
@@ -1988,19 +2006,42 @@ async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액:
     받는이 = str(대상.id)
 
     if 대상.id == interaction.user.id:
-        return await interaction.response.send_message("❌ 자기 자신에게는 송금할 수 없습니다.", ephemeral=True)
+        embed = discord.Embed(
+            title="❌ 송금 실패",
+            description="자기 자신에게는 송금할 수 없습니다.",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
+
     if 금액 < 100:
-        return await interaction.response.send_message("❌ 최소 송금 금액은 100원입니다.", ephemeral=True)
+        embed = discord.Embed(
+            title="❌ 송금 실패",
+            description="최소 송금 금액은 100원입니다.",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
+
     if get_balance(보낸이) < 금액:
-        return await interaction.response.send_message("💸 잔액이 부족합니다.", ephemeral=True)
+        embed = discord.Embed(
+            title="💸 잔액 부족",
+            description="송금할 만큼의 잔액이 부족합니다.",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
 
     add_balance(보낸이, -금액)
     add_balance(받는이, 금액)
-    await interaction.response.send_message(f"✅ {대상.mention}님에게 {금액}원을 송금했습니다.")
 
+    embed = discord.Embed(
+        title="✅ 송금 완료",
+        description=f"{대상.mention}님에게 **{금액:,}원**을 송금했습니다.",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed)
 
 
 from discord.ui import View, Button
+import random
 
 class LotteryButton(Button):
     def __init__(self, label, correct_slot, 베팅액, user_id):
@@ -2008,7 +2049,6 @@ class LotteryButton(Button):
         self.correct_slot = correct_slot
         self.베팅액 = 베팅액
         self.user_id = user_id
-        self.clicked = False
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
@@ -2017,20 +2057,58 @@ class LotteryButton(Button):
             return await interaction.response.send_message("❌ 이미 복권이 종료되었습니다.", ephemeral=True)
 
         self.view.stop()
+        embed = discord.Embed(color=discord.Color.green())
+
         if self.label == self.correct_slot:
             add_balance(self.user_id, self.베팅액 * 2)
-            msg = f"🎉 당첨! {self.베팅액 * 2}원을 획득했습니다!"
+            embed.title = "🎉 당첨!"
+            embed.description = f"축하합니다! **{self.베팅액 * 2:,}원**을 획득했습니다!"
         else:
-            msg = f"💔 꽝! {self.베팅액}원을 잃었습니다."
+            embed.title = "💔 꽝!"
+            embed.description = f"아쉽지만 탈락입니다.\n**{self.베팅액:,}원**을 잃었습니다."
 
-        await interaction.response.edit_message(content=msg, view=None)
+        embed.set_footer(text=f"현재 잔액: {get_balance(self.user_id):,}원")
+        await interaction.response.edit_message(embed=embed, view=None)
 
 class LotteryView(View):
     def __init__(self, user_id, 베팅액):
         super().__init__(timeout=30)
         correct = random.choice(["🎯", "🍀", "🎲"])
         for symbol in ["🎯", "🍀", "🎲"]:
-            self.add_i_
+            self.add_item(LotteryButton(label=symbol, correct_slot=correct, 베팅액=베팅액, user_id=user_id))
+
+@tree.command(name="복권", description="복권 3개 중 하나를 선택해보세요", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(베팅액="최소 1000원 이상")
+async def 복권(interaction: discord.Interaction, 베팅액: int):
+    user_id = str(interaction.user.id)
+
+    if 베팅액 < 1000:
+        embed = discord.Embed(
+            title="❌ 베팅 실패",
+            description="최소 베팅 금액은 1,000원입니다.",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    if get_balance(user_id) < 베팅액:
+        embed = discord.Embed(
+            title="💸 잔액 부족",
+            description=f"현재 잔액이 부족합니다. 잔액: {get_balance(user_id):,}원",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    add_balance(user_id, -베팅액)
+
+    view = LotteryView(user_id=interaction.user.id, 베팅액=베팅액)
+    embed = discord.Embed(
+        title="🎟 복권 게임 시작!",
+        description="3개의 이모지 중 하나를 선택해주세요.\n당첨되면 **2배의 보상!**",
+        color=discord.Color.blue()
+    )
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
 
 
 
@@ -2056,14 +2134,28 @@ async def 도박순위(interaction: discord.Interaction):
 @app_commands.describe(대상="돈을 지급할 유저", 금액="지급할 금액")
 async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금액: int):
     if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("❌ 이 명령어는 관리자만 사용할 수 있습니다.", ephemeral=True)
+        embed = discord.Embed(
+            title="❌ 권한 없음",
+            description="이 명령어는 관리자만 사용할 수 있습니다.",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
 
     if 금액 <= 0:
-        return await interaction.response.send_message("❌ 1원 이상만 지급할 수 있습니다.", ephemeral=True)
+        embed = discord.Embed(
+            title="❌ 잘못된 금액",
+            description="1원 이상만 지급할 수 있습니다.",
+            color=discord.Color.red()
+        )
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
 
     add_balance(str(대상.id), 금액)
-    await interaction.response.send_message(f"✅ {대상.mention}님에게 {금액}원을 지급했습니다.", ephemeral=True)
-
+    embed = discord.Embed(
+        title="💸 돈 지급 완료",
+        description=f"{대상.mention}님에게 **{금액:,}원**을 지급했습니다.",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 @bot.event
