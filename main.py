@@ -944,19 +944,16 @@ def get_player_stats(player_id, season_id):
     response.raise_for_status()
     return response.json()
 
-
 import time
 
 recent_saves = {}
 
-
-def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None, discord_id=None):
+def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None, discord_id=None, source="기본"):
     key = f"{nickname}_{discord_id}"
     now = time.time()
-    
-    # 30초 이내에 같은 사용자 저장 시 무시
+
     if key in recent_saves and now - recent_saves[key] < 30:
-        print(f"⏹ 중복 저장 방지: {nickname}")
+        print(f"⏹ 중복 저장 방지: {nickname} ({source})")
         return
     recent_saves[key] = now
 
@@ -1024,9 +1021,10 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None,
 
         with open(leaderboard_path, "w", encoding="utf-8") as f:
             json.dump({"season_id": season_id, "players": leaderboard}, f, ensure_ascii=False, indent=2)
-        print(f"✅ 저장 성공: {nickname}")
+        print(f"✅ 저장 성공 ({source}): {nickname}")
     except Exception as e:
-        print(f"❌ 저장 실패: {nickname} | 이유: {e}")
+        print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
+
 
 
 
@@ -1186,7 +1184,8 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         best_rank_sub_tier = ""
 
         # ✅ 이 줄 추가하세요
-        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id)
+        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id, source="전적명령")
+
 
 
         # 랭크 전적 임베드 필드 추가
@@ -1944,7 +1943,8 @@ async def auto_collect_pubg_stats():
             stats = get_player_stats(player_id, season_id)
             ranked_stats = get_player_ranked_stats(player_id, season_id)
             squad_metrics, _ = extract_squad_metrics(stats)
-            save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats)
+            save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, discord_id=m["discord_id"], source="자동갱신")
+
 
             print(f"✅ 저장 성공: {nickname}")
             # 저장 성공 시 실패 목록에서 제거
