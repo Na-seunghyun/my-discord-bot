@@ -875,6 +875,54 @@ def get_player_stats(player_id, season_id):
     response.raise_for_status()
     return response.json()
 
+def save_player_stats_to_file(nickname, squad_metrics, ranked_stats):
+    data_to_save = {
+        "nickname": nickname,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    if squad_metrics:
+        avg_damage, kd, win_rate = squad_metrics
+        data_to_save["squad"] = {
+            "avg_damage": avg_damage,
+            "kd": kd,
+            "win_rate": win_rate
+        }
+
+    if ranked_stats and "data" in ranked_stats:
+        ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
+        squad_rank = ranked_modes.get("squad")
+        if squad_rank:
+            data_to_save["ranked"] = {
+                "tier": squad_rank.get("currentTier", {}).get("tier", "Unranked"),
+                "subTier": squad_rank.get("currentTier", {}).get("subTier", ""),
+                "points": squad_rank.get("currentRankPoint", 0)
+            }
+
+    # JSON 파일 하나에 모아 저장
+    leaderboard_path = "season_leaderboard.json"
+    try:
+        if os.path.exists(leaderboard_path):
+            with open(leaderboard_path, "r", encoding="utf-8") as f:
+                leaderboard = json.load(f)
+        else:
+            leaderboard = []
+
+        # 동일 닉네임이면 갱신
+        leaderboard = [p for p in leaderboard if p["nickname"] != nickname]
+        leaderboard.append(data_to_save)
+
+        with open(leaderboard_path, "w", encoding="utf-8") as f:
+            json.dump(leaderboard, f, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        print(f"❌ 저장 중 오류: {e}")
+
+
+
+
+
+
 # ✅ 스쿼드 전적만 피드백용으로 추출
 def extract_squad_metrics(stats):
     mode_stats = stats["data"]["attributes"]["gameModeStats"].get("squad")
@@ -1070,6 +1118,70 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
 
 
+
+@tree.command(name="시즌랭킹", description="현재 시즌의 항목별 TOP3을 확인합니다.", guild=discord.Object(id=GUILD_ID))
+async def 시즌랭킹(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    leaderboard_path = "season_leaderboard.json"
+    if not os.path.exists(leaderboard_path):
+        await interaction.followup.send("❌ 아직 저장된 전적 데이터가 없습니다.", ephemeral=True)
+        return
+
+    with open(leaderboard_path, "r", encoding="utf-8") as f:
+        players = json.load(f)
+
+    # 항목별 리스트 만들기
+    damage_list = []
+    kd_list = []
+    winrate_list = []
+    rankpoint_list = []
+
+    for player in players:
+        name = player["nickname"]
+        squad = player.get("squad", {})
+        ranked = player.get("ranked", {})
+
+        if squad:
+            damage_list.append((name, squad.get("avg_damage", 0)))
+            kd_list.append((name, squad.get("kd", 0)))
+            winrate_list.append((name, squad.get("win_rate", 0)))
+
+        if ranked:
+            rankpoint_list.append((name, ranked.get("points", 0), ranked.get("tier", ""), ranked.get("subTier", "")))
+
+    # 상위 3명 정렬
+    damage_top3 = sorted(damage_list, key=lambda x: x[1], reverse=True)[:3]
+    kd_top3 = sorted(kd_list, key=lambda x: x[1], reverse=True)[:3]
+    win_top3 = sorted(winrate_list, key=lambda x: x[1], reverse=True)[:3]
+    rank_top3 = sorted(rankpoint_list, key=lambda x: x[1], reverse=True)[:3]
+
+    # Embed 구성
+    embed = discord.Embed(title="🏆 현재 시즌 항목별 TOP 3", color=discord.Color.gold())
+
+    def format_top3(entries, is_percentage=False):
+        result = []
+        medals = ["🥇", "🥈", "🥉"]
+        for i, entry in enumerate(entries):
+            if is_percentage:
+                result.append(f"{medals[i]} {entry[0]} - {entry[1]:.2f}%")
+            else:
+                result.append(f"{medals[i]} {entry[0]} - {entry[1]:.2f}")
+        return "\n".join(result)
+
+    embed.add_field(name="🔫 평균 데미지", value=format_top3(damage_top3), inline=False)
+    embed.add_field(name="⚔️ K/D", value=format_top3(kd_top3), inline=False)
+    embed.add_field(name="🏆 승률", value=format_top3(win_top3, is_percentage=True), inline=False)
+
+    if rank_top3:
+        rank_msg = []
+        medals = ["🥇", "🥈", "🥉"]
+        for i, (name, points, tier, sub) in enumerate(rank_top3):
+            rank_msg.append(f"{medals[i]} {name} - {tier} {sub} ({points})")
+        embed.add_field(name="🥇 랭크 포인트", value="\n".join(rank_msg), inline=False)
+
+    embed.set_footer(text="※ 기준: 저장된 유저의 현재 시즌 전적")
+    await interaction.followup.send(embed=embed)
 
 
 
