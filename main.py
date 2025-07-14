@@ -935,6 +935,7 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats):
 
 
 
+
 # ✅ 스쿼드 전적만 피드백용으로 추출
 def extract_squad_metrics(stats):
     mode_stats = stats["data"]["attributes"]["gameModeStats"].get("squad")
@@ -1146,17 +1147,19 @@ async def 시즌랭킹(interaction: discord.Interaction):
     with open(leaderboard_path, "r", encoding="utf-8") as f:
         file_data = json.load(f)
         players = file_data.get("players", [])
+        stored_season_id = file_data.get("season_id", "알 수 없음")
 
     if not players:
         await interaction.followup.send("❌ 현재 시즌에 저장된 유저 데이터가 없습니다.", ephemeral=True)
         return
 
+    # 항목별 리스트 만들기
     damage_list = []
     kd_list = []
     winrate_list = []
     rankpoint_list = []
-    rounds_list = []  # 게임 수
-    kills_list = []   # 킬 수
+    rounds_list = []
+    kills_list = []
 
     for player in players:
         name = player["nickname"]
@@ -1167,53 +1170,56 @@ async def 시즌랭킹(interaction: discord.Interaction):
             damage_list.append((name, squad.get("avg_damage", 0)))
             kd_list.append((name, squad.get("kd", 0)))
             winrate_list.append((name, squad.get("win_rate", 0)))
-            # 게임수, 킬수는 squad 데이터 없으면 0
-            rounds_list.append((name, squad.get("rounds_played", 0)))
-            kills_list.append((name, squad.get("kills", 0)))
+            rounds_list.append((name, squad.get("rounds_played", 0)))  # 만약 rounds_played 저장한다면
+            kills_list.append((name, squad.get("kills", 0)))           # 만약 kills 저장한다면
 
         if ranked:
             rankpoint_list.append((name, ranked.get("points", 0), ranked.get("tier", ""), ranked.get("subTier", "")))
 
-    # rounds_played, kills 데이터가 없다면 0으로 추가되도록 사전 저장값 추가 필요
-    # 만약 저장할 때 rounds_played, kills가 없으면 0 저장하도록 save_player_stats_to_file 쪽도 수정 권장
-
+    # 상위 3명 정렬
     damage_top3 = sorted(damage_list, key=lambda x: x[1], reverse=True)[:3]
     kd_top3 = sorted(kd_list, key=lambda x: x[1], reverse=True)[:3]
     win_top3 = sorted(winrate_list, key=lambda x: x[1], reverse=True)[:3]
+    rank_top3 = sorted(rankpoint_list, key=lambda x: x[1], reverse=True)[:3]
     rounds_top3 = sorted(rounds_list, key=lambda x: x[1], reverse=True)[:3]
     kills_top3 = sorted(kills_list, key=lambda x: x[1], reverse=True)[:3]
-    rank_top3 = sorted(rankpoint_list, key=lambda x: x[1], reverse=True)[:3]
 
-    embed = discord.Embed(title="🏆 현재 시즌 항목별 TOP 3", color=discord.Color.gold())
+    # Embed 구성 (게임 수, 킬 수 포함)
+    embed = discord.Embed(title=f"🏆 현재 시즌 항목별 TOP 3 (시즌 ID: {stored_season_id})", color=discord.Color.gold())
 
-    def format_top3(entries, is_percentage=False, is_int=False):
+    def format_top3(entries, is_percentage=False):
+        result = []
         medals = ["🥇", "🥈", "🥉"]
-        lines = []
         for i, entry in enumerate(entries):
-            if is_int:
-                lines.append(f"{medals[i]} {entry[0]} - {entry[1]}")
-            elif is_percentage:
-                lines.append(f"{medals[i]} {entry[0]} - {entry[1]:.2f}%")
+            if is_percentage:
+                result.append(f"{medals[i]} {entry[0]} - {entry[1]:.2f}%")
             else:
-                lines.append(f"{medals[i]} {entry[0]} - {entry[1]:.2f}")
-        return "\n".join(lines)
+                result.append(f"{medals[i]} {entry[0]} - {entry[1]:.2f}")
+        return "\n".join(result)
 
-    embed.add_field(name="🔫 평균 데미지 TOP 3", value=format_top3(damage_top3), inline=True)
-    embed.add_field(name="⚔️ K/D TOP 3", value=format_top3(kd_top3), inline=True)
-    embed.add_field(name="🏆 승률 TOP 3", value=format_top3(win_top3, is_percentage=True), inline=True)
+    def format_top3_int(entries):
+        result = []
+        medals = ["🥇", "🥈", "🥉"]
+        for i, entry in enumerate(entries):
+            result.append(f"{medals[i]} {entry[0]} - {entry[1]}")
+        return "\n".join(result)
 
-    embed.add_field(name="🎮 게임 수 TOP 3", value=format_top3(rounds_top3, is_int=True), inline=True)
-    embed.add_field(name="🔪 킬 수 TOP 3", value=format_top3(kills_top3, is_int=True), inline=True)
+    embed.add_field(name="🔫 평균 데미지", value=format_top3(damage_top3), inline=True)
+    embed.add_field(name="⚔️ K/D", value=format_top3(kd_top3), inline=True)
+    embed.add_field(name="🏆 승률", value=format_top3(win_top3, is_percentage=True), inline=True)
+    embed.add_field(name="🎮 게임 수", value=format_top3_int(rounds_top3), inline=True)
+    embed.add_field(name="💀 킬 수", value=format_top3_int(kills_top3), inline=True)
 
     if rank_top3:
         rank_msg = []
         medals = ["🥇", "🥈", "🥉"]
         for i, (name, points, tier, sub) in enumerate(rank_top3):
             rank_msg.append(f"{medals[i]} {name} - {tier} {sub} ({points})")
-        embed.add_field(name="🥇 랭크 포인트 TOP 3", value="\n".join(rank_msg), inline=False)
+        embed.add_field(name="🥇 랭크 포인트", value="\n".join(rank_msg), inline=False)
 
     embed.set_footer(text="※ 기준: 저장된 유저의 현재 시즌 전적")
     await interaction.followup.send(embed=embed)
+
 
 
 
