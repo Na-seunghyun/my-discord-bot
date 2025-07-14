@@ -1165,6 +1165,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     with open(leaderboard_path, "r", encoding="utf-8") as f:
         file_data = json.load(f)
         all_players = file_data.get("players", [])
+        # (게스트) 닉네임 가진 유저 제외
         players = [p for p in all_players if "(게스트)" not in p.get("nickname", "")]
         stored_season_id = file_data.get("season_id", "알 수 없음")
 
@@ -1298,7 +1299,6 @@ async def 검사(interaction: discord.Interaction):
 
 
     
-    # 닉네임 형식이 맞는 유저들 저장
     valid_members = []
     for member in interaction.guild.members:
         if member.bot:
@@ -1306,11 +1306,14 @@ async def 검사(interaction: discord.Interaction):
         parts = [p.strip() for p in (member.nick or member.name).strip().split("/")]
         if len(parts) == 3 and nickname_pattern.fullmatch("/".join(parts)):
             name, game_id, year = parts
+            is_guest = "(게스트)" in (member.nick or member.name)  # 닉네임에 '(게스트)' 포함 여부 체크
             valid_members.append({
                 "name": name.strip(),
                 "game_id": game_id.strip(),
-                "discord_id": member.id
+                "discord_id": member.id,
+                "is_guest": is_guest
             })
+
 
     with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
         json.dump(valid_members, f, ensure_ascii=False, indent=2)
@@ -1784,8 +1787,6 @@ async def auto_collect_pubg_stats():
             if m.get("game_id") and "(게스트)" not in m.get("name", "")
         ]
 
-        # game_id 있는 멤버만 필터링
-        valid_members = [m for m in members if m.get("game_id")]
         if not valid_members:
             print("⚠️ 유효한 배그 닉네임을 가진 멤버가 없습니다.")
             await asyncio.sleep(60)
@@ -1845,7 +1846,7 @@ async def auto_collect_pubg_stats():
         if next_idx == 0:
             # 모든 멤버 조회 완료 → 20분 대기
             print("✔️ 모든 멤버 조회 완료, 20분 대기")
-            await asyncio.sleep(60 * 60)
+            await asyncio.sleep(60 * 20)
         else:
             # 다음 멤버 조회 전 1분 대기
             await asyncio.sleep(60)
@@ -1853,6 +1854,7 @@ async def auto_collect_pubg_stats():
     except Exception as e:
         print(f"❗ 자동 수집 오류: {e}")
         await asyncio.sleep(60)  # 에러 발생 시 1분 대기
+
 
 
 
