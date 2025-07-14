@@ -1762,7 +1762,7 @@ import asyncio
 from discord.ext import tasks
 import discord
 
-@tasks.loop(minutes=10)
+@tasks.loop(seconds=0)  # 내부에서 sleep으로 텀 조절
 async def auto_collect_pubg_stats():
     try:
         # valid_pubg_ids.json 파일 없으면 자동 생성
@@ -1779,6 +1779,7 @@ async def auto_collect_pubg_stats():
         valid_members = [m for m in members if m.get("game_id")]
         if not valid_members:
             print("⚠️ 유효한 배그 닉네임을 가진 멤버가 없습니다.")
+            await asyncio.sleep(60)
             return
 
         # 최근 검사 인덱스 읽기
@@ -1789,54 +1790,60 @@ async def auto_collect_pubg_stats():
         else:
             start_idx = 0
 
-        batch_size = 3
+        m = valid_members[start_idx]
+        nickname = m["game_id"].strip()  # 공백 제거
 
-        for i in range(batch_size):
-            idx = (start_idx + i) % len(valid_members)
-            m = valid_members[idx]
-            nickname = m["game_id"].strip()  # 공백 제거
+        try:
+            if not can_make_request():
+                print("⏳ 요청 제한으로 대기 중")
+                await asyncio.sleep(60)  # 1분 대기 후 재시도
+                return
+            register_request()
 
-            try:
-                if not can_make_request():
-                    break
-                register_request()
+            player_id = get_player_id(nickname)
+            season_id = get_season_id()
+            stats = get_player_stats(player_id, season_id)
+            ranked_stats = get_player_ranked_stats(player_id, season_id)
+            squad_metrics, _ = extract_squad_metrics(stats)
+            save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats)
+            print(f"✅ 저장 완료: {nickname}")
 
-                player_id = get_player_id(nickname)
-                season_id = get_season_id()
-                stats = get_player_stats(player_id, season_id)
-                ranked_stats = get_player_ranked_stats(player_id, season_id)
-                squad_metrics, _ = extract_squad_metrics(stats)
-                save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats)
-                print(f"✅ 저장 완료: {nickname}")
+            # 자유채팅방 채널 찾기
+            channel = discord.utils.get(bot.get_all_channels(), name="자유채팅방")
+            if channel:
+                embed = discord.Embed(
+                    title="📦 전적 자동 저장 완료!",
+                    description=f"{m['name']}님의 전적 데이터가 자동으로 저장되었습니다!",
+                    color=discord.Color.green()
+                )
+                embed.add_field(name="배그 닉네임", value=nickname, inline=True)
+                embed.set_footer(text="※ 오덕봇 자동 수집 기능으로 저장됨")
 
-                # 자유채팅방 채널 찾기
-                channel = discord.utils.get(bot.get_all_channels(), name="자유채팅방")
-                if channel:
-                    embed = discord.Embed(
-                        title="📦 전적 자동 저장 완료!",
-                        description=f"{m['name']}님의 전적 데이터가 자동으로 저장되었습니다!",
-                        color=discord.Color.green()
-                    )
-                    embed.add_field(name="배그 닉네임", value=nickname, inline=True)
-                    embed.set_footer(text="※ 오덕봇 자동 수집 기능으로 저장됨")
+                try:
+                    user = await bot.fetch_user(m["discord_id"])
+                    await channel.send(content=f"{user.mention}", embed=embed)
+                except Exception as e:
+                    print(f"❌ 멘션 전송 실패: {e}")
 
-                    try:
-                        user = await bot.fetch_user(m["discord_id"])
-                        await channel.send(content=f"{user.mention}", embed=embed)
-                    except Exception as e:
-                        print(f"❌ 멘션 전송 실패: {e}")
+        except Exception as e:
+            print(f"❌ 저장 실패 ({nickname}): {e}")
 
-            except Exception as e:
-                print(f"❌ 저장 실패 ({nickname}): {e}")
-
-            await asyncio.sleep(5)
-
-        next_idx = (start_idx + batch_size) % len(valid_members)
+        # 다음 인덱스 계산
+        next_idx = (start_idx + 1) % len(valid_members)
         with open(index_file, "w") as f:
             f.write(str(next_idx))
 
+        if next_idx == 0:
+            # 모든 멤버 조회 완료 → 20분 대기
+            print("✔️ 모든 멤버 조회 완료, 20분 대기")
+            await asyncio.sleep(60 * 60)
+        else:
+            # 다음 멤버 조회 전 1분 대기
+            await asyncio.sleep(60)
+
     except Exception as e:
         print(f"❗ 자동 수집 오류: {e}")
+        await asyncio.sleep(60)  # 에러 발생 시 1분 대기
 
 
 
