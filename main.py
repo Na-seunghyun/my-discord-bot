@@ -1767,6 +1767,7 @@ import json
 import asyncio
 from discord.ext import tasks
 import discord
+import datetime
 
 @tasks.loop(seconds=0)  # 내부에서 sleep으로 텀 조절
 async def auto_collect_pubg_stats():
@@ -1844,9 +1845,25 @@ async def auto_collect_pubg_stats():
             f.write(str(next_idx))
 
         if next_idx == 0:
-            # 모든 멤버 조회 완료 → 20분 대기
-            print("✔️ 모든 멤버 조회 완료, 20분 대기")
-            await asyncio.sleep(60 * 20)
+            # 모든 멤버 조회 완료 → 하루 1회 알림 발송 및 3시간 대기
+            today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+            notify_file = "last_notify_date.txt"
+
+            last_notify_date = None
+            if os.path.exists(notify_file):
+                with open(notify_file, "r") as f:
+                    last_notify_date = f.read().strip()
+
+            if last_notify_date != today_str:
+                if channel:
+                    await channel.send(f"✅ 클랜 서버 인원 {len(valid_members)}명의 배틀그라운드 전적 데이터 수집이 완료되었습니다! ({today_str})")
+                with open(notify_file, "w") as f:
+                    f.write(today_str)
+            else:
+                print("오늘은 이미 알림을 보냈습니다.")
+
+            print("✔️ 모든 멤버 조회 완료, 3시간 대기")
+            await asyncio.sleep(60 * 60 * 3)  # 3시간 대기
         else:
             # 다음 멤버 조회 전 1분 대기
             await asyncio.sleep(60)
