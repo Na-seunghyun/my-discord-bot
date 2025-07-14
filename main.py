@@ -875,7 +875,7 @@ def get_player_stats(player_id, season_id):
     response.raise_for_status()
     return response.json()
 
-def save_player_stats_to_file(nickname, squad_metrics, ranked_stats):
+def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None):
     season_id = get_season_id()  # 현재 시즌 ID 가져오기
 
     data_to_save = {
@@ -883,12 +883,16 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats):
         "timestamp": datetime.now().isoformat()
     }
 
-    if squad_metrics:
+    if squad_metrics and stats:
         avg_damage, kd, win_rate = squad_metrics
+        rounds_played = stats["data"]["attributes"]["gameModeStats"].get("squad", {}).get("roundsPlayed", 0)
+        kills = stats["data"]["attributes"]["gameModeStats"].get("squad", {}).get("kills", 0)
         data_to_save["squad"] = {
             "avg_damage": avg_damage,
             "kd": kd,
-            "win_rate": win_rate
+            "win_rate": win_rate,
+            "rounds_played": rounds_played,
+            "kills": kills
         }
 
     if ranked_stats and "data" in ranked_stats:
