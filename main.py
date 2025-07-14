@@ -1823,7 +1823,6 @@ if os.path.exists("failed_members.json"):
         except Exception:
             failed_members = []
 
-daily_claims = {}
 
 @tree.command(name="저장실패", description="저장에 실패한 멤버들을 조회합니다.", guild=discord.Object(id=GUILD_ID))
 async def 저장실패(interaction: discord.Interaction):
