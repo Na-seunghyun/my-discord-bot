@@ -355,29 +355,40 @@ async def on_member_join(member):
     if not channel:
         return
 
-    new_invites = await guild.invites()
-    old_invites = invites_cache.get(str(guild.id), {})
-    inviter = None
+    # 최신 초대 캐시 로딩
+    try:
+        with open("invites_cache.json", "r", encoding="utf-8") as f:
+            old_cache = json.load(f)
+        old_invites = old_cache.get(str(guild.id), {})
+    except Exception as e:
+        print(f"❌ 초대 캐시 로딩 실패: {e}")
+        old_invites = {}
+
+    # 현재 초대 목록 가져오기
+    try:
+        new_invites_raw = await guild.invites()
+    except Exception as e:
+        print(f"❌ 현재 초대 목록 불러오기 실패: {e}")
+        new_invites_raw = []
 
     # 초대한 사람 찾기
-    for invite in new_invites:
-        old_data = old_invites.get(invite.code)
-        if old_data and invite.uses > old_data["uses"]:
-            inviter_id = old_data.get("inviter_id")
+    inviter = None
+    for invite in new_invites_raw:
+        old = old_invites.get(invite.code)
+        if old and invite.uses > old["uses"]:
+            inviter_id = old.get("inviter_id")
             if inviter_id:
-                inviter = await bot.fetch_user(inviter_id)
+                try:
+                    inviter = await bot.fetch_user(inviter_id)
+                except:
+                    inviter = None
             break
 
-    # 캐시 갱신 및 저장
-    invites_cache[str(guild.id)] = {
-        invite.code: {"uses": invite.uses, "inviter_id": invite.inviter.id if invite.inviter else None}
-        for invite in new_invites
-    }
-    save_invite_cache()
-
-    # 메시지 출력
+    # 입장 시간 (KST)
     KST = timezone(timedelta(hours=9))
     joined_time = datetime.now(tz=KST).strftime("%Y-%m-%d %H:%M:%S")
+
+    # 임베드 구성
     embed = discord.Embed(
         title="🎊 신입 멤버 출몰!",
         description=f"😎 {member.mention} 님이 **화려하게 입장!** 🎉\n\n누가 먼저 환영해볼까요?",
@@ -386,15 +397,22 @@ async def on_member_join(member):
     embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/minion.gif")
     embed.set_footer(text="누구보다 빠르게 남들과는 다르게!", icon_url=member.display_avatar.url)
 
+    # 초대한 사람 표시
     if inviter:
         embed.add_field(name="초대한 사람", value=f"{inviter.mention} (`{inviter.display_name}`)", inline=True)
     else:
         embed.add_field(name="초대한 사람", value="알 수 없음", inline=True)
 
+    # 입장 시간
     embed.add_field(name="입장 시간", value=joined_time, inline=True)
+
+    # 환영 메시지 전송 + 버튼 추가
     message = await channel.send(embed=embed)
     view = WelcomeButton(member=member, original_message=message)
     await message.edit(view=view)
+
+
+
 
 
 
