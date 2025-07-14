@@ -1072,6 +1072,9 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         best_rank_tier = "Unranked"
         best_rank_sub_tier = ""
 
+                # ✅ 이 줄 추가하세요
+        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats)
+
         # 랭크 전적 임베드 필드 추가
         if ranked_stats and "data" in ranked_stats:
             ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
