@@ -2172,6 +2172,65 @@ async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금�
     )
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
+@tree.command(name="슬롯", description="슬롯머신 도박 게임", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(베팅액="최소 1,000원 이상")
+async def 슬롯(interaction: discord.Interaction, 베팅액: int):
+    user_id = str(interaction.user.id)
+
+    if 베팅액 < 1000:
+        return await interaction.response.send_message(
+            embed=discord.Embed(title="❌ 최소 베팅액은 1,000원입니다.", color=discord.Color.red()),
+            ephemeral=True
+        )
+
+    if get_balance(user_id) < 베팅액:
+        return await interaction.response.send_message(
+            embed=discord.Embed(title="💸 잔액 부족", description=f"현재 잔액: {get_balance(user_id):,}원", color=discord.Color.red()),
+            ephemeral=True
+        )
+
+    add_balance(user_id, -베팅액)
+
+    symbols = ["🍒", "🍋", "💎", "🍉", "🔔"]
+    final_result = [random.choice(symbols) for _ in range(5)]
+
+    message = await interaction.response.send_message("🎰 슬롯머신을 돌리는 중...", ephemeral=False)
+    msg = await interaction.original_response()
+
+    # 애니메이션 효과: 3회 갱신
+    for _ in range(3):
+        temp = [random.choice(symbols) for _ in range(5)]
+        temp_text = "| " + " | ".join(temp) + " |\n\n🎲 돌리는 중..."
+        await msg.edit(content=temp_text)
+        await asyncio.sleep(0.7)
+
+    # 최종 결과 표시
+    result_text = "| " + " | ".join(final_result) + " |"
+    reward = 0
+    reward_msg = "꽝! 다음 기회를 노려보세요."
+
+    if len(set(final_result)) == 1:
+        reward = 베팅액 * 4
+        reward_msg = f"🎉 5개 일치! **{reward:,}원** 획득!"
+    elif any(final_result[i] == final_result[i+1] == final_result[i+2] for i in range(3)):
+        reward = 베팅액 * 2
+        reward_msg = f"✨ 3개 연속 일치! **{reward:,}원** 획득!"
+
+    if reward > 0:
+        add_balance(user_id, reward)
+
+    final_embed = discord.Embed(
+        title="🎰 슬롯머신 결과",
+        description=f"{result_text}\n\n{reward_msg}",
+        color=discord.Color.green() if reward > 0 else discord.Color.dark_gray()
+    )
+    await msg.edit(content=None, embed=final_embed)
+
+
+
+
+
+
 
 
 @bot.event
