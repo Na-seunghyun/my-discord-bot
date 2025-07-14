@@ -1912,13 +1912,13 @@ async def auto_collect_pubg_stats():
                 except Exception as e:
                     print(f"❌ 유저 멘션 실패: {e}")
                     
-        except Exception as e:
-            print(f"❌ 저장 실패: {nickname} | 이유: {e}")
-            if not any(fm["discord_id"] == m["discord_id"] for fm in failed_members):
-                failed_members.append(m)
-                # 실패 멤버 즉시 파일 저장
-                with open("failed_members.json", "w", encoding="utf-8") as f:
-                    json.dump(failed_members, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    print(f"❌ 저장 실패: {nickname} | 이유: {e}")
+                    if not any(fm["discord_id"] == m["discord_id"] for fm in failed_members):
+                        failed_members.append(m)
+                        # 실패 멤버 즉시 파일 저장
+                        with open("failed_members.json", "w", encoding="utf-8") as f:
+                            json.dump(failed_members, f, ensure_ascii=False, indent=2)
 
         # 인덱스 업데이트
         next_idx = (start_idx + 1) % len(valid_members)
@@ -1951,6 +1951,7 @@ async def auto_collect_pubg_stats():
 
 
 
+daily_claims = {}
 
 
 @tree.command(name="돈줘", description="하루에 한 번 5000원 지급", guild=discord.Object(id=GUILD_ID))
