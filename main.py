@@ -1164,7 +1164,8 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
     with open(leaderboard_path, "r", encoding="utf-8") as f:
         file_data = json.load(f)
-        players = file_data.get("players", [])
+        all_players = file_data.get("players", [])
+        players = [p for p in all_players if "(게스트)" not in p.get("nickname", "")]
         stored_season_id = file_data.get("season_id", "알 수 없음")
 
     if not players:
@@ -1776,6 +1777,12 @@ async def auto_collect_pubg_stats():
         # 파일 읽기
         with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
             members = json.load(f)
+
+        # game_id 있고, 이름에 (게스트) 없는 멤버만 필터링
+        valid_members = [
+            m for m in members
+            if m.get("game_id") and "(게스트)" not in m.get("name", "")
+        ]
 
         # game_id 있는 멤버만 필터링
         valid_members = [m for m in members if m.get("game_id")]
