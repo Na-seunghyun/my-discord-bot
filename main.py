@@ -1811,7 +1811,7 @@ async def 접속시간랭킹(interaction: discord.Interaction):
 import os
 import json
 import asyncio
-import datetime
+from datetime import datetime
 from discord.ext import tasks
 import discord
 
@@ -1894,7 +1894,7 @@ async def auto_collect_pubg_stats():
 
         if next_idx == 0:
             # 한 사이클 완료 → 하루 1회 알림 및 3시간 대기
-            today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+            today_str = datetime.utcnow().strftime("%Y-%m-%d")
             notify_file = "last_notify_date.txt"
 
             last_notify_date = None
