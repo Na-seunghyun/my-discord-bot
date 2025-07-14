@@ -1809,7 +1809,7 @@ async def auto_collect_pubg_stats():
             print(f"✅ 저장 완료: {nickname}")
 
             # 자유채팅방 채널 찾기
-            channel = discord.utils.get(bot.get_all_channels(), name="자유채팅방")
+            channel = discord.utils.get(bot.get_all_channels(), name="자동수집")
             if channel:
                 embed = discord.Embed(
                     title="📦 전적 자동 저장 완료!",
