@@ -1924,17 +1924,18 @@ async def auto_collect_pubg_stats():
         print(f"auto_collect_pubg_stats 함수 에러: {e}")
 
 
+from datetime import datetime, timezone, timedelta
+import discord
+from discord.ext import commands
+from discord import app_commands
+import random
 
-
-
-
+# 한국 시간대 설정
+KST = timezone(timedelta(hours=9))
 daily_claims = {}
 
 
-
-
-
-
+# ✅ 돈줘
 @tree.command(name="돈줘", description="하루에 한 번 5000원 지급", guild=discord.Object(id=GUILD_ID))
 async def 돈줘(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -1956,9 +1957,10 @@ async def 돈줘(interaction: discord.Interaction):
         description="하루 한 번! **5,000원**이 지급되었습니다.\n도박은 책임감 있게!",
         color=discord.Color.green()
     )
+    embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
-
+# ✅ 잔액
 @tree.command(name="잔액", description="유저의 현재 보유 금액을 확인합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="조회할 유저 (선택사항)")
 async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
@@ -1972,12 +1974,12 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     )
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
-
-@tree.command(name="도박", description="알로항 스타일로 도박해보세요 (베팅 성공확률 30–70%)", guild=discord.Object(id=GUILD_ID))
+# ✅ 도박
+@tree.command(name="도박", description="알로항 스타일 도박 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 500원부터 도박할 수 있습니다")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
     user_id = str(interaction.user.id)
-    bal = get_balance(user_id)
+    balance = get_balance(user_id)
 
     if 베팅액 < 500:
         embed = discord.Embed(
@@ -1987,10 +1989,10 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
         return await interaction.response.send_message(embed=embed, ephemeral=False)
 
-    if bal < 베팅액:
+    if balance < 베팅액:
         embed = discord.Embed(
             title="💸 잔액 부족",
-            description=f"현재 잔액: **{bal:,}원**\n베팅액: **{베팅액:,}원**",
+            description=f"현재 잔액: **{balance:,}원**\n베팅액: **{베팅액:,}원**",
             color=discord.Color.red()
         )
         return await interaction.response.send_message(embed=embed, ephemeral=False)
@@ -2002,25 +2004,27 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     if roll <= success_chance:
         add_balance(user_id, 베팅액)
-        result = ("🎉 도박 성공!", f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**+{베팅액:,}원** 획득!")
+        title = "🎉 도박 성공!"
+        desc = f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**+{베팅액:,}원** 획득!"
         color = discord.Color.green()
     else:
         add_balance(user_id, -베팅액)
-        result = ("💀 도박 실패!", f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**-{베팅액:,}원** 손실...")
+        title = "💀 도박 실패!"
+        desc = f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**-{베팅액:,}원** 손실..."
         color = discord.Color.red()
 
-    embed = discord.Embed(title=result[0], description=result[1], color=color)
+    embed = discord.Embed(title=title, description=desc, color=color)
     embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
     await interaction.followup.send(embed=embed)
 
-
+# ✅ 송금
 @tree.command(name="송금", description="다른 유저에게 금액을 보냅니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="금액을 보낼 유저", 금액="최소 100원 이상")
 async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액: int):
     보낸이 = str(interaction.user.id)
     받는이 = str(대상.id)
 
-    if 대상.id == interaction.user.id:
+    if 보낸이 == 받는이:
         embed = discord.Embed(
             title="❌ 송금 실패",
             description="자기 자신에게는 송금할 수 없습니다.",
@@ -2052,7 +2056,9 @@ async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액:
         description=f"{대상.mention}님에게 **{금액:,}원**을 송금했습니다.",
         color=discord.Color.green()
     )
-    await interaction.response.send_message(embed=embed)
+    embed.set_footer(text=f"보낸 사람 잔액: {get_balance(보낸이):,}원")
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+
 
 from discord.ui import View, Button
 
@@ -2070,18 +2076,17 @@ class LotteryButton(Button):
             return await interaction.response.send_message("❌ 이미 복권이 종료되었습니다.", ephemeral=True)
 
         self.view.stop()
-        embed = discord.Embed(color=discord.Color.green())
-
         if self.label == self.correct_slot:
             add_balance(self.user_id, self.베팅액 * 2)
-            embed.title = "🎉 당첨!"
-            embed.description = f"축하합니다! **{self.베팅액 * 2:,}원**을 획득했습니다!"
+            title = "🎉 당첨!"
+            desc = f"축하합니다! **{self.베팅액 * 2:,}원**을 획득했습니다!"
+            color = discord.Color.green()
         else:
-            embed.title = "💔 꽝!"
-            embed.description = f"아쉽지만 탈락입니다.\n**{self.베팅액:,}원**을 잃었습니다."
+            title = "💔 꽝!"
+            desc = f"아쉽지만 탈락입니다.\n**{self.베팅액:,}원**을 잃었습니다."
+            color = discord.Color.red()
 
-        embed.set_footer(text=f"현재 잔액: {get_balance(self.user_id):,}원")
-        await interaction.response.edit_message(embed=embed, view=None)
+        await interaction.response.edit_message(embed=create_embed(title, desc, color, self.user_id), view=None)
 
 class LotteryView(View):
     def __init__(self, user_id, 베팅액):
@@ -2095,37 +2100,79 @@ class LotteryView(View):
         self.stopped = True
         return super().stop()
 
-
 @tree.command(name="복권", description="복권 3개 중 하나를 선택해보세요", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
 async def 복권(interaction: discord.Interaction, 베팅액: int):
     user_id = str(interaction.user.id)
 
     if 베팅액 < 1000:
-        embed = discord.Embed(
-            title="❌ 베팅 실패",
-            description="최소 베팅 금액은 **1,000원**입니다.",
-            color=discord.Color.red()
-        )
-        return await interaction.response.send_message(embed=embed, ephemeral=False)
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **1,000원**입니다.", discord.Color.red()), ephemeral=False)
 
     if get_balance(user_id) < 베팅액:
-        embed = discord.Embed(
-            title="💸 잔액 부족",
-            description=f"현재 잔액이 부족합니다.\n잔액: **{get_balance(user_id):,}원**",
-            color=discord.Color.red()
-        )
-        return await interaction.response.send_message(embed=embed, ephemeral=False)
+        return await interaction.response.send_message(
+            embed=create_embed("💸 잔액 부족", f"잔액: **{get_balance(user_id):,}원**", discord.Color.red()), ephemeral=False)
 
     add_balance(user_id, -베팅액)
-
     view = LotteryView(user_id=interaction.user.id, 베팅액=베팅액)
-    embed = discord.Embed(
-        title="🎟 복권 게임 시작!",
-        description="3개의 이모지 중 하나를 선택해주세요.\n당첨되면 **2배 보상!**",
-        color=discord.Color.blue()
+    await interaction.response.send_message(
+        embed=create_embed("🎟 복권 게임 시작!", "3개의 이모지 중 하나를 선택해주세요.\n당첨되면 **2배 보상!**", discord.Color.blue()),
+        view=view, ephemeral=False)
+
+
+@tree.command(name="슬롯", description="애니메이션 슬롯머신 게임!", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(베팅액="최소 1000원 이상")
+async def 슬롯(interaction: discord.Interaction, 베팅액: int):
+    user_id = str(interaction.user.id)
+    symbols = ["🍒", "🍋", "🍇", "🍉", "💎"]
+    balance = get_balance(user_id)
+
+    if 베팅액 < 1000:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **1,000원**입니다.", discord.Color.red()), ephemeral=False)
+
+    if balance < 베팅액:
+        return await interaction.response.send_message(
+            embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()), ephemeral=False)
+
+    add_balance(user_id, -베팅액)
+    await interaction.response.defer()
+    message = await interaction.followup.send("🎰 슬롯머신 작동 중...", wait=True)
+
+    result = []
+    for i in range(5):
+        result.append(random.choice(symbols))
+        display = " | ".join(result + ["⬜"] * (5 - len(result)))
+        await message.edit(content=f"🎰 **슬롯머신 작동 중...**\n| {display} |")
+        await asyncio.sleep(0.7)
+
+    result_str = " | ".join(result)
+    max_streak = 1
+    cur_streak = 1
+    for i in range(1, len(result)):
+        if result[i] == result[i - 1]:
+            cur_streak += 1
+            max_streak = max(max_streak, cur_streak)
+        else:
+            cur_streak = 1
+
+    if max_streak == 5:
+        winnings = 베팅액 * 4
+        add_balance(user_id, winnings)
+        outcome = f"🎉 **5개 연속 일치! +{winnings:,}원 획득!**"
+        color = discord.Color.green()
+    elif max_streak >= 3:
+        winnings = 베팅액 * 2
+        add_balance(user_id, winnings)
+        outcome = f"✨ **{max_streak}개 연속 일치! +{winnings:,}원 획득!**"
+        color = discord.Color.green()
+    else:
+        outcome = f"😢 **꽝! 다음 기회를 노려보세요.\n-{베팅액:,}원 손실**"
+        color = discord.Color.red()
+
+    await message.edit(
+        content=f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n{outcome}\n💵 현재 잔액: {get_balance(user_id):,}원"
     )
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
 
 
 @tree.command(name="도박순위", description="도박 잔액 순위 TOP 10", guild=discord.Object(id=GUILD_ID))
@@ -2149,96 +2196,18 @@ async def 도박순위(interaction: discord.Interaction):
 @app_commands.describe(대상="돈을 지급할 유저", 금액="지급할 금액")
 async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금액: int):
     if not interaction.user.guild_permissions.administrator:
-        embed = discord.Embed(
-            title="❌ 권한 없음",
-            description="이 명령어는 관리자만 사용할 수 있습니다.",
-            color=discord.Color.red()
-        )
-        return await interaction.response.send_message(embed=embed, ephemeral=False)
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 권한 없음", "이 명령어는 관리자만 사용할 수 있습니다.", discord.Color.red()),
+            ephemeral=False)
 
     if 금액 <= 0:
-        embed = discord.Embed(
-            title="❌ 잘못된 금액",
-            description="1원 이상만 지급할 수 있습니다.",
-            color=discord.Color.red()
-        )
-        return await interaction.response.send_message(embed=embed, ephemeral=False)
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 잘못된 금액", "1원 이상만 지급할 수 있습니다.", discord.Color.red()),
+            ephemeral=False)
 
     add_balance(str(대상.id), 금액)
-    embed = discord.Embed(
-        title="💸 돈 지급 완료",
-        description=f"{대상.mention}님에게 **{금액:,}원**을 지급했습니다.",
-        color=discord.Color.green()
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=False)
-
-from discord.ext import commands
-import discord
-import random
-
-@tree.command(name="슬롯", description="애니메이션 슬롯머신 게임!", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(베팅액="최소 1000원 이상")
-async def 슬롯(interaction: discord.Interaction, 베팅액: int):
-    user_id = str(interaction.user.id)
-    symbols = ["🍒", "🍋", "🍇", "🍉", "💎"]
-    balance = get_balance(user_id)
-
-    if 베팅액 < 1000:
-        return await interaction.response.send_message("❌ 최소 베팅금은 1,000원입니다.", ephemeral=False)
-
-    if balance < 베팅액:
-        return await interaction.response.send_message(
-            f"❌ 잔액 부족! 현재 잔액: {balance:,}원", ephemeral=False)
-
-    # 베팅 차감
-    add_balance(user_id, -베팅액)
-
-    # 슬래시 명령 처리 중이라는 응답 먼저 보내기
-    await interaction.response.defer()
-
-    # 초기 메시지 전송
-    message = await interaction.followup.send("🎰 슬롯머신 작동 중...", wait=True)
-
-    # 애니메이션 효과: 한 칸씩 보여주기
-    result = []
-    for i in range(5):
-        result.append(random.choice(symbols))
-        display = " | ".join(result + ["⬜"] * (5 - len(result)))
-        await message.edit(content=f"🎰 **슬롯머신 작동 중...**\n| {display} |")
-        await asyncio.sleep(0.7)
-
-    result_str = " | ".join(result)
-
-    # 연속 일치 확인
-    max_streak = 1
-    cur_streak = 1
-    for i in range(1, len(result)):
-        if result[i] == result[i - 1]:
-            cur_streak += 1
-            max_streak = max(max_streak, cur_streak)
-        else:
-            cur_streak = 1
-
-    # 보상 계산
-    if max_streak == 5:
-        winnings = 베팅액 * 4
-        add_balance(user_id, winnings)
-        outcome = f"🎉 5개 연속 일치! **+{winnings:,}원 획득!**"
-    elif max_streak >= 3:
-        winnings = 베팅액 * 2
-        add_balance(user_id, winnings)
-        outcome = f"✨ {max_streak}개 연속 일치! **+{winnings:,}원 획득!**"
-    else:
-        outcome = f"😢 꽝! 다음 기회를 노려보세요.\n**-{베팅액:,}원 손실**"
-
-    current_balance = get_balance(user_id)
-
-    # 최종 메시지 업데이트
-    await message.edit(
-        content=(
-            f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n{outcome}\n💵 현재 잔액: {current_balance:,}원"
-        )
-    )
+    await interaction.response.send_message(
+        embed=create_embed("💸 돈 지급 완료", f"{대상.mention}님에게 **{금액:,}원**을 지급했습니다.", discord.Color.green(), 대상.id))
 
 
 
