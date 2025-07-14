@@ -329,7 +329,20 @@ class WelcomeButton(discord.ui.View):
 
 
 
+INVITE_CACHE_FILE = "invites_cache.json"
+invites_cache = {}
 
+def load_invite_cache():
+    global invites_cache
+    if os.path.exists(INVITE_CACHE_FILE):
+        with open(INVITE_CACHE_FILE, "r", encoding="utf-8") as f:
+            invites_cache = json.load(f)
+    else:
+        invites_cache = {}
+
+def save_invite_cache():
+    with open(INVITE_CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(invites_cache, f, ensure_ascii=False, indent=2)
 
 
 
@@ -342,22 +355,29 @@ async def on_member_join(member):
     if not channel:
         return
 
-    # 초대 링크 정보 다시 받아오기
     new_invites = await guild.invites()
-    old_invites = invites_cache.get(guild.id, {})
-    invites_cache[guild.id] = {invite.code: invite for invite in new_invites}
-
+    old_invites = invites_cache.get(str(guild.id), {})
     inviter = None
+
+    # 초대한 사람 찾기
     for invite in new_invites:
-        old_invite = old_invites.get(invite.code)
-        if old_invite and invite.uses > old_invite.uses:
-            inviter = invite.inviter
+        old_data = old_invites.get(invite.code)
+        if old_data and invite.uses > old_data["uses"]:
+            inviter_id = old_data.get("inviter_id")
+            if inviter_id:
+                inviter = await bot.fetch_user(inviter_id)
             break
 
-    # 입장 시간 (KST 기준)
+    # 캐시 갱신 및 저장
+    invites_cache[str(guild.id)] = {
+        invite.code: {"uses": invite.uses, "inviter_id": invite.inviter.id if invite.inviter else None}
+        for invite in new_invites
+    }
+    save_invite_cache()
+
+    # 메시지 출력
     KST = timezone(timedelta(hours=9))
     joined_time = datetime.now(tz=KST).strftime("%Y-%m-%d %H:%M:%S")
-
     embed = discord.Embed(
         title="🎊 신입 멤버 출몰!",
         description=f"😎 {member.mention} 님이 **화려하게 입장!** 🎉\n\n누가 먼저 환영해볼까요?",
@@ -366,19 +386,18 @@ async def on_member_join(member):
     embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/minion.gif")
     embed.set_footer(text="누구보다 빠르게 남들과는 다르게!", icon_url=member.display_avatar.url)
 
-    # 초대한 사람 정보 추가 (확실히 표시)
     if inviter:
-        # 닉네임과 멘션 둘 다 표시
         embed.add_field(name="초대한 사람", value=f"{inviter.mention} (`{inviter.display_name}`)", inline=True)
     else:
         embed.add_field(name="초대한 사람", value="알 수 없음", inline=True)
 
-    # 입장 시간 추가
     embed.add_field(name="입장 시간", value=joined_time, inline=True)
-
     message = await channel.send(embed=embed)
     view = WelcomeButton(member=member, original_message=message)
     await message.edit(view=view)
+
+
+
 
 @bot.event
 async def on_member_remove(member):
@@ -393,6 +412,40 @@ async def on_member_remove(member):
         embed.set_footer(text="다음엔 꼭 다시 만나요!")
 
         await channel.send(embed=embed)
+
+
+
+
+
+from discord.ext import tasks
+
+@tasks.loop(minutes=10)  # 주기적으로 초대 캐시 갱신
+async def auto_refresh_invites():
+    global invites_cache
+    for guild in bot.guilds:
+        try:
+            invites = await guild.invites()
+            invites_cache[str(guild.id)] = {
+                invite.code: {
+                    "uses": invite.uses,
+                    "inviter_id": invite.inviter.id if invite.inviter else None
+                }
+                for invite in invites
+            }
+        except Exception as e:
+            print(f"❌ 주기적 초대 캐시 실패 ({guild.name}): {e}")
+
+    try:
+        with open("invites_cache.json", "w", encoding="utf-8") as f:
+            json.dump(invites_cache, f, ensure_ascii=False, indent=2)
+        print("💾 초대 캐시 invites_cache.json 주기적 저장 완료!")
+    except Exception as e:
+        print(f"❌ 초대 캐시 저장 실패: {e}")
+
+
+
+
+
 
 
 
@@ -2070,15 +2123,37 @@ async def on_ready():
     except Exception as e:
         print(f"❌ 슬래시 명령 동기화 실패: {e}")
 
-    # 초대 캐시 초기화
-    invites_cache.clear()
+    # 초대 캐시 초기화 및 저장
+    global invites_cache
+    invites_cache = {}
+
     for guild in bot.guilds:
         try:
             invites = await guild.invites()
-            invites_cache[guild.id] = {invite.code: invite for invite in invites}
+            invites_cache[str(guild.id)] = {
+                invite.code: {
+                    "uses": invite.uses,
+                    "inviter_id": invite.inviter.id if invite.inviter else None
+                }
+                for invite in invites
+            }
         except Exception as e:
             print(f"❌ 초대 캐시 실패 ({guild.name}): {e}")
     print("📨 초대 캐시 초기화 완료!")
+
+    try:
+        with open("invites_cache.json", "w", encoding="utf-8") as f:
+            json.dump(invites_cache, f, ensure_ascii=False, indent=2)
+        print("💾 초대 캐시 invites_cache.json 저장 완료!")
+    except Exception as e:
+        print(f"❌ 초대 캐시 저장 실패: {e}")
+
+    # 초대 캐시 주기적 자동 갱신 시작
+    try:
+        auto_refresh_invites.start()
+        print("⏱ 초대 캐시 자동 갱신 루프 시작됨")
+    except RuntimeError:
+        print("⚠️ auto_refresh_invites 루프는 이미 실행 중입니다.")
 
     # 자동 닉네임 검사 및 저장
     target_guild = discord.utils.get(bot.guilds, id=GUILD_ID)
