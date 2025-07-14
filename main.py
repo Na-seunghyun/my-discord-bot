@@ -2176,7 +2176,7 @@ from discord.ext import commands
 import discord
 import random
 
-@tree.command(name="슬롯", description="슬롯머신 게임!", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="슬롯", description="애니메이션 슬롯머신 게임!", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
 async def 슬롯(interaction: discord.Interaction, 베팅액: int):
     user_id = str(interaction.user.id)
@@ -2184,8 +2184,7 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
     balance = get_balance(user_id)
 
     if 베팅액 < 1000:
-        return await interaction.response.send_message(
-            "❌ 최소 베팅금은 1,000원입니다.", ephemeral=False)
+        return await interaction.response.send_message("❌ 최소 베팅금은 1,000원입니다.", ephemeral=False)
 
     if balance < 베팅액:
         return await interaction.response.send_message(
@@ -2194,10 +2193,19 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
     # 베팅 차감
     add_balance(user_id, -베팅액)
 
-    # 결과 생성
-    result = [random.choice(symbols) for _ in range(5)]
+    # 초기 메시지 전송
+    message = await interaction.response.send_message("🎰 슬롯머신 작동 중...", wait=True)
+
+    # 애니메이션 효과: 한 칸씩 보여주기
+    result = []
+    for i in range(5):
+        result.append(random.choice(symbols))
+        display = " | ".join(result + ["⬜"] * (5 - len(result)))
+        await message.edit_original_response(content=f"🎰 **슬롯머신 작동 중...**\n| {display} |")
+        await asyncio.sleep(0.7)
+
     result_str = " | ".join(result)
-    
+
     # 연속 일치 확인
     max_streak = 1
     cur_streak = 1
@@ -2222,9 +2230,11 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
 
     current_balance = get_balance(user_id)
 
-    # 최종 메시지
-    await interaction.response.send_message(
-        f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n{outcome}\n💵 현재 잔액: {current_balance:,}원"
+    # 최종 메시지 업데이트
+    await message.edit_original_response(
+        content=(
+            f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n{outcome}\n💵 현재 잔액: {current_balance:,}원"
+        )
     )
 
 
