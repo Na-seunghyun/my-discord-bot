@@ -1153,7 +1153,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
 
 
-@tree.command(name="시즌랭킹", description="현재 시즌의 항목별 TOP3을 확인합니다.", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="시즌랭킹", description="현재 시즌의 항목별 TOP5을 확인합니다.", guild=discord.Object(id=GUILD_ID))
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
 
@@ -1202,36 +1202,42 @@ async def 시즌랭킹(interaction: discord.Interaction):
     rounds_top5 = sorted(rounds_list, key=lambda x: x[1], reverse=True)[:5]
     kills_top5 = sorted(kills_list, key=lambda x: x[1], reverse=True)[:5]
 
-    def format_top5(entries, is_percentage=False):
+    # 고정폭 글꼴(코드블록)으로 예쁘게 보여주기 함수
+    def format_top5_codeblock(entries, is_percentage=False):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
         lines = []
         for i, entry in enumerate(entries):
             val = f"{entry[1]:.2f}%" if is_percentage else f"{entry[1]:.2f}"
-            lines.append(f"{medals[i]} {i+1}. {entry[0]} - {val}")
-        return "\n".join(lines)
+            name = entry[0][:10].ljust(10)  # 닉네임 최대 10자, 좌측정렬
+            val_str = val.rjust(7)           # 값 우측정렬
+            lines.append(f"{medals[i]} {i+1}. {name} {val_str}")
+        return "```\n" + "\n".join(lines) + "\n```"
 
-    def format_top5_int(entries):
+    def format_top5_int_codeblock(entries):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
         lines = []
         for i, entry in enumerate(entries):
-            lines.append(f"{medals[i]} {i+1}. {entry[0]} - {entry[1]}")
-        return "\n".join(lines)
+            name = entry[0][:10].ljust(10)
+            val_str = str(entry[1]).rjust(7)
+            lines.append(f"{medals[i]} {i+1}. {name} {val_str}")
+        return "```\n" + "\n".join(lines) + "\n```"
 
     embed = discord.Embed(title=f"🏆 현재 시즌 항목별 TOP 5 (시즌 ID: {stored_season_id})", color=discord.Color.gold())
 
-    embed.add_field(name="🔫 평균 데미지", value=format_top5(damage_top5), inline=True)
-    embed.add_field(name="⚔️ K/D", value=format_top5(kd_top5), inline=True)
-    embed.add_field(name="🏆 승률", value=format_top5(win_top5, is_percentage=True), inline=True)
-    embed.add_field(name="🎮 게임 수", value=format_top5_int(rounds_top5), inline=True)
-    embed.add_field(name="💀 킬 수", value=format_top5_int(kills_top5), inline=True)
+    embed.add_field(name="🔫 평균 데미지", value=format_top5_codeblock(damage_top5), inline=True)
+    embed.add_field(name="⚔️ K/D", value=format_top5_codeblock(kd_top5), inline=True)
+    embed.add_field(name="🏆 승률", value=format_top5_codeblock(win_top5, is_percentage=True), inline=True)
+    embed.add_field(name="🎮 게임 수", value=format_top5_int_codeblock(rounds_top5), inline=True)
+    embed.add_field(name="💀 킬 수", value=format_top5_int_codeblock(kills_top5), inline=True)
 
     if rank_top5:
+        rank_msg = []
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
-        rank_lines = []
         for i, (name, points, tier, sub) in enumerate(rank_top5):
-            rank_lines.append(f"{medals[i]} {i+1}. {name} - {tier} {sub} ({points})")
-        embed.add_field(name="🥇 랭크 포인트", value="\n".join(rank_lines), inline=False)
+            rank_msg.append(f"{medals[i]} {i+1}. {name[:10].ljust(10)} - {tier} {sub} ({points})")
+        embed.add_field(name="🥇 랭크 포인트", value="```\n" + "\n".join(rank_msg) + "\n```", inline=False)
 
+    # footer 내용 (저장 유저 수 / 적합 유저 수)
     try:
         with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
             valid_members = json.load(f)
@@ -1239,9 +1245,12 @@ async def 시즌랭킹(interaction: discord.Interaction):
             text=f"※ 기준: 저장된 유저 {len(players)}명 / 총 적합 인원 {len(valid_members)}명"
         )
     except:
-        embed.set_footer(text="※ 기준: 저장된 유저 전적")
+        embed.set_footer(
+            text="※ 기준: 저장된 유저 전적"
+        )
 
     await interaction.followup.send(embed=embed)
+
 
 
 
