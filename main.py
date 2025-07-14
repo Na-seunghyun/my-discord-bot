@@ -1917,7 +1917,7 @@ async def auto_collect_pubg_stats():
         print(f"❗ 자동 수집 오류: {e}")
         await asyncio.sleep(60)  # 에러 발생 시 1분 대기
 
-
+daily_claims = {}
 
 @tree.command(name="돈줘", description="하루에 한 번 5000원 지급", guild=discord.Object(id=GUILD_ID))
 async def 돈줘(interaction: discord.Interaction):
