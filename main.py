@@ -1910,6 +1910,7 @@ async def auto_collect_pubg_stats():
                     await channel.send(content=f"{user.mention}", embed=embed)
                 except Exception as e:
                     print(f"❌ 유저 멘션 실패: {e}")
+                    
         except Exception as e:
             print(f"❌ 저장 실패: {nickname} | 이유: {e}")
             if not any(fm["discord_id"] == m["discord_id"] for fm in failed_members):
@@ -1946,9 +1947,6 @@ async def auto_collect_pubg_stats():
             await asyncio.sleep(60 * 60 * 3)
         else:
             await asyncio.sleep(60)
-
-
-
 
 
 
