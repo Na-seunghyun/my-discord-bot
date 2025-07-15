@@ -2356,6 +2356,7 @@ async def 투자종목(interaction: discord.Interaction):
 
 
 
+# ✅ 필요한 모듈
 import os
 import json
 import random
@@ -2371,10 +2372,10 @@ def save_last_chart_time(dt: datetime):
 
 def load_last_chart_time() -> datetime:
     if not os.path.exists("last_chart_time.json"):
-        return datetime.min
+        return datetime.min.replace(tzinfo=timezone.utc)  # ⬅️ timezone-aware로 변경
     with open("last_chart_time.json", "r", encoding="utf-8") as f:
         data = json.load(f)
-        return datetime.fromisoformat(data.get("last_updated", "1970-01-01T00:00:00"))
+        return isoparse(data.get("last_updated", "1970-01-01T00:00:00+00:00"))  # ⬅️ 항상 timezone 포함
 
 def save_investment_history(history):
     file = "investment_history.json"
@@ -2386,6 +2387,7 @@ def save_investment_history(history):
     data.extend(history)
     with open(file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
+
 
 
 
@@ -2522,8 +2524,9 @@ async def process_investments():
     investments = load_investments()
     new_list = []
 
-    last_chart_time = load_last_chart_time()
-    now = datetime.now(timezone(timedelta(hours=9)))
+    KST = timezone(timedelta(hours=9))
+    last_chart_time = load_last_chart_time().astimezone(KST)
+    now = datetime.now(KST)
 
     report = "📊 [2시간 주기 투자 종목 변동]\n\n"
 
@@ -2546,7 +2549,7 @@ async def process_investments():
         shares = inv["shares"]
         old_price = inv["price_per_share"]
         new_price = stocks[stock]["price"]
-        timestamp = isoparse(inv["timestamp"])  # ⬅️ 수정됨
+        timestamp = isoparse(inv["timestamp"]).astimezone(KST)  # ⬅️ timezone-aware 변환
 
         # ✅ 정산 기준은 이전 차트 발행 시각보다 이후일 것
         if timestamp < last_chart_time:
@@ -2592,6 +2595,7 @@ async def process_investments():
                 print(f"❌ 오덕코인 채널 전송 실패: {e}")
 
     save_last_chart_time(now)
+
 
 
 
