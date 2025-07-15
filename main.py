@@ -2331,14 +2331,26 @@ async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금�
 @tree.command(name="투자종목", description="투자 가능한 종목과 현재 1주당 가격을 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def 투자종목(interaction: discord.Interaction):
     stocks = load_stocks()
+    embeds = []
     embed = discord.Embed(title="📈 투자 종목 리스트", color=discord.Color.gold())
+    count = 0
+
     for name, info in stocks.items():
         embed.add_field(
             name=name,
             value=f"💵 1주 가격: {info['price']:,}원",
             inline=True
         )
-    await interaction.response.send_message(embed=embed)
+        count += 1
+        if count == 25:
+            embeds.append(embed)
+            embed = discord.Embed(color=discord.Color.gold())
+            count = 0
+
+    if count > 0:
+        embeds.append(embed)
+
+    await interaction.response.send_message(embeds=embeds)
 
 
 @tree.command(name="투자", description="종목을 선택하고 몇 주를 살지 정합니다", guild=discord.Object(id=GUILD_ID))
