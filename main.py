@@ -2256,6 +2256,15 @@ async def 도박순위(interaction: discord.Interaction):
 
     await interaction.followup.send(embed=embed)
 
+def create_embed(title: str, description: str, color: discord.Color, user_id: str = None) -> discord.Embed:
+    embed = discord.Embed(title=title, description=description, color=color)
+    if user_id:
+        from balance_utils import get_balance  # 혹은 적절한 경로로 변경
+        embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
+    return embed
+
+
+
 @tree.command(name="돈지급", description="관리자가 유저에게 돈을 지급합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="돈을 지급할 유저", 금액="지급할 금액")
 async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금액: int):
