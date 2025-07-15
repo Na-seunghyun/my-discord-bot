@@ -2376,7 +2376,6 @@ def create_embed(title: str, description: str, color: discord.Color, user_id: st
 
 
 
-
 @tree.command(name="일괄지급", description="서버 내 모든 유저에게 일정 금액을 지급합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(금액="지급할 금액 (1원 이상)")
 async def 일괄지급(interaction: discord.Interaction, 금액: int):
@@ -2395,10 +2394,9 @@ async def 일괄지급(interaction: discord.Interaction, 금액: int):
     await interaction.response.defer(thinking=True)
 
     guild = interaction.guild
-    members = await guild.fetch_members(limit=None).flatten()
-
     count = 0
-    for member in members:
+
+    async for member in guild.fetch_members(limit=None):
         if member.bot:
             continue
         add_balance(str(member.id), 금액)
@@ -2410,6 +2408,7 @@ async def 일괄지급(interaction: discord.Interaction, 금액: int):
         discord.Color.green()
     )
     await interaction.followup.send(embed=embed)
+
 
 
 
