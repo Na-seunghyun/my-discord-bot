@@ -2628,6 +2628,29 @@ async def process_investments():
     save_last_chart_time(now)
 
 
+@tree.command(name="잔액초기화", description="모든 유저의 잔액을 0원으로 초기화합니다 (채널관리자 전용)", guild=discord.Object(id=GUILD_ID))
+async def 잔액초기화(interaction: discord.Interaction):
+    # 역할 이름이 '채널관리자'인 경우만 허용
+    role_names = [role.name for role in interaction.user.roles]
+    if "채널관리자" not in role_names:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 권한 없음", "이 명령어는 **'채널관리자' 역할**만 사용할 수 있습니다.", discord.Color.red()),
+            ephemeral=True
+        )
+
+    balances = load_balances()
+    for uid in balances:
+        balances[uid]["amount"] = 0
+        balances[uid]["last_updated"] = datetime.utcnow().isoformat()
+
+    save_balances(balances)
+
+    await interaction.response.send_message(
+        embed=create_embed("✅ 잔액 초기화 완료", f"총 {len(balances)}명의 잔액이 0원으로 초기화되었습니다.", discord.Color.green()),
+        ephemeral=False
+    )
+
+
 
 
 
