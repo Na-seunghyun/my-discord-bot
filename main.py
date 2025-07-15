@@ -1924,30 +1924,59 @@ async def auto_collect_pubg_stats():
         print(f"auto_collect_pubg_stats 함수 에러: {e}")
 
 
-from datetime import datetime, timezone, timedelta
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
+from datetime import datetime, timezone, timedelta
+import json
+import os
+import asyncio
 import random
 
-# 한국 시간대 설정
+# 🕰️ 한국 시간대
 KST = timezone(timedelta(hours=9))
-daily_claims = {}
+
+# 📁 저장 파일 경로
+DAILY_CLAIMS_FILE = "daily_claims.json"
+
+# 📌 봇/트리 선언 (예시)
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+tree = bot.tree
+GUILD_ID = 123456789012345678  # ✅ 실제 서버 ID로 바꾸세요
 
 
-def create_embed(title: str, description: str, color: discord.Color, user_id: str = None) -> discord.Embed:
-    embed = discord.Embed(title=title, description=description, color=color)
-    if user_id:
-        embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
-    return embed
+# ✅ 잔액 관련 함수 (이미 구현되어 있다고 가정)
+def add_balance(user_id, amount):
+    # 실제 구현에 따라 작성하세요
+    pass
+
+def get_balance(user_id):
+    # 실제 구현에 따라 작성하세요
+    return 0
 
 
+# ✅ 파일로부터 일일 수령 기록 로드
+def load_daily_claims():
+    if not os.path.exists(DAILY_CLAIMS_FILE):
+        with open(DAILY_CLAIMS_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
+    with open(DAILY_CLAIMS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-# ✅ 돈줘
+# ✅ 일일 수령 기록 저장
+def save_daily_claims(data):
+    with open(DAILY_CLAIMS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# ✅ 최초 로딩
+daily_claims = load_daily_claims()
+
+
+# ✅ /돈줘 명령어
 @tree.command(name="돈줘", description="하루에 한 번 5000원 지급", guild=discord.Object(id=GUILD_ID))
 async def 돈줘(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
-    today = datetime.now(KST).date()
+    today = datetime.now(KST).date().isoformat()
 
     if daily_claims.get(user_id) == today:
         embed = discord.Embed(
@@ -1955,10 +1984,11 @@ async def 돈줘(interaction: discord.Interaction):
             description="오늘은 이미 받으셨습니다. 내일 다시 시도해주세요.",
             color=discord.Color.red()
         )
-        return await interaction.response.send_message(embed=embed, ephemeral=False)
+        return await interaction.response.send_message(embed=embed, ephemeral=True)
 
     add_balance(user_id, 5000)
     daily_claims[user_id] = today
+    save_daily_claims(daily_claims)
 
     embed = discord.Embed(
         title="💰 돈이 지급되었습니다!",
@@ -1966,7 +1996,27 @@ async def 돈줘(interaction: discord.Interaction):
         color=discord.Color.green()
     )
     embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
-    await interaction.response.send_message(embed=embed, ephemeral=False)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ⏰ 자정마다 daily_claims 초기화
+@tasks.loop(hours=24)
+async def reset_daily_claims():
+    global daily_claims
+    daily_claims = {}
+    save_daily_claims(daily_claims)
+    print("✅ daily_claims 초기화 완료 (한국 시 기준 자정)")
+
+
+# ⏱️ 루프 시작 전: 자정까지 대기
+@reset_daily_claims.before_loop
+async def before_reset():
+    await bot.wait_until_ready()
+    now = datetime.now(KST)
+    next_midnight = datetime.combine(now.date(), datetime.min.time(), tzinfo=KST) + timedelta(days=1)
+    wait_seconds = (next_midnight - now).total_seconds()
+    print(f"⏳ 자정까지 {int(wait_seconds)}초 대기 후 daily_claims 초기화 시작")
+    await asyncio.sleep(wait_seconds)
 
 # ✅ 잔액
 @tree.command(name="잔액", description="유저의 현재 보유 금액을 확인합니다", guild=discord.Object(id=GUILD_ID))
@@ -2247,6 +2297,7 @@ async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금�
 @bot.event
 async def on_ready():
     print(f"✅ 봇 로그인: {bot.user} ({bot.user.id})")
+    reset_daily_claims.start()
 
     # 슬래시 명령 동기화
     guild_obj = discord.Object(id=GUILD_ID)
