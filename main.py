@@ -2362,6 +2362,7 @@ import random
 from datetime import datetime, timedelta, timezone
 import discord
 from discord.ext import tasks
+from dateutil.parser import isoparse  # ⬅️ 추가됨
 
 # ✅ 파일 저장 및 불러오기 함수들
 def save_last_chart_time(dt: datetime):
@@ -2385,7 +2386,6 @@ def save_investment_history(history):
     data.extend(history)
     with open(file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
-
 
 
 
@@ -2515,6 +2515,7 @@ async def 투자왕(interaction: discord.Interaction):
 
 
 
+# ✅ 투자 시스템 핵심 루프
 @tasks.loop(hours=2)
 async def process_investments():
     stocks = load_stocks()
@@ -2545,7 +2546,7 @@ async def process_investments():
         shares = inv["shares"]
         old_price = inv["price_per_share"]
         new_price = stocks[stock]["price"]
-        timestamp = datetime.fromisoformat(inv["timestamp"])
+        timestamp = isoparse(inv["timestamp"])  # ⬅️ 수정됨
 
         # ✅ 정산 기준은 이전 차트 발행 시각보다 이후일 것
         if timestamp < last_chart_time:
