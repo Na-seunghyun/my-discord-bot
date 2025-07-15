@@ -2629,56 +2629,21 @@ async def 투자왕(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
-# ✅ 유저에게 투자 정산 DM 보내는 함수
-async def send_investment_summary(user: discord.User, user_id: str):
-    stocks = load_stocks()
-    investments = load_investments()
-    my_investments = [inv for inv in investments if inv["user_id"] == user_id]
+# ✅ 유저에게 투자 정산 결과를 DM으로 보내는 함수 (정산된 내역 기반)
+async def send_investment_summary(user: discord.User, user_id: str, history: list):
+    # 이 유저의 정산된 투자 내역만 필터링
+    user_history = [h for h in history if h["user_id"] == user_id]
 
-    if not my_investments:
+    if not user_history:
         return
 
-    # 종목 + 매입단가 기준으로 묶기
-    grouped = {}
-    for inv in my_investments:
-        key = (inv["stock"], inv["price_per_share"])
-        grouped.setdefault(key, 0)
-        grouped[key] += inv["shares"]
-
-    total_invested = 0
-    total_returned = 0
-    fields = []
-
-    for (stock, buy_price), shares in grouped.items():
-        if stock not in stocks:
-            continue
-        current_price = stocks[stock]["price"]
-        invested = buy_price * shares
-        returned = current_price * shares
-        profit = returned - invested
-        rate = round((current_price - buy_price) / buy_price * 100, 2)
-        emoji = "📈" if profit >= 0 else "📉"
-        sign = "+" if profit > 0 else ""
-        rate_str = f"{sign}{rate}%"
-        profit_str = f"{sign}{profit:,}원"
-
-        fields.append({
-            "name": f"{emoji} [{stock}] {rate_str}",
-            "value": (
-                f"🪙 보유: {shares}주\n"
-                f"💰 매입가 총액: {invested:,}원\n"
-                f"💵 정산 금액: {returned:,}원\n"
-                f"📊 손익: {profit_str}"
-            )
-        })
-
-        total_invested += invested
-        total_returned += returned
-
+    total_invested = sum(h["buy_price"] * h["shares"] for h in user_history)
+    total_returned = sum(h["sell_price"] * h["shares"] for h in user_history)
     total_profit = total_returned - total_invested
     total_sign = "+" if total_profit > 0 else ""
     total_emoji = "📈" if total_profit >= 0 else "📉"
 
+    # 전체 요약 Embed
     summary_embed = discord.Embed(
         title="📊 투자 정산 요약",
         description=(
@@ -2689,16 +2654,41 @@ async def send_investment_summary(user: discord.User, user_id: str):
         color=discord.Color.green() if total_profit >= 0 else discord.Color.red()
     )
 
+    # 개별 종목 정산 내역
     embeds = [summary_embed]
     current_embed = discord.Embed(title="📈 개별 종목 정산", color=discord.Color.teal())
-    for i, field in enumerate(fields):
-        current_embed.add_field(name=field["name"], value=field["value"], inline=False)
+    for i, h in enumerate(user_history):
+        stock = h["stock"]
+        shares = h["shares"]
+        buy_price = h["buy_price"]
+        sell_price = h["sell_price"]
+        invested = buy_price * shares
+        returned = sell_price * shares
+        profit = returned - invested
+        rate = round((sell_price - buy_price) / buy_price * 100, 2)
+        sign = "+" if profit > 0 else ""
+        emoji = "📈" if profit >= 0 else "📉"
+
+        current_embed.add_field(
+            name=f"{emoji} [{stock}] {sign}{rate}%",
+            value=(
+                f"🪙 보유: {shares}주\n"
+                f"💰 매입가 총액: {invested:,}원\n"
+                f"💵 정산 금액: {returned:,}원\n"
+                f"📊 손익: {sign}{profit:,}원"
+            ),
+            inline=False
+        )
+
+        # 24개 넘으면 새 Embed
         if (i + 1) % 24 == 0:
             embeds.append(current_embed)
             current_embed = discord.Embed(title="📈 개별 종목 정산 (계속)", color=discord.Color.teal())
+
     if len(current_embed.fields) > 0:
         embeds.append(current_embed)
 
+    # DM 전송
     try:
         for embed in embeds:
             await user.send(embed=embed)
@@ -2714,9 +2704,6 @@ async def send_investment_summary(user: discord.User, user_id: str):
 
 
 
-
-
-# ✅ 2시간마다 실행되는 투자 정산 루프
 @tasks.loop(hours=2)
 async def process_investments():
     stocks = load_stocks()
@@ -2730,6 +2717,7 @@ async def process_investments():
     report = "📊 [2시간 주기 투자 종목 변동]\n\n"
     split_report = ""
 
+    # 가격 변동 함수 (희박하게 -100%, +100%)
     def generate_change():
         r = random.random()
         if r < 0.00005:
@@ -2739,6 +2727,7 @@ async def process_investments():
         else:
             return random.randint(-30, 30)
 
+    # 주식 가격 업데이트
     for name, stock in stocks.items():
         change = generate_change()
         old_price = stock["price"]
@@ -2755,6 +2744,7 @@ async def process_investments():
 
     save_stocks(stocks)
 
+    # 정산 처리
     history = []
     updated_users = set()
 
@@ -2766,6 +2756,7 @@ async def process_investments():
         new_price = stocks[stock]["price"]
         timestamp = isoparse(inv["timestamp"]).astimezone(KST)
 
+        # 직전 정산 이후에 구매한 주식만 정산
         if timestamp < last_chart_time:
             continue
 
@@ -2789,19 +2780,20 @@ async def process_investments():
         else:
             new_list.append(inv)
 
+    # 투자 목록 갱신 및 기록 저장
     save_investments(new_list)
-
     if history:
         save_investment_history(history)
 
-    # 각 유저에게 개별 DM 전송
+    # 정산된 유저들에게 DM 전송
     for user_id in updated_users:
         try:
             user = await bot.fetch_user(int(user_id))
-            await send_investment_summary(user, user_id)
+            await send_investment_summary(user, user_id, history)  # ✅ history 기반
         except Exception as e:
             print(f"❌ {user_id}님에게 정산 DM 전송 실패: {e}")
 
+    # 채널에 정산 결과 알림
     if split_report:
         report += f"\n{split_report}"
 
@@ -2813,7 +2805,9 @@ async def process_investments():
             except Exception as e:
                 print(f"❌ 오덕코인 채널 전송 실패: {e}")
 
+    # 마지막 정산 시각 갱신
     save_last_chart_time(now)
+
 
 
 @tree.command(name="잔액초기화", description="모든 유저의 잔액을 0원으로 초기화합니다 (채널관리자 전용)", guild=discord.Object(id=GUILD_ID))
