@@ -1939,15 +1939,6 @@ KST = timezone(timedelta(hours=9))
 # 📁 저장 파일 경로
 DAILY_CLAIMS_FILE = "daily_claims.json"
 
-# ✅ 잔액 관련 함수 (이미 구현되어 있다고 가정)
-def add_balance(user_id, amount):
-    # 실제 구현에 따라 작성하세요
-    pass
-
-def get_balance(user_id):
-    # 실제 구현에 따라 작성하세요
-    return 0
-
 
 # ✅ 파일로부터 일일 수령 기록 로드
 def load_daily_claims():
@@ -1980,6 +1971,7 @@ async def 돈줘(interaction: discord.Interaction):
         )
         return await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    # ✅ 이 부분은 잘 연결된 상태입니다
     add_balance(user_id, 5000)
     daily_claims[user_id] = today
     save_daily_claims(daily_claims)
@@ -1991,6 +1983,7 @@ async def 돈줘(interaction: discord.Interaction):
     )
     embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 
 # ⏰ 자정마다 daily_claims 초기화
