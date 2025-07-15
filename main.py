@@ -2461,6 +2461,7 @@ async def 내투자(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+# ✅ 투자왕 커맨드
 @tree.command(name="투자왕", description="지금까지 가장 많은 수익을 낸 유저 랭킹", guild=discord.Object(id=GUILD_ID))
 async def 투자왕(interaction: discord.Interaction):
     file_path = "investment_history.json"
@@ -2497,18 +2498,27 @@ async def 투자왕(interaction: discord.Interaction):
 
     embed = discord.Embed(title="👑 투자왕 TOP 10", color=discord.Color.gold())
     for rank, (user_id, total_profit) in enumerate(top_users, 1):
+        name = f"Unknown ({user_id})"
         try:
             guild = interaction.guild
-            member = guild.get_member(int(user_id)) or await guild.fetch_member(int(user_id))
-            name = member.nick or member.name
-        except:
-            name = f"Unknown ({user_id})"
+            member = guild.get_member(int(user_id))
+            if member is None:
+                try:
+                    member = await guild.fetch_member(int(user_id))
+                except discord.NotFound:
+                    member = None
+            if member:
+                name = member.nick or member.name
+        except Exception as e:
+            print(f"❌ 사용자 정보 조회 실패: {user_id} / {e}")
 
         embed.add_field(
             name=f"{rank}위 - {name}",
             value=f"누적 수익: **{total_profit:,}원**",
             inline=False
         )
+
+    await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
 
