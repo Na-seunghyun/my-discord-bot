@@ -68,6 +68,52 @@ BADWORDS_FILE = "badwords.txt"
 
 
 
+# 📁 투자 관련 파일
+INVESTMENT_FILE = "investments.json"
+STOCKS_FILE = "stocks.json"
+
+# 📈 종목 목록 (30개, 1주당 가격 500~3000원)
+STOCK_LIST = [
+    "로켓스탁", "피자코인", "와사비바이오", "버블티엔터", "슬로우버거",
+    "햄버그금융", "망고소프트", "초코우유랩", "블루문제약", "펭귄테크",
+    "파스타홀딩스", "자몽바이오", "고래투자사", "슈퍼감자", "썬더모터스",
+    "큐브엔터", "하늘은행", "크림소프트", "베이컨솔루션", "구름캐피탈",
+    "레몬IT", "눈송이로지스", "브로콜리랩", "타코앤스탁", "딸기엔터프라이즈",
+    "펑크테크놀로지", "라떼헬스케어", "미소캐시", "오로라디지털", "스푼리서치"
+]
+
+def initialize_stocks():
+    if not os.path.exists(STOCKS_FILE):
+        stocks = {name: {"price": random.randint(500, 3000), "change": 0} for name in STOCK_LIST}
+        with open(STOCKS_FILE, "w", encoding="utf-8") as f:
+            json.dump(stocks, f, indent=2)
+
+def load_stocks():
+    initialize_stocks()
+    with open(STOCKS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_stocks(data):
+    with open(STOCKS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def load_investments():
+    if not os.path.exists(INVESTMENT_FILE):
+        return []
+    with open(INVESTMENT_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_investments(data):
+    with open(INVESTMENT_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+
+
+
+
+
+
 
 
 # 🎲 도박 기능용 상수 및 유틸
@@ -2282,7 +2328,106 @@ async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금�
     await interaction.response.send_message(
         embed=create_embed("💸 돈 지급 완료", f"{대상.mention}님에게 **{금액:,}원**을 지급했습니다.", discord.Color.green(), 대상.id))
 
+@tree.command(name="투자종목", description="투자 가능한 종목과 현재 1주당 가격을 확인합니다", guild=discord.Object(id=GUILD_ID))
+async def 투자종목(interaction: discord.Interaction):
+    stocks = load_stocks()
+    embed = discord.Embed(title="📈 투자 종목 리스트", color=discord.Color.gold())
+    for name, info in stocks.items():
+        embed.add_field(
+            name=name,
+            value=f"💵 1주 가격: {info['price']:,}원",
+            inline=True
+        )
+    await interaction.response.send_message(embed=embed)
 
+
+@tree.command(name="투자", description="종목을 선택하고 몇 주를 살지 정합니다", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(종목="투자할 종목 이름", 수량="구매할 주식 수 (최소 1주)")
+async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
+    user_id = str(interaction.user.id)
+    종목 = 종목.strip()
+    stocks = load_stocks()
+
+    if 종목 not in stocks:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 종목 오류", f"'{종목}'은 존재하지 않는 종목입니다.", discord.Color.red()), ephemeral=False)
+
+    if 수량 < 1:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 수량 오류", "최소 **1주** 이상 구매해야 합니다.", discord.Color.red()), ephemeral=False)
+
+    단가 = stocks[종목]["price"]
+    총액 = 단가 * 수량
+
+    if get_balance(user_id) < 총액:
+        return await interaction.response.send_message(
+            embed=create_embed("💸 잔액 부족", f"보유 잔액: **{get_balance(user_id):,}원**\n필요 금액: **{총액:,}원**", discord.Color.red()), ephemeral=False)
+
+    add_balance(user_id, -총액)
+
+    investments = load_investments()
+    investments.append({
+        "user_id": user_id,
+        "stock": 종목,
+        "shares": 수량,
+        "price_per_share": 단가,
+        "timestamp": datetime.now().isoformat()
+    })
+    save_investments(investments)
+
+    await interaction.response.send_message(
+        embed=create_embed("📥 투자 완료", f"**{종목}** {수량}주 구매 완료!\n총 투자금: **{총액:,}원**", discord.Color.blue(), user_id))
+
+
+@tasks.loop(hours=2)
+async def process_investments():
+    stocks = load_stocks()
+    investments = load_investments()
+    new_list = []
+
+    report = "📊 [2시간 주기 투자 종목 변동]\n\n"
+    for name, stock in stocks.items():
+        change = random.randint(-30, 30)
+        old_price = stock["price"]
+        new_price = max(100, int(old_price * (1 + change / 100)))
+        stock["price"] = new_price
+        stock["change"] = change
+        symbol = "📈" if change > 0 else ("📉" if change < 0 else "➖")
+        report += f"{symbol} {name}: {change:+}% → {new_price:,}원\n"
+
+    save_stocks(stocks)
+
+    for inv in investments:
+        user_id = inv["user_id"]
+        stock = inv["stock"]
+        shares = inv["shares"]
+        old_price = inv["price_per_share"]
+        new_price = stocks[stock]["price"]
+        timestamp = datetime.fromisoformat(inv["timestamp"])
+
+        if datetime.now() - timestamp >= timedelta(hours=2):
+            diff = new_price - old_price
+            total = new_price * shares
+            profit = diff * shares
+            add_balance(user_id, total)
+
+            try:
+                user = await bot.fetch_user(int(user_id))
+                await user.send(f"📈 [{stock}] {stocks[stock]['change']:+}%\n보유: {shares}주\n정산: {total:,}원 (+{profit:+,}원)")
+            except:
+                pass
+        else:
+            new_list.append(inv)
+
+    save_investments(new_list)
+
+    for guild in bot.guilds:
+        ch = discord.utils.get(guild.text_channels, name="오덕코인")
+        if ch:
+            try:
+                await ch.send(report)
+            except Exception as e:
+                print(f"❌ 오덕코인 채널 전송 실패: {e}")
 
 
 
@@ -2300,7 +2445,6 @@ async def on_ready():
         print(f"✅ 슬래시 명령어 {len(synced)}개 동기화됨")
     except Exception as e:
         print(f"❌ 슬래시 명령어 동기화 실패: {e}")
-
 
     # ⏲️ 자정 루프 시작
     if not reset_daily_claims.is_running():
@@ -2369,7 +2513,7 @@ async def on_ready():
         print("⚠️ auto_update_valid_ids 루프는 이미 실행 중일 수 있음.")
 
     # 음성 채널 자동 퇴장 타이머
-    await asyncio.sleep(3)  # 중복 방지를 위한 대기
+    await asyncio.sleep(3)
     for guild in bot.guilds:
         bap_channel = discord.utils.get(guild.voice_channels, name="밥좀묵겠습니다")
         text_channel = discord.utils.get(guild.text_channels, name="봇알림")
@@ -2391,6 +2535,18 @@ async def on_ready():
                     auto_disconnect_after_timeout(member, bap_channel, text_channel))
                 auto_disconnect_tasks[member.id] = task
                 print(f"🔄 재시작 후 타이머 적용됨: {member.display_name}")
+
+    # ✅ 투자 시스템 초기화 및 루프 시작
+    initialize_stocks()
+
+    if not os.path.exists(INVESTMENT_FILE):
+        with open(INVESTMENT_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f, indent=2)
+
+    if not process_investments.is_running():
+        process_investments.start()
+        print("📈 투자 정산 루프 시작됨")
+
 
 
 
