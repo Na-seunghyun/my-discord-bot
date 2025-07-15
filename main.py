@@ -2528,6 +2528,7 @@ async def 투자왕(interaction: discord.Interaction):
 
 
 # ✅ 투자 시스템 핵심 루프
+# ✅ 투자 시스템 핵심 루프
 @tasks.loop(hours=2)
 async def process_investments():
     stocks = load_stocks()
@@ -2539,14 +2540,32 @@ async def process_investments():
     now = datetime.now(KST)
 
     report = "📊 [2시간 주기 투자 종목 변동]\n\n"
+    split_report = ""
 
+    # ✅ 극단적 변동 포함 함수
+    def generate_change():
+        r = random.random()
+        if r < 0.00005:    # 0.005% 확률로 +100%
+            return 100
+        elif r < 0.0010:   # 0.005% 확률로 -100%
+            return -100
+        else:
+            return random.randint(-30, 30)
+
+    # ✅ 주가 갱신 및 분할 처리
     for name, stock in stocks.items():
-        change = random.randint(-30, 30)
+        change = generate_change()
         old_price = stock["price"]
         new_price = max(100, int(old_price * (1 + change / 100)))
+
+        # 📌 3만원 초과 시 10분할
+        if new_price > 30_000:
+            new_price = new_price // 10
+            split_report += f"📣 [{name}] 주식 분할: 1주 → 10주, 가격 ↓ {old_price:,} → {new_price:,}원\n"
+
         stock["price"] = new_price
         stock["change"] = change
-        symbol = "📈" if change > 0 else ("📉" if change < 0 else "➖")
+        symbol = "📈" if change > 0 else ("📉" if change < 0 else "💥" if change in [-100, 100] else "➖")
         report += f"{symbol} {name}: {change:+}% → {new_price:,}원\n"
 
     save_stocks(stocks)
@@ -2559,9 +2578,8 @@ async def process_investments():
         shares = inv["shares"]
         old_price = inv["price_per_share"]
         new_price = stocks[stock]["price"]
-        timestamp = isoparse(inv["timestamp"]).astimezone(KST)  # ⬅️ timezone-aware 변환
+        timestamp = isoparse(inv["timestamp"]).astimezone(KST)
 
-        # ✅ 정산 기준은 이전 차트 발행 시각보다 이후일 것
         if timestamp < last_chart_time:
             continue
 
@@ -2595,6 +2613,9 @@ async def process_investments():
 
     if history:
         save_investment_history(history)
+
+    if split_report:
+        report += f"\n{split_report}"
 
     for guild in bot.guilds:
         ch = discord.utils.get(guild.text_channels, name="오덕코인")
