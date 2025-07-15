@@ -2401,7 +2401,24 @@ async def 종목_자동완성(interaction: discord.Interaction, current: str):
         if current_lower in name.lower()
     ][:25]  # Discord 제한: 최대 25개까지만
 
+# ✅ /내투자
+@tree.command(name="내투자", description="현재 보유 중인 투자 내역을 확인합니다", guild=discord.Object(id=GUILD_ID))
+async def 내투자(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    investments = load_investments()
+    my_investments = [inv for inv in investments if inv["user_id"] == user_id]
 
+    if not my_investments:
+        return await interaction.response.send_message(embed=create_embed("📭 투자 내역 없음", "현재 보유 중인 투자 내역이 없습니다.", discord.Color.light_grey()), ephemeral=True)
+
+    embed = discord.Embed(title="📊 나의 투자 내역", color=discord.Color.blue())
+    for inv in my_investments:
+        embed.add_field(
+            name=inv["stock"],
+            value=f"수량: {inv['shares']}주\n매수 단가: {inv['price_per_share']:,}원\n투자 시각: {inv['timestamp'].replace('T', ' ')[:16]}",
+            inline=False
+        )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @tasks.loop(hours=2)
 async def process_investments():
