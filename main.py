@@ -112,7 +112,7 @@ def save_investments(data):
 
 
 
-
+oduk_pool_cache = {}
 
 
 
@@ -173,13 +173,11 @@ def save_oduk_pool(data):
         json.dump(data, f, indent=2)
 
 def add_oduk_pool(amount: int):
-    pool = load_oduk_pool()
-    pool["amount"] += amount
-    save_oduk_pool(pool)
+    oduk_pool_cache["amount"] += amount
+    save_oduk_pool(oduk_pool_cache)
 
 def get_oduk_pool_amount() -> int:
-    return load_oduk_pool().get("amount", 0)
-
+    return oduk_pool_cache.get("amount", 0)
 
 
 
@@ -2690,11 +2688,13 @@ async def 잔액초기화(interaction: discord.Interaction):
     save_balances(balances)
 
     # ✅ 오덕로또 상금 풀 초기화
-    save_oduk_pool({
+    global oduk_pool_cache
+    oduk_pool_cache = {
         "amount": 0,
         "last_lotto_date": "",
         "last_winner": ""
-    })
+    }
+    save_oduk_pool(oduk_pool_cache)
 
     # ✅ 오덕로또 참여 기록 초기화
     save_oduk_lotto_entries({})
@@ -2953,6 +2953,7 @@ async def on_ready():
     # 초대 캐시 초기화 및 저장
     global invites_cache
     invites_cache = {}
+    oduk_pool_cache = load_oduk_pool()  # 캐시 로딩
 
     for guild in bot.guilds:
         try:
