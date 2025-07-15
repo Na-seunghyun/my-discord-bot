@@ -2353,6 +2353,44 @@ async def 투자종목(interaction: discord.Interaction):
     await interaction.response.send_message(embeds=embeds)
 
 
+
+
+
+import os
+import json
+import random
+from datetime import datetime, timedelta, timezone
+import discord
+from discord.ext import tasks
+
+# ✅ 파일 저장 및 불러오기 함수들
+def save_last_chart_time(dt: datetime):
+    with open("last_chart_time.json", "w", encoding="utf-8") as f:
+        json.dump({"last_updated": dt.isoformat()}, f)
+
+def load_last_chart_time() -> datetime:
+    if not os.path.exists("last_chart_time.json"):
+        return datetime.min
+    with open("last_chart_time.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+        return datetime.fromisoformat(data.get("last_updated", "1970-01-01T00:00:00"))
+
+def save_investment_history(history):
+    file = "investment_history.json"
+    if not os.path.exists(file):
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump([], f)
+    with open(file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data.extend(history)
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+
+
+
+
+
 @tree.command(name="투자", description="종목을 선택하고 몇 주를 살지 정합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(종목="투자할 종목 이름", 수량="구매할 주식 수 (최소 1주)")
 async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
@@ -2424,7 +2462,7 @@ async def 내투자(interaction: discord.Interaction):
 @tree.command(name="투자왕", description="지금까지 가장 많은 수익을 낸 유저 랭킹", guild=discord.Object(id=GUILD_ID))
 async def 투자왕(interaction: discord.Interaction):
     file_path = "investment_history.json"
-    
+
     if not os.path.exists(file_path):
         return await interaction.response.send_message(
             embed=create_embed("📭 랭킹 없음", "아직 수익이 기록된 유저가 없습니다.", discord.Color.light_grey()),
@@ -2446,19 +2484,13 @@ async def 투자왕(interaction: discord.Interaction):
             ephemeral=True
         )
 
-    # 누적 수익 계산
+    # ✅ 누적 수익 계산
     profits = {}
     for entry in history:
         uid = entry["user_id"]
         profits[uid] = profits.get(uid, 0) + entry.get("profit", 0)
 
-    if not profits:
-        return await interaction.response.send_message(
-            embed=create_embed("📭 랭킹 없음", "아직 수익이 기록된 유저가 없습니다.", discord.Color.light_grey()),
-            ephemeral=True
-        )
-
-    # 수익 높은 순으로 정렬
+    # ✅ 상위 10명 정렬
     top_users = sorted(profits.items(), key=lambda x: x[1], reverse=True)[:10]
 
     embed = discord.Embed(title="👑 투자왕 TOP 10", color=discord.Color.gold())
@@ -2468,7 +2500,6 @@ async def 투자왕(interaction: discord.Interaction):
             name = user.name
         except:
             name = f"Unknown ({user_id})"
-
         embed.add_field(
             name=f"{rank}위 - {name}",
             value=f"누적 수익: **{total_profit:,}원**",
@@ -2483,14 +2514,16 @@ async def 투자왕(interaction: discord.Interaction):
 
 
 
+
 @tasks.loop(hours=2)
 async def process_investments():
     stocks = load_stocks()
     investments = load_investments()
     new_list = []
 
-    # ✅ 현재 가격 갱신 시각 저장
-    now = datetime.now()
+    last_chart_time = load_last_chart_time()
+    now = datetime.now(timezone(timedelta(hours=9)))
+
     report = "📊 [2시간 주기 투자 종목 변동]\n\n"
 
     for name, stock in stocks.items():
@@ -2504,7 +2537,7 @@ async def process_investments():
 
     save_stocks(stocks)
 
-    history = []  # ✅ 누적 수익 저장 리스트
+    history = []
 
     for inv in investments:
         user_id = inv["user_id"]
@@ -2514,14 +2547,16 @@ async def process_investments():
         new_price = stocks[stock]["price"]
         timestamp = datetime.fromisoformat(inv["timestamp"])
 
-        # ✅ 갱신 시각 이전에 투자한 것만 정산
-        if timestamp < now - timedelta(hours=2):
+        # ✅ 정산 기준은 이전 차트 발행 시각보다 이후일 것
+        if timestamp < last_chart_time:
+            continue
+
+        if timestamp < now:
             diff = new_price - old_price
             total = new_price * shares
             profit = diff * shares
             add_balance(user_id, total)
 
-            # ✅ 수익 기록 저장
             history.append({
                 "user_id": user_id,
                 "stock": stock,
@@ -2544,20 +2579,8 @@ async def process_investments():
 
     save_investments(new_list)
 
-    # ✅ investment_history.json 에 누적 저장
     if history:
-        file = "investment_history.json"
-        if not os.path.exists(file):
-            with open(file, "w", encoding="utf-8") as f:
-                json.dump([], f)
-
-        with open(file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        data.extend(history)
-
-        with open(file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4)
+        save_investment_history(history)
 
     for guild in bot.guilds:
         ch = discord.utils.get(guild.text_channels, name="오덕코인")
@@ -2566,6 +2589,8 @@ async def process_investments():
                 await ch.send(report)
             except Exception as e:
                 print(f"❌ 오덕코인 채널 전송 실패: {e}")
+
+    save_last_chart_time(now)
 
 
 
