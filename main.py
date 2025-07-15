@@ -2420,13 +2420,79 @@ async def 내투자(interaction: discord.Interaction):
         )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+
+@tree.command(name="투자왕", description="지금까지 가장 많은 수익을 낸 유저 랭킹", guild=discord.Object(id=GUILD_ID))
+async def 투자왕(interaction: discord.Interaction):
+    file_path = "investment_history.json"
+    
+    if not os.path.exists(file_path):
+        return await interaction.response.send_message(
+            embed=create_embed("📭 랭킹 없음", "아직 수익이 기록된 유저가 없습니다.", discord.Color.light_grey()),
+            ephemeral=True
+        )
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        try:
+            history = json.load(f)
+        except json.JSONDecodeError:
+            return await interaction.response.send_message(
+                embed=create_embed("⚠️ 오류 발생", "수익 기록 파일을 읽을 수 없습니다.", discord.Color.red()),
+                ephemeral=True
+            )
+
+    if not isinstance(history, list) or not history:
+        return await interaction.response.send_message(
+            embed=create_embed("📭 랭킹 없음", "아직 수익이 기록된 유저가 없습니다.", discord.Color.light_grey()),
+            ephemeral=True
+        )
+
+    # 누적 수익 계산
+    profits = {}
+    for entry in history:
+        uid = entry["user_id"]
+        profits[uid] = profits.get(uid, 0) + entry.get("profit", 0)
+
+    if not profits:
+        return await interaction.response.send_message(
+            embed=create_embed("📭 랭킹 없음", "아직 수익이 기록된 유저가 없습니다.", discord.Color.light_grey()),
+            ephemeral=True
+        )
+
+    # 수익 높은 순으로 정렬
+    top_users = sorted(profits.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    embed = discord.Embed(title="👑 투자왕 TOP 10", color=discord.Color.gold())
+    for rank, (user_id, total_profit) in enumerate(top_users, 1):
+        try:
+            user = await bot.fetch_user(int(user_id))
+            name = user.name
+        except:
+            name = f"Unknown ({user_id})"
+
+        embed.add_field(
+            name=f"{rank}위 - {name}",
+            value=f"누적 수익: **{total_profit:,}원**",
+            inline=False
+        )
+
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+
+
+
+
+
+
+
 @tasks.loop(hours=2)
 async def process_investments():
     stocks = load_stocks()
     investments = load_investments()
     new_list = []
 
+    # ✅ 현재 가격 갱신 시각 저장
+    now = datetime.now()
     report = "📊 [2시간 주기 투자 종목 변동]\n\n"
+
     for name, stock in stocks.items():
         change = random.randint(-30, 30)
         old_price = stock["price"]
@@ -2438,6 +2504,8 @@ async def process_investments():
 
     save_stocks(stocks)
 
+    history = []  # ✅ 누적 수익 저장 리스트
+
     for inv in investments:
         user_id = inv["user_id"]
         stock = inv["stock"]
@@ -2446,21 +2514,50 @@ async def process_investments():
         new_price = stocks[stock]["price"]
         timestamp = datetime.fromisoformat(inv["timestamp"])
 
-        if datetime.now() - timestamp >= timedelta(hours=2):
+        # ✅ 갱신 시각 이전에 투자한 것만 정산
+        if timestamp < now - timedelta(hours=2):
             diff = new_price - old_price
             total = new_price * shares
             profit = diff * shares
             add_balance(user_id, total)
 
+            # ✅ 수익 기록 저장
+            history.append({
+                "user_id": user_id,
+                "stock": stock,
+                "shares": shares,
+                "buy_price": old_price,
+                "sell_price": new_price,
+                "profit": profit,
+                "timestamp": now.isoformat()
+            })
+
             try:
                 user = await bot.fetch_user(int(user_id))
-                await user.send(f"📈 [{stock}] {stocks[stock]['change']:+}%\n보유: {shares}주\n정산: {total:,}원 (+{profit:+,}원)")
+                await user.send(
+                    f"📈 [{stock}] {stocks[stock]['change']:+}%\n보유: {shares}주\n정산: {total:,}원 (+{profit:+,}원)"
+                )
             except:
                 pass
         else:
             new_list.append(inv)
 
     save_investments(new_list)
+
+    # ✅ investment_history.json 에 누적 저장
+    if history:
+        file = "investment_history.json"
+        if not os.path.exists(file):
+            with open(file, "w", encoding="utf-8") as f:
+                json.dump([], f)
+
+        with open(file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        data.extend(history)
+
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
 
     for guild in bot.guilds:
         ch = discord.utils.get(guild.text_channels, name="오덕코인")
