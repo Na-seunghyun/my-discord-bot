@@ -2372,6 +2372,55 @@ def create_embed(title: str, description: str, color: discord.Color, user_id: st
 
 
 
+
+
+
+
+
+@tree.command(name="일괄지급", description="서버 내 모든 유저에게 일정 금액을 지급합니다", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(금액="지급할 금액 (1원 이상)")
+async def 일괄지급(interaction: discord.Interaction, 금액: int):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 권한 없음", "이 명령어는 관리자만 사용할 수 있습니다.", discord.Color.red()),
+            ephemeral=True
+        )
+
+    if 금액 <= 0:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 잘못된 금액", "1원 이상만 지급할 수 있습니다.", discord.Color.red()),
+            ephemeral=True
+        )
+
+    await interaction.response.defer(thinking=True)
+
+    guild = interaction.guild
+    members = await guild.fetch_members(limit=None).flatten()
+
+    count = 0
+    for member in members:
+        if member.bot:
+            continue
+        add_balance(str(member.id), 금액)
+        count += 1
+
+    embed = create_embed(
+        "💸 일괄 지급 완료",
+        f"총 **{count}명**에게 **{금액:,}원**씩 지급했습니다.",
+        discord.Color.green()
+    )
+    await interaction.followup.send(embed=embed)
+
+
+
+
+
+
+
+
+
+
+
 @tree.command(name="돈지급", description="관리자가 유저에게 돈을 지급합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="돈을 지급할 유저", 금액="지급할 금액")
 async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금액: int):
