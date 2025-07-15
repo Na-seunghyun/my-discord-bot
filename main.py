@@ -2498,17 +2498,17 @@ async def 투자왕(interaction: discord.Interaction):
     embed = discord.Embed(title="👑 투자왕 TOP 10", color=discord.Color.gold())
     for rank, (user_id, total_profit) in enumerate(top_users, 1):
         try:
-            user = await bot.fetch_user(int(user_id))
-            name = user.name
+            guild = interaction.guild
+            member = guild.get_member(int(user_id)) or await guild.fetch_member(int(user_id))
+            name = member.nick or member.name
         except:
             name = f"Unknown ({user_id})"
+
         embed.add_field(
             name=f"{rank}위 - {name}",
             value=f"누적 수익: **{total_profit:,}원**",
             inline=False
         )
-
-    await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
 
