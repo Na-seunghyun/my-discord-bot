@@ -1939,12 +1939,6 @@ KST = timezone(timedelta(hours=9))
 # 📁 저장 파일 경로
 DAILY_CLAIMS_FILE = "daily_claims.json"
 
-# 📌 봇/트리 선언 (예시)
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
-tree = bot.tree
-GUILD_ID = 123456789012345678  # ✅ 실제 서버 ID로 바꾸세요
-
-
 # ✅ 잔액 관련 함수 (이미 구현되어 있다고 가정)
 def add_balance(user_id, amount):
     # 실제 구현에 따라 작성하세요
