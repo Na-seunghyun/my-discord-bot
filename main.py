@@ -2005,18 +2005,19 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
         return await interaction.response.send_message(embed=embed, ephemeral=False)
 
+    # ✅ 베팅 금액 차감은 무조건 먼저!
+    add_balance(user_id, -베팅액)
     await interaction.response.defer(thinking=True, ephemeral=False)
 
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
     if roll <= success_chance:
-        add_balance(user_id, 베팅액 * 2)  # ✅ 핵심 수정 부분
+        add_balance(user_id, 베팅액 * 2)  # ✅ 총 수익은 +베팅액 (차감한 만큼 포함)
         title = "🎉 도박 성공!"
         desc = f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**+{베팅액:,}원** 획득!"
         color = discord.Color.green()
     else:
-        add_balance(user_id, -베팅액)
         title = "💀 도박 실패!"
         desc = f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**-{베팅액:,}원** 손실..."
         color = discord.Color.red()
@@ -2024,6 +2025,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     embed = discord.Embed(title=title, description=desc, color=color)
     embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
     await interaction.followup.send(embed=embed)
+
 
 
 # ✅ 송금
