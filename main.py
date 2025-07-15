@@ -2297,7 +2297,9 @@ async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금�
 @bot.event
 async def on_ready():
     print(f"🤖 봇 로그인됨: {bot.user}")
-
+    await tree.clear_commands(guild=discord.Object(id=1309433603331198977))  # ← 강제 초기화
+    synced = await tree.sync(guild=discord.Object(id=1309433603331198977))   # ← 다시 등록
+    print(f"✅ 슬래시 명령어 {len(synced)}개 재등록됨")
     # 🔄 슬래시 명령어 동기화
     try:
         synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
