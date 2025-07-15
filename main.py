@@ -2629,6 +2629,81 @@ async def 투자왕(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
+# ✅ 유저에게 투자 정산 DM 보내는 함수
+async def send_investment_summary(user: discord.User, user_id: str):
+    stocks = load_stocks()
+    investments = load_investments()
+    my_investments = [inv for inv in investments if inv["user_id"] == user_id]
+
+    if not my_investments:
+        return
+
+    # 종목 + 매입단가 기준으로 묶기
+    grouped = {}
+    for inv in my_investments:
+        key = (inv["stock"], inv["price_per_share"])
+        grouped.setdefault(key, 0)
+        grouped[key] += inv["shares"]
+
+    total_invested = 0
+    total_returned = 0
+    fields = []
+
+    for (stock, buy_price), shares in grouped.items():
+        if stock not in stocks:
+            continue
+        current_price = stocks[stock]["price"]
+        invested = buy_price * shares
+        returned = current_price * shares
+        profit = returned - invested
+        rate = round((current_price - buy_price) / buy_price * 100, 2)
+        emoji = "📈" if profit >= 0 else "📉"
+        sign = "+" if profit > 0 else ""
+        rate_str = f"{sign}{rate}%"
+        profit_str = f"{sign}{profit:,}원"
+
+        fields.append({
+            "name": f"{emoji} [{stock}] {rate_str}",
+            "value": (
+                f"🪙 보유: {shares}주\n"
+                f"💰 매입가 총액: {invested:,}원\n"
+                f"💵 정산 금액: {returned:,}원\n"
+                f"📊 손익: {profit_str}"
+            )
+        })
+
+        total_invested += invested
+        total_returned += returned
+
+    total_profit = total_returned - total_invested
+    total_sign = "+" if total_profit > 0 else ""
+    total_emoji = "📈" if total_profit >= 0 else "📉"
+
+    summary_embed = discord.Embed(
+        title="📊 투자 정산 요약",
+        description=(
+            f"💼 총 투자금: {total_invested:,}원\n"
+            f"💵 총 정산금: {total_returned:,}원\n"
+            f"{total_emoji} 총 손익: {total_sign}{total_profit:,}원"
+        ),
+        color=discord.Color.green() if total_profit >= 0 else discord.Color.red()
+    )
+
+    embeds = [summary_embed]
+    current_embed = discord.Embed(title="📈 개별 종목 정산", color=discord.Color.teal())
+    for i, field in enumerate(fields):
+        current_embed.add_field(name=field["name"], value=field["value"], inline=False)
+        if (i + 1) % 24 == 0:
+            embeds.append(current_embed)
+            current_embed = discord.Embed(title="📈 개별 종목 정산 (계속)", color=discord.Color.teal())
+    if len(current_embed.fields) > 0:
+        embeds.append(current_embed)
+
+    try:
+        for embed in embeds:
+            await user.send(embed=embed)
+    except discord.Forbidden:
+        print(f"❌ {user.name}님에게 DM 전송 실패")
 
 
 
@@ -2636,8 +2711,12 @@ async def 투자왕(interaction: discord.Interaction):
 
 
 
-# ✅ 투자 시스템 핵심 루프
-# ✅ 투자 시스템 핵심 루프
+
+
+
+
+
+# ✅ 2시간마다 실행되는 투자 정산 루프
 @tasks.loop(hours=2)
 async def process_investments():
     stocks = load_stocks()
@@ -2651,23 +2730,20 @@ async def process_investments():
     report = "📊 [2시간 주기 투자 종목 변동]\n\n"
     split_report = ""
 
-    # ✅ 극단적 변동 포함 함수
     def generate_change():
         r = random.random()
-        if r < 0.00005:    # 0.005% 확률로 +100%
+        if r < 0.00005:
             return 100
-        elif r < 0.0010:   # 0.005% 확률로 -100%
+        elif r < 0.0010:
             return -100
         else:
             return random.randint(-30, 30)
 
-    # ✅ 주가 갱신 및 분할 처리
     for name, stock in stocks.items():
         change = generate_change()
         old_price = stock["price"]
         new_price = max(100, int(old_price * (1 + change / 100)))
 
-        # 📌 3만원 초과 시 10분할
         if new_price > 30_000:
             new_price = new_price // 10
             split_report += f"📣 [{name}] 주식 분할: 1주 → 10주, 가격 ↓ {old_price:,} → {new_price:,}원\n"
@@ -2680,6 +2756,7 @@ async def process_investments():
     save_stocks(stocks)
 
     history = []
+    updated_users = set()
 
     for inv in investments:
         user_id = inv["user_id"]
@@ -2708,13 +2785,7 @@ async def process_investments():
                 "timestamp": now.isoformat()
             })
 
-            try:
-                user = await bot.fetch_user(int(user_id))
-                await user.send(
-                    f"📈 [{stock}] {stocks[stock]['change']:+}%\n보유: {shares}주\n정산: {total:,}원 (+{profit:+,}원)"
-                )
-            except:
-                pass
+            updated_users.add(user_id)
         else:
             new_list.append(inv)
 
@@ -2722,6 +2793,14 @@ async def process_investments():
 
     if history:
         save_investment_history(history)
+
+    # 각 유저에게 개별 DM 전송
+    for user_id in updated_users:
+        try:
+            user = await bot.fetch_user(int(user_id))
+            await send_investment_summary(user, user_id)
+        except Exception as e:
+            print(f"❌ {user_id}님에게 정산 DM 전송 실패: {e}")
 
     if split_report:
         report += f"\n{split_report}"
