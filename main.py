@@ -2188,20 +2188,36 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
 
 @tree.command(name="도박순위", description="도박 잔액 순위 TOP 10", guild=discord.Object(id=GUILD_ID))
 async def 도박순위(interaction: discord.Interaction):
+    await interaction.response.defer()
+
     data = load_balances()
     sorted_list = sorted(data.items(), key=lambda x: x[1].get("amount", 0), reverse=True)[:10]
 
-    embed = discord.Embed(title="💰 도박 순위 TOP 10", color=discord.Color.gold())
+    embed = discord.Embed(
+        title="💰 도박 순위 TOP 10",
+        description="상위 10명의 도박 잔액 현황입니다.",
+        color=discord.Color.gold()
+    )
+
     for rank, (uid, info) in enumerate(sorted_list, start=1):
         try:
-            user = await bot.fetch_user(int(uid))
-            name = user.display_name
-        except:
-            name = f"Unknown({uid})"
-        embed.add_field(name=f"{rank}위 - {name}", value=f"{info['amount']:,}원", inline=False)
+            member = await interaction.guild.fetch_member(int(uid))
+            name = member.display_name  # ✅ 서버 내 별명
+        except Exception:
+            try:
+                user = await bot.fetch_user(int(uid))
+                name = user.name  # fallback
+            except:
+                name = f"Unknown ({uid})"
 
-    await interaction.response.send_message(embed=embed)
+        balance = info.get("amount", 0)
+        embed.add_field(
+            name=f"{rank}위 - {name}",
+            value=f"{balance:,}원",
+            inline=False
+        )
 
+    await interaction.followup.send(embed=embed)
 
 @tree.command(name="돈지급", description="관리자가 유저에게 돈을 지급합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="돈을 지급할 유저", 금액="지급할 금액")
