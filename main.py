@@ -2758,8 +2758,6 @@ async def auto_oduk_lotto():
     result_str = ""
 
     if not entries_today:
-        pool["last_lotto_date"] = today
-        save_oduk_pool(pool)
         result_str = "😢 오늘은 로또에 참여한 유저가 없어 상금이 이월됩니다."
     else:
         answer = sorted(random.sample(range(1, 46), 6))
@@ -2782,18 +2780,23 @@ async def auto_oduk_lotto():
         else:
             result_str += "😥 당첨자가 없어 상금이 이월됩니다."
 
-        pool["last_lotto_date"] = today
-        save_oduk_pool(pool)
+    # ✅ 추첨 날짜 갱신 및 참여자 정보 초기화
+    pool["last_lotto_date"] = today
+    save_oduk_pool(pool)
+    data[today] = {}
+    save_oduk_lotto_entries(data)
 
     embed = discord.Embed(title="📢 오덕로또 추첨 결과", description=result_str, color=discord.Color.gold())
+
     # ✅ 로또 결과를 보낼 채널 설정
     for guild in bot.guilds:
-        channel = discord.utils.get(guild.text_channels, name="오덕도박장")  # 원하는 채널 이름으로 변경 가능
+        channel = discord.utils.get(guild.text_channels, name="오덕도박장")
         if channel:
             try:
                 await channel.send(embed=embed)
             except Exception as e:
                 print(f"❌ 로또 결과 전송 실패: {e}")
+
 
 
 @auto_oduk_lotto.before_loop
@@ -2806,6 +2809,65 @@ async def before_auto_oduk_lotto():
     wait_seconds = (next_9am - now).total_seconds()
     print(f"⏳ 오덕로또 추첨까지 {int(wait_seconds)}초 대기 중...")
     await asyncio.sleep(wait_seconds)
+
+
+
+@tree.command(name="로또참여현황", description="오늘의 오덕로또 참여 현황을 확인합니다", guild=discord.Object(id=GUILD_ID))
+async def 로또참여현황(interaction: discord.Interaction):
+    today = datetime.now(KST).date().isoformat()
+    data = load_oduk_lotto_entries()
+
+    if today not in data or not data[today]:
+        return await interaction.response.send_message(
+            embed=create_embed("📭 참여자 없음", "오늘 오덕로또에 아직 아무도 참여하지 않았습니다.", discord.Color.orange()),
+            ephemeral=False
+        )
+
+    embeds = []
+    current_embed = discord.Embed(
+        title=f"🎯 오덕로또 참여 현황 ({today})",
+        description="오늘 오덕로또에 참여한 유저 목록입니다.",
+        color=discord.Color.teal()
+    )
+    field_count = 0
+
+    for uid, combos in data[today].items():
+        try:
+            user = await bot.fetch_user(int(uid))
+            username = user.display_name
+        except:
+            username = f"Unknown({uid})"
+
+        combo_text = "\n".join([f"{i+1}조합: {', '.join(map(str, c))}" for i, c in enumerate(combos)])
+        field_value = combo_text[:1024]  # 필드 값 제한 고려
+
+        current_embed.add_field(
+            name=f"👤 {username} ({len(combos)}개 조합)",
+            value=field_value,
+            inline=False
+        )
+        field_count += 1
+
+        # 임베드 필드가 25개 이상이면 새 임베드로 전환
+        if field_count >= 25:
+            embeds.append(current_embed)
+            current_embed = discord.Embed(color=discord.Color.teal())
+            field_count = 0
+
+    # 마지막 남은 임베드 추가
+    if field_count > 0:
+        current_embed.set_footer(text="🕘 내일 오전 9시에 자동 추첨됩니다!")
+        embeds.append(current_embed)
+
+    for embed in embeds:
+        await interaction.channel.send(embed=embed)
+
+    await interaction.response.send_message(
+        embed=create_embed("📊 참여 현황 출력됨", f"{len(data[today])}명의 참여 내역이 전송되었습니다.", discord.Color.green()),
+        ephemeral=True
+    )
+
+
 
 
 
