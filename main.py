@@ -2285,23 +2285,20 @@ async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금�
 
 
 
-
-
-
 @bot.event
 async def on_ready():
     print(f"🤖 봇 로그인됨: {bot.user}")
-    
-    # 👇 커맨드 강제 초기화 (await ❌)
-    tree.clear_commands(guild=discord.Object(id=1309433603331198977))
-    
-    # 👇 다시 등록 (await ⭕
+    await asyncio.sleep(2)  # 약간 대기
+
+    for guild in bot.guilds:
+        print(f"접속 서버: {guild.name} (ID: {guild.id})")
 
     try:
-        synced = await tree.sync(guild=discord.Object(id=1309433603331198977))
-        print(f"✅ 슬래시 명령어 {len(synced)}개 재등록됨")
+        synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
+        print(f"✅ 슬래시 명령어 {len(synced)}개 동기화됨")
     except Exception as e:
-        print(f"❌ 슬래시 명령어 등록 실패: {e}")
+        print(f"❌ 슬래시 명령어 동기화 실패: {e}")
+
 
     # ⏲️ 자정 루프 시작
     if not reset_daily_claims.is_running():
