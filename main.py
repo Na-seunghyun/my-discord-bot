@@ -2259,7 +2259,7 @@ async def 도박순위(interaction: discord.Interaction):
 def create_embed(title: str, description: str, color: discord.Color, user_id: str = None) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, color=color)
     if user_id:
-        from balance_utils import get_balance  # 혹은 적절한 경로로 변경
+        
         embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
     return embed
 
