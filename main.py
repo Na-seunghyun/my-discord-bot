@@ -2251,12 +2251,12 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
             cur_streak = 1
 
     if max_streak == 5:
-        winnings = 베팅액 * 4
+        winnings = 베팅액 * 10
         add_balance(user_id, winnings)
         outcome = f"🎉 **5개 연속 일치! +{winnings:,}원 획득!**"
         color = discord.Color.green()
     elif max_streak >= 3:
-        winnings = 베팅액 * 2
+        winnings = 베팅액 * 4
         add_balance(user_id, winnings)
         outcome = f"✨ **{max_streak}개 연속 일치! +{winnings:,}원 획득!**"
         color = discord.Color.green()
