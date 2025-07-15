@@ -2101,7 +2101,6 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     )
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
-# ✅ 도박
 @tree.command(name="도박", description="알로항 스타일 도박 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 500원부터 도박할 수 있습니다")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
@@ -2109,49 +2108,35 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     balance = get_balance(user_id)
 
     if 베팅액 < 500:
-        embed = discord.Embed(
-            title="❌ 베팅 실패",
-            description="최소 베팅 금액은 **500원**입니다.",
-            color=discord.Color.red()
-        )
-        return await interaction.response.send_message(embed=embed, ephemeral=False)
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **500원**입니다.", discord.Color.red()), ephemeral=False)
 
     if balance < 베팅액:
-        embed = discord.Embed(
-            title="💸 잔액 부족",
-            description=f"현재 잔액: **{balance:,}원**\n베팅액: **{베팅액:,}원**",
-            color=discord.Color.red()
-        )
-        return await interaction.response.send_message(embed=embed, ephemeral=False)
+        return await interaction.response.send_message(
+            embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**\n베팅액: **{베팅액:,}원**", discord.Color.red()), ephemeral=False)
 
-    # ✅ 베팅 금액 차감은 무조건 먼저!
+    # 베팅 처리
     add_balance(user_id, -베팅액)
-    await interaction.response.defer(thinking=True, ephemeral=False)
 
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
     if roll <= success_chance:
-        add_balance(user_id, 베팅액 * 2)  # ✅ 총 수익은 +베팅액 (차감한 만큼 포함)
-        title = "🎉 도박 성공!"
-        desc = f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**+{베팅액:,}원** 획득!"
-        color = discord.Color.green()
+        add_balance(user_id, 베팅액 * 2)
+        embed = create_embed("🎉 도박 성공!",
+            f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**+{베팅액:,}원** 획득!",
+            discord.Color.green(), user_id)
     else:
-        add_oduk_pool(베팅액)  # ⬅️ 오덕잔고 적립
+        add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
-
-        title = "💀 도박 실패!"
-        desc = (
+        embed = create_embed("💀 도박 실패!",
             f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n"
             f"**-{베팅액:,}원** 손실...\n\n"
             f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
-            f"🎟️ `/오덕로또참여`로 참여하세요!"
-        )
-        color = discord.Color.red()
+            f"🎟️ `/오덕로또참여`로 참여하세요!", discord.Color.red(), user_id)
 
-        embed = discord.Embed(title=title, description=desc, color=color)
-        embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
-        await interaction.followup.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
+
 
 
 
