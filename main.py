@@ -159,6 +159,33 @@ async def auto_update_valid_ids():
 
 
 
+ODUK_POOL_FILE = "oduk_pool.json"
+
+def load_oduk_pool():
+    if not os.path.exists(ODUK_POOL_FILE):
+        with open(ODUK_POOL_FILE, "w", encoding="utf-8") as f:
+            json.dump({"amount": 0, "last_lotto_date": None, "last_winner": None}, f)
+    with open(ODUK_POOL_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_oduk_pool(data):
+    with open(ODUK_POOL_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def add_oduk_pool(amount: int):
+    pool = load_oduk_pool()
+    pool["amount"] += amount
+    save_oduk_pool(pool)
+
+def get_oduk_pool_amount() -> int:
+    return load_oduk_pool().get("amount", 0)
+
+
+
+
+
+
+
 
 
 WELCOME_CHANNEL_NAME = "자유채팅방"  # 자유롭게 바꿔도 됨
@@ -1986,6 +2013,7 @@ KST = timezone(timedelta(hours=9))
 DAILY_CLAIMS_FILE = "daily_claims.json"
 
 
+
 # ✅ 파일로부터 일일 수령 기록 로드
 def load_daily_claims():
     if not os.path.exists(DAILY_CLAIMS_FILE):
@@ -2051,6 +2079,14 @@ async def before_reset():
     print(f"⏳ 자정까지 {int(wait_seconds)}초 대기 후 daily_claims 초기화 시작")
     await asyncio.sleep(wait_seconds)
 
+
+
+
+
+
+
+
+
 # ✅ 잔액
 @tree.command(name="잔액", description="유저의 현재 보유 금액을 확인합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="조회할 유저 (선택사항)")
@@ -2101,13 +2137,21 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         desc = f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**+{베팅액:,}원** 획득!"
         color = discord.Color.green()
     else:
+        add_oduk_pool(베팅액)  # ⬅️ 오덕잔고 적립
+        pool_amt = get_oduk_pool_amount()
+
         title = "💀 도박 실패!"
-        desc = f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**-{베팅액:,}원** 손실..."
+        desc = (
+            f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n"
+            f"**-{베팅액:,}원** 손실...\n\n"
+            f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
+            f"🎟️ `/오덕로또참여`로 참여하세요!"
+        )
         color = discord.Color.red()
 
-    embed = discord.Embed(title=title, description=desc, color=color)
-    embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
-    await interaction.followup.send(embed=embed)
+        embed = discord.Embed(title=title, description=desc, color=color)
+        embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
+        await interaction.followup.send(embed=embed)
 
 
 
@@ -2176,11 +2220,18 @@ class LotteryButton(Button):
             desc = f"축하합니다! **{self.베팅액 * 2:,}원**을 획득했습니다!"
             color = discord.Color.green()
         else:
+            add_oduk_pool(self.베팅액)
+            pool_amt = get_oduk_pool_amount()
+
             title = "💔 꽝!"
-            desc = f"아쉽지만 탈락입니다.\n**{self.베팅액:,}원**을 잃었습니다."
+            desc = (
+                f"아쉽지만 탈락입니다.\n**{self.베팅액:,}원**을 잃었습니다.\n\n"
+                f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
+                f"🎟️ `/오덕로또참여`로 참여하세요!"
+            )
             color = discord.Color.red()
 
-        await interaction.response.edit_message(embed=create_embed(title, desc, color, self.user_id), view=None)
+            await interaction.response.edit_message(embed=create_embed(title, desc, color, self.user_id), view=None)
 
 class LotteryView(View):
     def __init__(self, user_id, 베팅액):
@@ -2261,8 +2312,16 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         outcome = f"✨ **{max_streak}개 연속 일치! +{winnings:,}원 획득!**"
         color = discord.Color.green()
     else:
-        outcome = f"😢 **꽝! 다음 기회를 노려보세요.\n-{베팅액:,}원 손실**"
+        add_oduk_pool(베팅액)
+        pool_amt = get_oduk_pool_amount()
+
+        outcome = (
+            f"😢 **꽝! 다음 기회를 노려보세요.\n-{베팅액:,}원 손실**\n\n"
+            f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
+            f"🎟️ `/오덕로또참여`로 참여하세요!"
+        )
         color = discord.Color.red()
+
 
     await message.edit(
         content=f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n{outcome}\n💵 현재 잔액: {get_balance(user_id):,}원"
@@ -2652,6 +2711,163 @@ async def 잔액초기화(interaction: discord.Interaction):
 
 
 
+ODUK_LOTTO_ENTRIES_FILE = "oduk_lotto_entries.json"
+
+def load_oduk_lotto_entries():
+    if not os.path.exists(ODUK_LOTTO_ENTRIES_FILE):
+        with open(ODUK_LOTTO_ENTRIES_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
+    with open(ODUK_LOTTO_ENTRIES_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_oduk_lotto_entries(data):
+    with open(ODUK_LOTTO_ENTRIES_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+
+
+@tasks.loop(hours=24)
+async def auto_oduk_lotto():
+    await bot.wait_until_ready()
+
+    now = datetime.now(KST)
+    today = now.date().isoformat()
+    pool = load_oduk_pool()
+    data = load_oduk_lotto_entries()
+    entries_today = data.get(today, {})
+
+    if pool.get("last_lotto_date") == today:
+        print("🟨 이미 오늘의 로또 추첨이 완료됨")
+        return
+
+    result_str = ""
+
+    if not entries_today:
+        pool["last_lotto_date"] = today
+        save_oduk_pool(pool)
+        result_str = "😢 오늘은 로또에 참여한 유저가 없어 상금이 이월됩니다."
+    else:
+        answer = sorted(random.sample(range(1, 46), 6))
+        winner_id = None
+        for uid, combos in entries_today.items():
+            for combo in combos:
+                if sorted(combo) == answer:
+                    winner_id = uid
+                    break
+            if winner_id:
+                break
+
+        result_str = f"🎯 정답 번호: {', '.join(map(str, answer))}\n\n"
+        if winner_id:
+            amount = pool.get("amount", 0)
+            add_balance(winner_id, amount)
+            pool["amount"] = 0
+            pool["last_winner"] = winner_id
+            result_str += f"🎉 <@{winner_id}> 님이 로또에 당첨되었습니다!\n💰 상금 **{amount:,}원** 지급 완료!"
+        else:
+            result_str += "😥 당첨자가 없어 상금이 이월됩니다."
+
+        pool["last_lotto_date"] = today
+        save_oduk_pool(pool)
+
+    embed = discord.Embed(title="📢 오덕로또 추첨 결과", description=result_str, color=discord.Color.gold())
+    # ✅ 로또 결과를 보낼 채널 설정
+    for guild in bot.guilds:
+        channel = discord.utils.get(guild.text_channels, name="오덕코인")  # 원하는 채널 이름으로 변경 가능
+        if channel:
+            try:
+                await channel.send(embed=embed)
+            except Exception as e:
+                print(f"❌ 로또 결과 전송 실패: {e}")
+
+
+@auto_oduk_lotto.before_loop
+async def before_auto_oduk_lotto():
+    await bot.wait_until_ready()
+    now = datetime.now(KST)
+    next_9am = datetime.combine(now.date(), datetime.min.time(), tzinfo=KST) + timedelta(hours=9)
+    if now >= next_9am:
+        next_9am += timedelta(days=1)
+    wait_seconds = (next_9am - now).total_seconds()
+    print(f"⏳ 오덕로또 추첨까지 {int(wait_seconds)}초 대기 중...")
+    await asyncio.sleep(wait_seconds)
+
+
+
+
+
+
+
+# ✅ 오덕로또 참여 명령어
+@tree.command(name="오덕로또참여", description="오덕로또에 참여합니다 (1조합당 2,000원)", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(수량="1~10개의 조합", 수동번호들="쉼표로 구분된 숫자들(6개 입력), 자동은 '자동'")
+async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수동번호들: str):
+    user_id = str(interaction.user.id)
+    today = datetime.now(KST).date().isoformat()
+
+    if 수량 < 1 or 수량 > 10:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 참여 실패", "1~10개의 조합만 참여할 수 있습니다.", discord.Color.red()), ephemeral=True)
+
+    cost = 수량 * 2000
+    if get_balance(user_id) < cost:
+        return await interaction.response.send_message(
+            embed=create_embed("💸 잔액 부족", f"{수량}조합 × 2,000원 = **{cost:,}원** 필요", discord.Color.red()), ephemeral=True)
+
+    # ✅ 번호 조합 생성
+    entries = []
+    for _ in range(수량):
+        if 수동번호들.strip().lower() == "자동":
+            combo = sorted(random.sample(range(1, 46), 6))
+        else:
+            try:
+                parts = [int(n.strip()) for n in 수동번호들.split(",")]
+                if len(parts) != 6 or not all(1 <= n <= 45 for n in parts):
+                    raise ValueError
+                combo = sorted(parts)
+            except:
+                return await interaction.response.send_message(
+                    embed=create_embed("❌ 번호 오류", "수동 입력 시 1~45 사이의 **6개 숫자**를 쉼표로 입력해주세요.", discord.Color.red()), ephemeral=True)
+        entries.append(combo)
+
+    # ✅ 저장
+    data = load_oduk_lotto_entries()
+    if today not in data:
+        data[today] = {}
+    if user_id not in data[today]:
+        data[today][user_id] = []
+
+    if len(data[today][user_id]) + len(entries) > 10:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 조합 초과", "하루 최대 10조합까지만 참여할 수 있습니다.", discord.Color.red()), ephemeral=True)
+
+    data[today][user_id].extend(entries)
+    save_oduk_lotto_entries(data)
+
+    # 💰 차감
+    add_balance(user_id, -cost)
+
+    joined = "\n".join([f"🎟️ 조합 {i+1}: {', '.join(map(str, combo))}" for i, combo in enumerate(entries)])
+    embed = discord.Embed(
+        title="🎯 오덕로또 참여 완료",
+        description=f"{수량}조합 참여 완료! 총 **{cost:,}원** 차감되었습니다.\n\n{joined}",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 @bot.event
@@ -2734,6 +2950,17 @@ async def on_ready():
     except Exception:
         print("⚠️ auto_update_valid_ids 루프는 이미 실행 중일 수 있음.")
 
+        # ✅ 여기에 추가
+    try:
+        auto_oduk_lotto.start()
+        print("⏰ 오덕로또 자동 추첨 루프 시작됨")
+    except RuntimeError:
+        print("⚠️ auto_oduk_lotto 루프는 이미 실행 중입니다.")
+
+
+
+
+    
     # 음성 채널 자동 퇴장 타이머
     await asyncio.sleep(3)
     for guild in bot.guilds:
