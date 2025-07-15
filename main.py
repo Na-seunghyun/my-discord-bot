@@ -162,12 +162,13 @@ async def auto_update_valid_ids():
 ODUK_POOL_FILE = "oduk_pool.json"
 
 def load_oduk_pool():
+    default_data = {
+        "amount": 0,
+        "last_lotto_date": "",
+        "last_winner": ""
+    }
+
     if not os.path.exists(ODUK_POOL_FILE):
-        default_data = {
-            "amount": 0,
-            "last_lotto_date": "",
-            "last_winner": ""
-        }
         with open(ODUK_POOL_FILE, "w", encoding="utf-8") as f:
             json.dump(default_data, f, indent=2)
         return default_data
@@ -178,11 +179,12 @@ def load_oduk_pool():
         except json.JSONDecodeError:
             data = {}
 
-        # 필드가 누락된 경우 기본값 채우기
-        data.setdefault("amount", 0)
-        data.setdefault("last_lotto_date", "")
-        data.setdefault("last_winner", "")
-        return data
+    # 누락된 키를 채워줌
+    for key in default_data:
+        data.setdefault(key, default_data[key])
+
+    return data
+
 
 
 def save_oduk_pool(data):
@@ -2970,7 +2972,10 @@ async def on_ready():
     # 초대 캐시 초기화 및 저장
     global invites_cache
     invites_cache = {}
+    
+    global oduk_pool_cache
     oduk_pool_cache = load_oduk_pool()  # 캐시 로딩
+    print(f"🔄 오덕 캐시 로딩됨: {oduk_pool_cache}")
 
     for guild in bot.guilds:
         try:
