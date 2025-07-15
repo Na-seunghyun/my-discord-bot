@@ -163,10 +163,27 @@ ODUK_POOL_FILE = "oduk_pool.json"
 
 def load_oduk_pool():
     if not os.path.exists(ODUK_POOL_FILE):
+        default_data = {
+            "amount": 0,
+            "last_lotto_date": "",
+            "last_winner": ""
+        }
         with open(ODUK_POOL_FILE, "w", encoding="utf-8") as f:
-            json.dump({"amount": 0, "last_lotto_date": None, "last_winner": None}, f)
+            json.dump(default_data, f, indent=2)
+        return default_data
+
     with open(ODUK_POOL_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            data = {}
+
+        # 필드가 누락된 경우 기본값 채우기
+        data.setdefault("amount", 0)
+        data.setdefault("last_lotto_date", "")
+        data.setdefault("last_winner", "")
+        return data
+
 
 def save_oduk_pool(data):
     with open(ODUK_POOL_FILE, "w", encoding="utf-8") as f:
