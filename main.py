@@ -2296,16 +2296,18 @@ async def 돈지급(interaction: discord.Interaction, 대상: discord.User, 금�
 
 @bot.event
 async def on_ready():
-    print(f"✅ 봇 로그인: {bot.user} ({bot.user.id})")
-    reset_daily_claims.start()
+    print(f"🤖 봇 로그인됨: {bot.user}")
 
-    # 슬래시 명령 동기화
-    guild_obj = discord.Object(id=GUILD_ID)
+    # 🔄 슬래시 명령어 동기화
     try:
-        synced = await tree.sync(guild=guild_obj)
-        print(f"🔁 슬래시 커맨드 등록됨: {len(synced)}개")
+        synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
+        print(f"✅ 슬래시 명령어 {len(synced)}개 동기화됨")
     except Exception as e:
-        print(f"❌ 슬래시 명령 동기화 실패: {e}")
+        print(f"❌ 슬래시 명령어 동기화 실패: {e}")
+
+    # ⏲️ 자정 루프 시작
+    if not reset_daily_claims.is_running():
+        reset_daily_claims.start()
 
     # 초대 캐시 초기화 및 저장
     global invites_cache
