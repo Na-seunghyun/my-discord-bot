@@ -3059,113 +3059,163 @@ def save_oduk_lotto_entries(data):
 
 
 
+# ✅ 자동 추첨 로직 (6개 선택, 정답 4개 + 보너스 1개)
 @tasks.loop(hours=24)
 async def auto_oduk_lotto():
     await bot.wait_until_ready()
-
     now = datetime.now(KST)
-    today = now.date().isoformat()
-    pool = load_oduk_pool()
-    data = load_oduk_lotto_entries()
-    entries_today = data.get(today, {})
+    draw_start = now - timedelta(days=1)
+    draw_end = now
 
-    if pool.get("last_lotto_date") == today:
+    all_entries = load_oduk_lotto_entries()
+    filtered_entries = {}
+    for record in all_entries:
+        timestamp = datetime.fromisoformat(record["timestamp"])
+        if draw_start <= timestamp < draw_end:
+            uid = record["user_id"]
+            combo = record["combo"]
+            filtered_entries.setdefault(uid, []).append(combo)
+
+    if oduk_pool_cache.get("last_lotto_date") == now.date().isoformat():
         print("🟨 이미 오늘의 로또 추첨이 완료됨")
         return
 
     result_str = ""
 
-    if not entries_today:
+    if not filtered_entries:
         result_str = "😢 오늘은 로또에 참여한 유저가 없어 상금이 이월됩니다."
     else:
         answer = sorted(random.sample(range(1, 46), 4))
-        winner_counts = {}  # user_id: 당첨 횟수
+        bonus = random.choice([n for n in range(1, 46) if n not in answer])
+        tier1 = []
+        tier2 = []
+        tier3 = []
 
-        for uid, combos in entries_today.items():
+        for uid, combos in filtered_entries.items():
             for combo in combos:
-                if sorted(combo) == answer:
-                    winner_counts[uid] = winner_counts.get(uid, 0) + 1
+                match = len(set(combo) & set(answer))
+                if match == 4:
+                    tier1.append(uid)
+                elif match == 3 and bonus in combo:
+                    tier2.append(uid)
+                elif match == 3:
+                    tier3.append(uid)
 
-        result_str = f"🎯 정답 번호: {', '.join(map(str, answer))}\n\n"
+        result_str = f"🎯 정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n\n"
 
-        total_hits = sum(winner_counts.values())
-        if total_hits > 0:
-            amount = pool.get("amount", 0)
-            share = amount // total_hits
+        amount = get_oduk_pool_amount()
+        tier2_pool = int(amount * 0.2)
+        tier1_pool = int(amount * 0.8)
 
-            for uid, hit_count in winner_counts.items():
-                add_balance(uid, share * hit_count)
+        lines = []
+        notified_users = set()
 
-            pool["amount"] = 0
-            pool["last_winner"] = ", ".join(winner_counts.keys())
+        if tier3:
+            for uid in tier3:
+                add_balance(uid, 5000)
+                try:
+                    user = await bot.fetch_user(int(uid))
+                    await user.send(f"🎉 오덕로또 3등 당첨! 5,000원 지급 🎉")
+                except:
+                    pass
+                notified_users.add(uid)
+            lines.append(f"🥉 3등 {len(tier3)}명 (3개 일치) → 5,000원 고정 지급")
 
-            lines = []
-            for uid, hit_count in winner_counts.items():
-                total_prize = share * hit_count
-                lines.append(f"🎉 <@{uid}> {hit_count}회 당첨! → **{total_prize:,}원** 지급")
-
-            result_str += "\n".join(lines)
+        leftover = 0
+        if tier2:
+            share = tier2_pool // len(tier2)
+            for uid in tier2:
+                add_balance(uid, share)
+                if uid not in notified_users:
+                    try:
+                        user = await bot.fetch_user(int(uid))
+                        await user.send(f"🎉 오덕로또 2등 당첨! {share:,}원 지급 🎉")
+                    except:
+                        pass
+                    notified_users.add(uid)
+            leftover += tier2_pool % len(tier2)
+            lines.append(f"🥈 2등 {len(tier2)}명 (3개 + 보너스) → 1인당 {share:,}원")
         else:
-            result_str += "😥 당첨자가 없어 상금이 이월됩니다."
+            leftover += tier2_pool
+            lines.append("🥈 2등 당첨자 없음 → 상금 이월")
 
-    # ✅ 추첨 날짜 갱신 및 참여자 정보 초기화
-    pool["last_lotto_date"] = today
-    save_oduk_pool(pool)
-    data[today] = {}
-    save_oduk_lotto_entries(data)
+        if tier1:
+            share = tier1_pool // len(tier1)
+            for uid in tier1:
+                add_balance(uid, share)
+                if uid not in notified_users:
+                    try:
+                        user = await bot.fetch_user(int(uid))
+                        await user.send(f"🎉 오덕로또 1등 당첨! {share:,}원 획득하셨습니다!")
+                    except:
+                        pass
+                    notified_users.add(uid)
+            leftover += tier1_pool % len(tier1)
+            lines.append(f"🏆 1등 {len(tier1)}명 (4개 일치) → 1인당 {share:,}원")
+        else:
+            leftover += tier1_pool
+            lines.append("🏆 1등 당첨자 없음 → 상금 이월")
+
+        oduk_pool_cache["amount"] = leftover
+        oduk_pool_cache["last_winner"] = ", ".join(set(tier1 + tier2 + tier3))
+        result_str += "\n".join(lines)
+
+    oduk_pool_cache["last_lotto_date"] = now.date().isoformat()
+    save_oduk_pool(oduk_pool_cache)
+    save_oduk_lotto_entries(all_entries)  # 기록은 초기화하지 않음
 
     embed = discord.Embed(title="📢 오덕로또 추첨 결과", description=result_str, color=discord.Color.gold())
-
     for guild in bot.guilds:
         channel = discord.utils.get(guild.text_channels, name="오덕도박장")
         if channel:
             try:
-                await channel.send(embed=embed)
+                await channel.send("@everyone 오늘의 오덕로또 결과입니다!", embed=embed)
             except Exception as e:
                 print(f"❌ 로또 결과 전송 실패: {e}")
 
 
-@auto_oduk_lotto.before_loop
-async def before_auto_oduk_lotto():
-    await bot.wait_until_ready()
-    now = datetime.now(KST)
-    next_9am = datetime.combine(now.date(), datetime.min.time(), tzinfo=KST) + timedelta(hours=9)
-    if now >= next_9am:
-        next_9am += timedelta(days=1)
-    wait_seconds = (next_9am - now).total_seconds()
-    print(f"⏳ 오덕로또 추첨까지 {int(wait_seconds)}초 대기 중...")
-    await asyncio.sleep(wait_seconds)
+
 
 
 
 @tree.command(name="로또참여현황", description="오늘의 오덕로또 참여 현황을 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def 로또참여현황(interaction: discord.Interaction):
-    today = datetime.now(KST).date().isoformat()
-    data = load_oduk_lotto_entries()
+    now = datetime.now(KST)
+    draw_start = now - timedelta(days=1)
+    draw_end = now
 
-    if today not in data or not data[today]:
+    all_entries = load_oduk_lotto_entries()
+    filtered_entries = {}
+    for record in all_entries:
+        timestamp = datetime.fromisoformat(record["timestamp"])
+        if draw_start <= timestamp < draw_end:
+            uid = record["user_id"]
+            combo = record["combo"]
+            filtered_entries.setdefault(uid, []).append(combo)
+
+    if not filtered_entries:
         return await interaction.response.send_message(
-            embed=create_embed("📭 참여자 없음", "오늘 오덕로또에 아직 아무도 참여하지 않았습니다.", discord.Color.orange()),
+            embed=discord.Embed(title="📭 참여자 없음", description="이번 회차 로또에 아직 아무도 참여하지 않았습니다.", color=discord.Color.orange()),
             ephemeral=False
         )
 
     embeds = []
     current_embed = discord.Embed(
-        title=f"🎯 오덕로또 참여 현황 ({today})",
-        description="오늘 오덕로또에 참여한 유저 목록입니다.",
+        title=f"🎯 오덕로또 참여 현황\n({draw_start.strftime('%m/%d %H:%M')} ~ {draw_end.strftime('%m/%d %H:%M')})",
+        description="현재 회차에 참여한 유저 목록입니다.",
         color=discord.Color.teal()
     )
     field_count = 0
 
-    for uid, combos in data[today].items():
+    for uid, combos in filtered_entries.items():
         try:
             user = await bot.fetch_user(int(uid))
             username = user.display_name
         except:
             username = f"Unknown({uid})"
 
-        combo_text = "\n".join([f"{i+1}조합: {', '.join(map(str, c))}" for i, c in enumerate(combos)])
-        field_value = combo_text[:1024]  # 필드 값 제한 고려
+        combo_count = len(combos)
+        field_value = f"총 {combo_count}개 조합 참여"
 
         current_embed.add_field(
             name=f"👤 {username} ({len(combos)}개 조합)",
@@ -3174,22 +3224,20 @@ async def 로또참여현황(interaction: discord.Interaction):
         )
         field_count += 1
 
-        # 임베드 필드가 25개 이상이면 새 임베드로 전환
         if field_count >= 25:
             embeds.append(current_embed)
             current_embed = discord.Embed(color=discord.Color.teal())
             field_count = 0
 
-    # 마지막 남은 임베드 추가
     if field_count > 0:
-        current_embed.set_footer(text="🕘 내일 오전 9시에 자동 추첨됩니다!")
+        current_embed.set_footer(text="🕘 다음 추첨: 오전 9시")
         embeds.append(current_embed)
 
     for embed in embeds:
         await interaction.channel.send(embed=embed)
 
     await interaction.response.send_message(
-        embed=create_embed("📊 참여 현황 출력됨", f"{len(data[today])}명의 참여 내역이 전송되었습니다.", discord.Color.green()),
+        embed=discord.Embed(title="📊 참여 현황 출력됨", description=f"총 {len(filtered_entries)}명 참여.", color=discord.Color.green()),
         ephemeral=True
     )
 
@@ -3203,43 +3251,45 @@ async def 로또참여현황(interaction: discord.Interaction):
 
 # ✅ 오덕로또 참여 명령어
 @tree.command(name="오덕로또참여", description="오덕로또에 참여합니다 (1조합당 2,000원)", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(수량="1~10개의 조합", 수동번호들="쉼표로 구분된 숫자들(6개 입력), 자동은 '자동'")
+@app_commands.describe(수량="1~10개의 조합 수량 선택", 수동번호들="자동 또는 6개 숫자 (예: 3,5,12,19,22,41)")
 async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수동번호들: str):
     user_id = str(interaction.user.id)
     today = datetime.now(KST).date().isoformat()
 
+    data = load_oduk_lotto_entries()
+    user_entries_today = data.get(today, {}).get(user_id, [])
+    if len(user_entries_today) + 수량 > 20:
+        return await interaction.response.send_message(
+            embed=discord.Embed(title="❌ 참여 초과", description="하루 최대 **20조합**까지만 참여할 수 있습니다.", color=discord.Color.red()), ephemeral=True)
+
     if 수량 < 1 or 수량 > 10:
         return await interaction.response.send_message(
-            embed=create_embed("❌ 참여 실패", "1~10개의 조합만 참여할 수 있습니다.", discord.Color.red()), ephemeral=True)
+            embed=discord.Embed(title="❌ 참여 실패", description="1~10개의 조합만 한 번에 참여할 수 있습니다.", color=discord.Color.red()), ephemeral=True)
 
     cost = 수량 * 2000
     if get_balance(user_id) < cost:
         return await interaction.response.send_message(
-            embed=create_embed("💸 잔액 부족", f"{수량}조합 × 2,000원 = **{cost:,}원** 필요", discord.Color.red()), ephemeral=True)
+            embed=discord.Embed(title="💸 잔액 부족", description=f"{수량}조합 × 2,000원 = **{cost:,}원** 필요", color=discord.Color.red()), ephemeral=True)
 
-    # ✅ 번호 조합 생성
     entries = []
     for _ in range(수량):
         if 수동번호들.strip().lower() == "자동":
-            combo = sorted(random.sample(range(1, 46), 4))
+            combo = sorted(random.sample(range(1, 46), 6))
         else:
             try:
                 parts = [int(n.strip()) for n in 수동번호들.split(",")]
-                if len(parts) != 4 or not all(1 <= n <= 45 for n in parts):
+                if len(parts) != 6 or not all(1 <= n <= 45 for n in parts):
                     raise ValueError
                 combo = sorted(parts)
             except:
                 return await interaction.response.send_message(
-                    embed=create_embed("❌ 번호 오류", "수동 입력 시 1~45 사이의 **6개 숫자**를 쉼표로 입력해주세요.", discord.Color.red()), ephemeral=True)
+                    embed=discord.Embed(title="❌ 번호 오류", description="수동 입력 시 1~45 사이의 **6개 숫자**를 쉼표로 입력해주세요.", color=discord.Color.red()), ephemeral=True)
         entries.append(combo)
 
-    # ✅ 잔액 차감 및 오덕잔고 적립
     add_balance(user_id, -cost)
     add_oduk_pool(cost)
     pool_amt = get_oduk_pool_amount()
 
-    # ✅ 참여 내역 저장
-    data = load_oduk_lotto_entries()
     if today not in data:
         data[today] = {}
     if user_id not in data[today]:
@@ -3247,7 +3297,6 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
     data[today][user_id].extend(entries)
     save_oduk_lotto_entries(data)
 
-    # ✅ 참여 결과 메시지
     joined = "\n".join([f"🎟️ 조합 {i+1}: {', '.join(map(str, combo))}" for i, combo in enumerate(entries)])
     desc = (
         f"{수량}조합 참여 완료! 총 **{cost:,}원** 차감되었습니다.\n\n"
@@ -3257,8 +3306,9 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
     )
     embed = discord.Embed(title="🎯 오덕로또 참여 완료", description=desc, color=discord.Color.blue())
     embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
-
     await interaction.response.send_message(embed=embed)
+
+# ⚠️ 당첨 로직은 별도 코드로 추가될 수 있습니다.
 
 
 
