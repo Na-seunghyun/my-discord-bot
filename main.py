@@ -2787,7 +2787,6 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
 
 
 
-# ✅ /내투자
 @tree.command(name="내투자", description="현재 보유 중인 투자 내역을 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def 내투자(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -2795,16 +2794,28 @@ async def 내투자(interaction: discord.Interaction):
     my_investments = [inv for inv in investments if inv["user_id"] == user_id]
 
     if not my_investments:
-        return await interaction.response.send_message(embed=create_embed("📭 투자 내역 없음", "현재 보유 중인 투자 내역이 없습니다.", discord.Color.light_grey()), ephemeral=True)
-
-    embed = discord.Embed(title="📊 나의 투자 내역", color=discord.Color.blue())
-    for inv in my_investments:
-        embed.add_field(
-            name=inv["stock"],
-            value=f"수량: {inv['shares']}주\n매수 단가: {inv['price_per_share']:,}원\n투자 시각: {inv['timestamp'].replace('T', ' ')[:16]}",
-            inline=False
+        return await interaction.response.send_message(
+            embed=create_embed("📭 투자 내역 없음", "현재 보유 중인 투자 내역이 없습니다.", discord.Color.light_grey()),
+            ephemeral=True
         )
+
+    # ✅ 모든 내역을 문자열로 묶음
+    text = ""
+    for inv in my_investments:
+        종목 = inv["stock"]
+        수량 = inv["shares"]
+        단가 = inv["price_per_share"]
+        시각 = inv["timestamp"].replace("T", " ")[:16]
+        text += f"📈 **{종목}** | {수량}주 | {단가:,}원 | {시각}\n"
+
+    embed = discord.Embed(
+        title="📊 나의 투자 내역",
+        description=text[:4000],  # Discord 메시지 제한 보호용 (최대 4096자)
+        color=discord.Color.blue()
+    )
+
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 
 # ✅ 투자왕 커맨드
