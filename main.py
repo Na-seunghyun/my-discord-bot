@@ -2821,7 +2821,8 @@ async def process_investments():
         else:
             return random.randint(-30, 30)
 
-    delisted_stocks = []
+    delisted_stocks = set()
+    price_changes = {}
 
     # 주식 가격 업데이트
     for name, stock in stocks.items():
@@ -2829,9 +2830,12 @@ async def process_investments():
         old_price = stock["price"]
         new_price = int(old_price * (1 + change / 100))
 
+        # 가격 변화 저장
+        price_changes[name] = (old_price, change)
+
         # 💀 상장폐지 처리: 100원 미만 시 재상장
         if new_price < 100:
-            delisted_stocks.append(name)
+            delisted_stocks.add(name)
             stock["price"] = 150
             stock["change"] = 0
             report += f"💀 [{name}] 상장폐지 후 재상장 (가격 < 100원) → 150원으로 초기화\n"
@@ -2864,11 +2868,14 @@ async def process_investments():
             continue
 
         if timestamp < now:
-            # 주식 가격 변동 반영
-            change = stocks[stock]["change"]
-            real_new_price = int(old_price * (1 + change / 100))
-            if real_new_price < 1:
-                real_new_price = 1
+            # 정산가는 실제 변동률 적용값 (상장폐지 이전 주가 포함)
+            if stock in price_changes:
+                prev_price, change = price_changes[stock]
+                real_new_price = int(old_price * (1 + change / 100))
+                if real_new_price < 1:
+                    real_new_price = 1
+            else:
+                real_new_price = stocks[stock]["price"]  # fallback
 
             diff = real_new_price - old_price
             total = real_new_price * shares
@@ -2913,6 +2920,7 @@ async def process_investments():
                 print(f"❌ 오덕코인 채널 전송 실패: {e}")
 
     save_last_chart_time(now)
+
 
 
 
