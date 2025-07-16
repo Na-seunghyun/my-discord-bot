@@ -2170,27 +2170,56 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         return await interaction.response.send_message(
             embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**\n베팅액: **{베팅액:,}원**", discord.Color.red()), ephemeral=False)
 
-    # 베팅 처리
+    # 베팅 차감
     add_balance(user_id, -베팅액)
 
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
+    # ✅ 고정폭 막대 생성 함수
+    def create_graph_bar(success_chance: int, roll: int, width: int = 30) -> tuple[str, str]:
+        bar = ""
+        pointer_line = ""
+
+        for i in range(width):
+            value = int(i * (100 / width)) + 1  # 1~100에 대응
+            if value <= success_chance:
+                bar += "■"
+            else:
+                bar += "·"  # 실패 영역은 점으로 표현
+            if value <= roll < value + int(100 / width):
+                pointer_line += "↑"
+            else:
+                pointer_line += " "
+
+        return f"[{bar}]", pointer_line
+
+    bar, pointer = create_graph_bar(success_chance, roll)
+
     if roll <= success_chance:
         add_balance(user_id, 베팅액 * 2)
         embed = create_embed("🎉 도박 성공!",
-            f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n**+{베팅액:,}원** 획득!",
+            f"성공확률: **{success_chance}%**\n"
+            f"굴린 값: **{roll}** (🎯 성공 범위 이내!)\n\n"
+            f"[1 - 100]\n{bar}\n{pointer} (굴린 값: {roll})\n"
+            f"{roll} ≤ {success_chance} → 성공!\n"
+            f"**+{베팅액:,}원** 획득!",
             discord.Color.green(), user_id)
     else:
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
         embed = create_embed("💀 도박 실패!",
-            f"성공확률: **{success_chance}%**\n굴린 값: **{roll}**\n"
+            f"성공확률: **{success_chance}%**\n"
+            f"굴린 값: **{roll}** (❌ 실패 범위)\n\n"
+            f"[1 - 100]\n{bar}\n{pointer} (굴린 값: {roll})\n"
+            f"{roll} > {success_chance} → 실패!\n"
             f"**-{베팅액:,}원** 손실...\n\n"
             f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
-            f"🎟️ `/오덕로또참여`로 참여하세요!", discord.Color.red(), user_id)
+            f"🎟️ `/오덕로또참여`로 참여하세요!",
+            discord.Color.red(), user_id)
 
     await interaction.response.send_message(embed=embed)
+
 
 
 
