@@ -2723,6 +2723,7 @@ async def 투자왕(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
+
 # ✅ 유저에게 투자 정산 결과를 DM으로 보내는 함수 (정산된 내역 기반)
 async def send_investment_summary(user: discord.User, user_id: str, history: list):
     # 이 유저의 정산된 투자 내역만 필터링
@@ -2763,6 +2764,13 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
         sign = "+" if profit > 0 else ""
         emoji = "📈" if profit >= 0 else "📉"
 
+        # 💬 급등/급락 멘트 추가
+        funny_comment = ""
+        if rate == 100.0:
+            funny_comment = "\n🔥 *내부자 아니죠? 100% 급등은 너무했잖아요!*"
+        elif rate == -100.0:
+            funny_comment = "\n💣 *텅장 완료... 투자금이 증발했습니다. 🙃*"
+
         current_embed.add_field(
             name=f"{emoji} [{stock}] {sign}{rate}%",
             value=(
@@ -2770,6 +2778,7 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
                 f"💰 매입가 총액: {invested:,}원\n"
                 f"💵 정산 금액: {returned:,}원\n"
                 f"📊 손익: {sign}{profit:,}원"
+                f"{funny_comment}"
             ),
             inline=False
         )
@@ -2798,6 +2807,7 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
 
 
 
+
 @tasks.loop(hours=2)
 async def process_investments():
     stocks = load_stocks()
@@ -2808,7 +2818,7 @@ async def process_investments():
     last_chart_time = load_last_chart_time().astimezone(KST)
     now = datetime.now(KST)
 
-    report = "📊 [2시간 주기 투자 종목 변동]\n\n"
+    report = f"📊 [2시간 주기 투자 종목 변동 - {now.strftime('%m/%d %H:%M')}]\n\n"
     split_report = ""
 
     # 가격 변동 함수 (희박하게 -100%, +100%)
@@ -2851,6 +2861,12 @@ async def process_investments():
         symbol = "📈" if change > 0 else ("📉" if change < 0 else "💥" if change in [-100, 100] else "➖")
         report += f"{symbol} {name}: {change:+}% → {new_price:,}원\n"
 
+        # 급등/급락 안내 추가
+        if change == 100:
+            report += f"🔥 [{name}] 급등! 내부자 냄새가 나는 100% 상승입니다!\n"
+        elif change == -100:
+            report += f"💣 [{name}] 폭락! -100% 손실, 이제 이 주식은 기억 속으로...\n"
+
     save_stocks(stocks)
 
     # 정산 처리
@@ -2883,6 +2899,10 @@ async def process_investments():
 
             add_balance(user_id, total)
 
+            comment = ""
+            if stock in delisted_stocks:
+                comment = "⚠ 상장폐지로 정산 후 초기화된 종목입니다."
+
             history.append({
                 "user_id": user_id,
                 "stock": stock,
@@ -2890,7 +2910,8 @@ async def process_investments():
                 "buy_price": old_price,
                 "sell_price": real_new_price,
                 "profit": profit,
-                "timestamp": now.isoformat()
+                "timestamp": now.isoformat(),
+                "comment": comment
             })
 
             updated_users.add(user_id)
