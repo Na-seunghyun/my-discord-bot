@@ -2159,65 +2159,64 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
 
 
 
-@tree.command(name="도박", description="알로항 스타일 도박 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(베팅액="최소 500원부터 도박할 수 있습니다")
+@tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(베팅액="최소 500원부터 도박 가능")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
     user_id = str(interaction.user.id)
     balance = get_balance(user_id)
 
+    # 최소 베팅, 잔액 부족 체크
     if 베팅액 < 500:
         return await interaction.response.send_message(
-            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **500원**입니다.", discord.Color.red()), ephemeral=False)
-
+            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **500원**입니다.", discord.Color.red()), ephemeral=True)
     if balance < 베팅액:
         return await interaction.response.send_message(
-            embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**\n베팅액: **{베팅액:,}원**", discord.Color.red()), ephemeral=False)
+            embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()), ephemeral=True)
 
-    # 💸 베팅 차감
+    # 잔액 차감
     add_balance(user_id, -베팅액)
 
-    # 🎲 확률 계산
+    # 도박 실행
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
-    # ✅ 시각화 막대 생성 (성공=■, 실패=·, 위치=⚡/❌)
-    def create_graph_bar(success_chance: int, roll: int, width: int = 30) -> str:
-        success_pos = round(success_chance / 100 * width)
+    # ✅ 시각화 막대 (width=20, 마커 포함)
+    def create_graph_bar(chance: int, roll: int, width: int = 20) -> str:
+        success_pos = round(chance / 100 * width)
         roll_pos = round(roll / 100 * width)
-
         bar = ""
         for i in range(width):
             if i == roll_pos:
-                bar += "⚡" if roll <= success_chance else "❌"
+                bar += "⚡" if roll <= chance else "❌"
             else:
                 bar += "■" if i < success_pos else "·"
         return f"[{bar}]"
 
     bar = create_graph_bar(success_chance, roll)
+    updated_balance = get_balance(user_id)
 
+    # 성공
     if roll <= success_chance:
         add_balance(user_id, 베팅액 * 2)
+        final_balance = get_balance(user_id)
         embed = create_embed("🎉 도박 성공!",
-            f"성공확률: **{success_chance}%**\n"
-            f"굴린 값: **{roll}** (🎯 성공 범위 이내!)\n\n"
-            f"{bar}\n"
-            f"{roll} ≤ {success_chance} → 성공!\n"
-            f"**+{베팅액:,}원** 획득!",
+            f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
+            f"+{베팅액:,}원 획득!\n💰 잔액: {final_balance:,}원",
             discord.Color.green(), user_id)
+
+    # 실패
     else:
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
         embed = create_embed("💀 도박 실패!",
-            f"성공확률: **{success_chance}%**\n"
-            f"굴린 값: **{roll}** (❌ 실패 범위)\n\n"
-            f"{bar}\n"
-            f"{roll} > {success_chance} → 실패!\n"
-            f"**-{베팅액:,}원** 손실...\n\n"
-            f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
-            f"🎟️ `/오덕로또참여`로 참여하세요!",
+            f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
+            f"-{베팅액:,}원 손실...\n"
+            f"🍜 오덕잔고: {pool_amt:,}원\n"
+            f"💰 잔액: {updated_balance:,}원",
             discord.Color.red(), user_id)
 
     await interaction.response.send_message(embed=embed)
+
 
 
 
