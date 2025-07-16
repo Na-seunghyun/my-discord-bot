@@ -1712,7 +1712,7 @@ async def 개별소환(interaction: discord.Interaction):
     await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
 
 
-# ✅ 슬래시 명령어: 팀짜기
+# ✅ 팀 이동 버튼 View
 class TeamMoveView(discord.ui.View):
     def __init__(self, teams, empty_channels, origin_channel):
         super().__init__(timeout=None)
@@ -1721,23 +1721,39 @@ class TeamMoveView(discord.ui.View):
         self.origin_channel = origin_channel
         self.moved = False
 
+        # ✅ 초기 이동 대상 멤버 저장
+        self.initial_members = set()
+        for team in teams[1:]:  # 팀1 제외
+            self.initial_members.update(team)
+
     @discord.ui.button(label="🚀 팀 이동 시작", style=discord.ButtonStyle.green)
     async def move(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.moved:
             await interaction.response.send_message("이미 이동 완료됨", ephemeral=True)
             return
-        for team, channel in zip(self.teams[1:], self.empty_channels):
-            for member in team:
-                try:
-                    await member.move_to(channel)
-                except:
-                    pass
+
         self.moved = True
         button.disabled = True
         await interaction.response.edit_message(view=self)
+
+        for team, channel in zip(self.teams[1:], self.empty_channels):  # 팀 2부터 이동
+            for member in team:
+                try:
+                    # ✅ 초기 멤버이고, 아직 원래 채널에 있는 경우만 이동
+                    if (
+                        member in self.initial_members and
+                        member.voice and
+                        member.voice.channel == self.origin_channel
+                    ):
+                        await member.move_to(channel)
+                        await asyncio.sleep(0.1)  # 안정성 위해 약간의 지연
+                except Exception as e:
+                    print(f"이동 중 오류 발생: {member.display_name}: {e}")
+
         self.stop()
 
 
+# ✅ /팀짜기 슬래시 명령어
 @tree.command(name="팀짜기", description="음성 채널 팀 나누기", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(team_size="팀당 인원 수")
 @app_commands.choices(team_size=[
@@ -1752,17 +1768,24 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
         return
 
     members = [m for m in vc.members if not m.bot]
+    if len(members) < team_size.value * 2:
+        await interaction.response.send_message("❌ 팀을 나누기엔 인원이 부족합니다.", ephemeral=True)
+        return
+
     random.shuffle(members)
     teams = [members[i:i + team_size.value] for i in range(0, len(members), team_size.value)]
 
     guild = interaction.guild
-    empty_channels = [ch for ch in guild.voice_channels if ch.name.startswith("일반") and len(ch.members) == 0 and ch != vc]
+    empty_channels = [
+        ch for ch in guild.voice_channels
+        if ch.name.startswith("일반") and len(ch.members) == 0 and ch != vc
+    ]
 
     if len(empty_channels) < len(teams) - 1:
         await interaction.response.send_message("❌ 빈 채널 부족", ephemeral=True)
         return
 
-    msg = f"🎲 팀 나누기 완료\n\n**팀 1 (현재 채널):** {', '.join(m.display_name for m in teams[0])}\n"
+    msg = f"🎲 **팀 나누기 완료!**\n\n**팀 1 (현재 채널):** {', '.join(m.display_name for m in teams[0])}\n"
     for idx, (team, ch) in enumerate(zip(teams[1:], empty_channels), start=2):
         msg += f"**팀 {idx} ({ch.name}):** {', '.join(m.display_name for m in team)}\n"
 
