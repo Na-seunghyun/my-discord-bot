@@ -2700,7 +2700,8 @@ async def 수량_자동완성(interaction: discord.Interaction, current: int):
 
 
 
-@tree.command(name="자동투자", description="보유 금액 내 랜덤 종목 자동 분산 투자", guild=discord.Object(id=GUILD_ID))
+
+@tree.command(name="자동투자", description="무작위 종목에 입력한 금액 내에서 자동 분산 투자", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(금액="투자할 총 금액 (최소 1,000원)")
 async def 자동투자(interaction: discord.Interaction, 금액: int):
     user_id = str(interaction.user.id)
@@ -2715,30 +2716,40 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
             embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()), ephemeral=True)
 
     stocks = load_stocks()
-    종목들 = list(stocks.keys())
-    random.shuffle(종목들)
+    종목_전체 = list(stocks.keys())
+    random.shuffle(종목_전체)
 
-    남은금액 = 금액
-    수수료총합 = 0
+    # ✅ 1~30개 랜덤 종목 선택
+    선택종목수 = random.randint(1, min(30, len(종목_전체)))
+    선택된종목 = 종목_전체[:선택종목수]
+
+    # ✅ 랜덤 비율 생성 (전체 합 = 1.0)
+    비율들 = [random.random() for _ in range(선택종목수)]
+    총합 = sum(비율들)
+    비율들 = [v / 총합 for v in 비율들]
+
     투자결과 = []
     investments = load_investments()
+    수수료총합 = 0
+    총사용액 = 0
 
-    for 종목 in 종목들:
+    for 종목, 비율 in zip(선택된종목, 비율들):
+        배정금액 = int(금액 * 비율)
+
         단가 = stocks[종목]["price"]
         실단가 = int(단가 * 1.01)
-        수량 = 남은금액 // 실단가
+        수량 = 배정금액 // 실단가
+
         if 수량 < 1:
             continue
 
-        총액 = 수량 * 실단가
-        실제구매가 = 수량 * 단가
+        총액 = 실단가 * 수량
+        실제구매가 = 단가 * 수량
         수수료 = 총액 - 실제구매가
 
         add_balance(user_id, -총액)
         수수료총합 += 수수료
-        남은금액 -= 총액
-
-        투자결과.append(f"📈 **{종목}** {수량}주 구매 (**{총액:,}원**)")
+        총사용액 += 총액
 
         investments.append({
             "user_id": user_id,
@@ -2748,8 +2759,7 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
             "timestamp": datetime.now().isoformat()
         })
 
-        if 남은금액 < 1000:
-            break
+        투자결과.append(f"📈 **{종목}** {수량}주 (총 {총액:,}원)")
 
     save_investments(investments)
     add_oduk_pool(수수료총합)
@@ -2757,13 +2767,13 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
 
     if not 투자결과:
         return await interaction.response.send_message(
-            embed=create_embed("🤷 자동투자 실패", "해당 금액으로 구매 가능한 종목이 없습니다.", discord.Color.orange()), ephemeral=False)
+            embed=create_embed("🤷 자동투자 실패", "입력 금액으로는 매수 가능한 종목이 없습니다.", discord.Color.orange()), ephemeral=False)
 
     await interaction.response.send_message(
         embed=create_embed(
-            "🎯 자동투자 완료",
+            "🎯 랜덤 자동투자 완료",
             (
-                f"총 투자금: **{금액:,}원** 중 사용액: **{금액 - 남은금액:,}원**\n"
+                f"총 입력금액: **{금액:,}원** 중 사용: **{총사용액:,}원**\n"
                 f"💸 수수료 적립: **{수수료총합:,}원** → 오덕잔고 적립 완료\n"
                 f"🏦 현재 오덕잔고: **{oduk_amount:,}원**\n\n" +
                 "\n".join(투자결과)
@@ -2772,8 +2782,6 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
             user_id
         )
     )
-
-
 
 
 
