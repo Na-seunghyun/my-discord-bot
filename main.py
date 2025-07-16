@@ -2573,6 +2573,7 @@ async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
     user_id = str(interaction.user.id)
     종목 = 종목.strip()
     stocks = load_stocks()
+    purchase_fee_rate = 0.01  # ✅ 수수료 1%
 
     if 종목 not in stocks:
         return await interaction.response.send_message(
@@ -2583,11 +2584,12 @@ async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
             embed=create_embed("❌ 수량 오류", "최소 **1주** 이상 구매해야 합니다.", discord.Color.red()), ephemeral=False)
 
     단가 = stocks[종목]["price"]
-    총액 = 단가 * 수량
+    실단가 = int(단가 * (1 + purchase_fee_rate))  # ✅ 수수료 포함
+    총액 = 실단가 * 수량
 
     if get_balance(user_id) < 총액:
         return await interaction.response.send_message(
-            embed=create_embed("💸 잔액 부족", f"보유 잔액: **{get_balance(user_id):,}원**\n필요 금액: **{총액:,}원**", discord.Color.red()), ephemeral=False)
+            embed=create_embed("💸 잔액 부족", f"보유 잔액: **{get_balance(user_id):,}원**\n필요 금액 (수수료 포함): **{총액:,}원**", discord.Color.red()), ephemeral=False)
 
     add_balance(user_id, -총액)
 
@@ -2602,7 +2604,8 @@ async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
     save_investments(investments)
 
     await interaction.response.send_message(
-        embed=create_embed("📥 투자 완료", f"**{종목}** {수량}주 구매 완료!\n총 투자금: **{총액:,}원**", discord.Color.blue(), user_id))
+        embed=create_embed("📥 투자 완료", f"**{종목}** {수량}주 구매 완료!\n총 투자금 (수수료 포함): **{총액:,}원**", discord.Color.blue(), user_id))
+
 
 # ✅ 종목 자동완성
 @투자.autocomplete("종목")
@@ -2617,11 +2620,9 @@ async def 종목_자동완성(interaction: discord.Interaction, current: str):
     ][:25]
 
 
-
-
-
+# ✅ 수량 자동완성 (수수료 반영)
 @투자.autocomplete("수량")
-async def 수량_자동완성(interaction: discord.Interaction, current: str):
+async def 수량_자동완성(interaction: discord.Interaction, current: int):
     user_id = str(interaction.user.id)
     stocks = load_stocks()
 
@@ -2630,19 +2631,21 @@ async def 수량_자동완성(interaction: discord.Interaction, current: str):
         return []
 
     단가 = stocks[selected_stock]["price"]
+    수수료율 = 0.01  # ✅ 수수료 반영
+    실단가 = int(단가 * (1 + 수수료율))
     잔액 = get_balance(user_id)
 
-    최대_수량 = 잔액 // 단가
+    최대_수량 = 잔액 // 실단가
     if 최대_수량 < 1:
-        return [app_commands.Choice(name="❌ 잔액 부족: 구매 불가", value=0)]
+        return [app_commands.Choice(name="❌ 잔액 부족: 수수료 포함 구매 불가", value=0)]
 
-    # ✅ 최대 수량만 추천
     return [
         app_commands.Choice(
-            name=f"📈 최대 구매 가능: {최대_수량}주 ({최대_수량 * 단가:,}원)",
+            name=f"📈 최대 구매 가능: {최대_수량}주 (수수료 포함 {최대_수량 * 실단가:,}원)",
             value=최대_수량
         )
     ]
+
 
 # ✅ /내투자
 @tree.command(name="내투자", description="현재 보유 중인 투자 내역을 확인합니다", guild=discord.Object(id=GUILD_ID))
@@ -2818,8 +2821,14 @@ async def process_investments():
     last_chart_time = load_last_chart_time().astimezone(KST)
     now = datetime.now(KST)
 
-    report = f"📊 [2시간 주기 투자 종목 변동 - {now.strftime('%m/%d %H:%M')}]\n\n"
+    report = f"📊 [2시간 주기 투자 종목 변동 - {now.strftime('%m/%d %H:%M')}]
+\n"
     split_report = ""
+
+    # 수수료 설정
+    purchase_fee_rate = 0.01  # 매수 시 1% 수수료
+    sell_fee_rate = 0.01      # 매도 시 1% 수수료 (이익 시 적용)
+    total_fees_collected = 0  # 오덕잔고 누적 수수료
 
     # 가격 변동 함수 (희박하게 -100%, +100%)
     def generate_change():
@@ -2840,10 +2849,8 @@ async def process_investments():
         old_price = stock["price"]
         new_price = int(old_price * (1 + change / 100))
 
-        # 가격 변화 저장
         price_changes[name] = (old_price, change)
 
-        # 💀 상장폐지 처리: 100원 미만 시 재상장
         if new_price < 100:
             delisted_stocks.add(name)
             stock["price"] = 150
@@ -2851,7 +2858,6 @@ async def process_investments():
             report += f"💀 [{name}] 상장폐지 후 재상장 (가격 < 100원) → 150원으로 초기화\n"
             continue
 
-        # 📉 분할 조건
         if new_price > 30_000:
             new_price = new_price // 10
             split_report += f"📣 [{name}] 주식 분할: 1주 → 10주, 가격 ↓ {old_price:,} → {new_price:,}원\n"
@@ -2861,7 +2867,6 @@ async def process_investments():
         symbol = "📈" if change > 0 else ("📉" if change < 0 else "💥" if change in [-100, 100] else "➖")
         report += f"{symbol} {name}: {change:+}% → {new_price:,}원\n"
 
-        # 급등/급락 안내 추가
         if change == 100:
             report += f"🔥 [{name}] 급등! 내부자 냄새가 나는 100% 상승입니다!\n"
         elif change == -100:
@@ -2869,7 +2874,6 @@ async def process_investments():
 
     save_stocks(stocks)
 
-    # 정산 처리
     history = []
     updated_users = set()
 
@@ -2884,20 +2888,30 @@ async def process_investments():
             continue
 
         if timestamp < now:
-            # 정산가는 실제 변동률 적용값 (상장폐지 이전 주가 포함)
             if stock in price_changes:
                 prev_price, change = price_changes[stock]
                 real_new_price = int(old_price * (1 + change / 100))
                 if real_new_price < 1:
                     real_new_price = 1
             else:
-                real_new_price = stocks[stock]["price"]  # fallback
+                real_new_price = stocks[stock]["price"]
 
-            diff = real_new_price - old_price
-            total = real_new_price * shares
-            profit = diff * shares
+            buy_cost_per_share = int(old_price * (1 + purchase_fee_rate))
+            invested = buy_cost_per_share * shares
+            fee_on_buy = (buy_cost_per_share - old_price) * shares
+            total_fees_collected += fee_on_buy
 
-            add_balance(user_id, total)
+            sell_total = real_new_price * shares
+            gross_profit = sell_total - invested
+            fee_on_sell = 0
+            if gross_profit > 0:
+                fee_on_sell = int(sell_total * sell_fee_rate)
+                sell_total -= fee_on_sell
+                total_fees_collected += fee_on_sell
+
+            profit = sell_total - invested
+
+            add_balance(user_id, sell_total)
 
             comment = ""
             if stock in delisted_stocks:
@@ -2921,6 +2935,31 @@ async def process_investments():
     save_investments(new_list)
     if history:
         save_investment_history(history)
+
+    # ✅ 오덕잔고에 수수료 적립
+    def add_oduk_pool(amount):
+        try:
+            with open("oduk_pool.json", "r", encoding="utf-8") as f:
+                pool = json.load(f)
+        except:
+            pool = {"amount": 0}
+
+        pool["amount"] = pool.get("amount", 0) + amount
+        with open("oduk_pool.json", "w", encoding="utf-8") as f:
+            json.dump(pool, f, indent=2)
+
+    add_oduk_pool(total_fees_collected)
+
+    # ✅ 오덕잔고 총액 불러오기
+    try:
+        with open("oduk_pool.json", "r", encoding="utf-8") as f:
+            pool = json.load(f)
+        oduk_amount = pool.get("amount", 0)
+    except:
+        oduk_amount = total_fees_collected
+
+    # ✅ 수수료 및 오덕잔고 안내 추가
+    report += f"\n💰 이번 정산 수수료 수익: {total_fees_collected:,}원 적립\n🏦 현재 오덕잔고: {oduk_amount:,}원\n"
 
     for user_id in updated_users:
         try:
