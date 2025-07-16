@@ -2852,9 +2852,9 @@ async def process_investments():
     # 가격 변동 함수 (희박하게 -100%, +100%)
     def generate_change():
         r = random.random()
-        if r < 0.00005:
+        if r < 0.0002:
             return 100
-        elif r < 0.0010:
+        elif r < 0.0015:
             return -100
         else:
             return random.randint(-30, 30)
