@@ -2821,8 +2821,9 @@ async def process_investments():
     last_chart_time = load_last_chart_time().astimezone(KST)
     now = datetime.now(KST)
 
-    report = f"📊 [2시간 주기 투자 종목 변동 - {now.strftime('%m/%d %H:%M')}]\n\n"
+    report = f"📊 [2시간 주기 투자 종목 변동 - {now.strftime('%m/%d %H:%M')}]
 
+"\n"
     split_report = ""
 
     # 수수료 설정
