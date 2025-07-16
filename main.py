@@ -2784,7 +2784,22 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
     )
 
 
+# ✅ 자동완성 함수 (잔액 자동 표시)
+@자동투자.autocomplete("금액")
+async def 자동투자_금액_자동완성(interaction: discord.Interaction, current: int):
+    user_id = str(interaction.user.id)
+    잔액 = get_balance(user_id)
 
+    if 잔액 < 1000:
+        return [
+            app_commands.Choice(name="❌ 잔액 부족: 최소 1,000원 필요", value=0)
+        ]
+
+    return [
+        app_commands.Choice(name=f"💰 전체 잔액 사용: {잔액:,}원", value=잔액),
+        app_commands.Choice(name=f"🔟 10,000원만 투자", value=10000),
+        app_commands.Choice(name=f"💯 100,000원만 투자", value=100000)
+    ]
 
 
 @tree.command(name="내투자", description="현재 보유 중인 투자 내역을 확인합니다", guild=discord.Object(id=GUILD_ID))
