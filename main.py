@@ -3190,6 +3190,13 @@ async def 로또참여현황(interaction: discord.Interaction):
         draw_start = today_9am
         draw_end = draw_start + timedelta(days=1)
 
+    # ⏰ 남은 시간 계산
+    remaining = draw_end - now
+    total_minutes = remaining.total_seconds() // 60
+    hours = int(total_minutes // 60)
+    minutes = int(total_minutes % 60)
+    time_left_str = f"{hours}시간 {minutes}분"
+
     all_entries = load_oduk_lotto_entries()
     filtered_entries = {}
     for record in all_entries:
@@ -3201,7 +3208,10 @@ async def 로또참여현황(interaction: discord.Interaction):
 
     if not filtered_entries:
         return await interaction.response.send_message(
-            embed=discord.Embed(title="📭 참여자 없음", description="이번 회차 로또에 아직 아무도 참여하지 않았습니다.", color=discord.Color.orange()),
+            embed=discord.Embed(
+                title="📭 참여자 없음",
+                description="이번 회차 로또에 아직 아무도 참여하지 않았습니다.",
+                color=discord.Color.orange()),
             ephemeral=False
         )
 
@@ -3236,14 +3246,17 @@ async def 로또참여현황(interaction: discord.Interaction):
             field_count = 0
 
     if field_count > 0:
-        current_embed.set_footer(text="🕘 다음 추첨: 오전 9시")
+        current_embed.set_footer(text=f"🕘 다음 추첨까지 남은 시간: {time_left_str}")
         embeds.append(current_embed)
 
     for embed in embeds:
         await interaction.channel.send(embed=embed)
 
     await interaction.response.send_message(
-        embed=discord.Embed(title="📊 참여 현황 출력됨", description=f"총 {len(filtered_entries)}명 참여.", color=discord.Color.green()),
+        embed=discord.Embed(
+            title="📊 참여 현황 출력됨",
+            description=f"총 {len(filtered_entries)}명 참여.",
+            color=discord.Color.green()),
         ephemeral=True
     )
 
