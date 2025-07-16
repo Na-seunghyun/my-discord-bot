@@ -2239,7 +2239,10 @@ async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액:
 
 
 from discord.ui import View, Button
+import random
+import discord
 
+# 🎯 복권 버튼
 class LotteryButton(Button):
     def __init__(self, label, correct_slot, 베팅액, user_id):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
@@ -2254,25 +2257,36 @@ class LotteryButton(Button):
             return await interaction.response.send_message("❌ 이미 복권이 종료되었습니다.", ephemeral=True)
 
         self.view.stop()
-        if self.label == self.correct_slot:
-            add_balance(self.user_id, self.베팅액 * 2)
-            title = "🎉 당첨!"
-            desc = f"축하합니다! **{self.베팅액 * 2:,}원**을 획득했습니다!"
-            color = discord.Color.green()
-        else:
-            add_oduk_pool(self.베팅액)
-            pool_amt = get_oduk_pool_amount()
 
-            title = "💔 꽝!"
-            desc = (
-                f"아쉽지만 탈락입니다.\n**{self.베팅액:,}원**을 잃었습니다.\n\n"
-                f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
-                f"🎟️ `/오덕로또참여`로 참여하세요!"
+        try:
+            if self.label == self.correct_slot:
+                add_balance(self.user_id, self.베팅액 * 3)
+                title = "🎉 당첨!"
+                desc = f"축하합니다! **{self.베팅액 * 3:,}원**을 획득했습니다!"
+                color = discord.Color.green()
+            else:
+                add_oduk_pool(self.베팅액)
+                pool_amt = get_oduk_pool_amount()
+                title = "💔 꽝!"
+                desc = (
+                    f"아쉽지만 탈락입니다.\n**{self.베팅액:,}원**을 잃었습니다.\n\n"
+                    f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
+                    f"🎟️ `/오덕로또참여`로 참여하세요!"
+                )
+                color = discord.Color.red()
+
+            await interaction.response.edit_message(
+                embed=create_embed(title, desc, color, str(self.user_id)),
+                view=None
             )
-            color = discord.Color.red()
 
-            await interaction.response.edit_message(embed=create_embed(title, desc, color, self.user_id), view=None)
+        except Exception as e:
+            print(f"❌ 복권 버튼 오류: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message("⚠️ 오류가 발생했습니다.", ephemeral=True)
 
+
+# 🎯 복권 인터페이스 (버튼 3개)
 class LotteryView(View):
     def __init__(self, user_id, 베팅액):
         super().__init__(timeout=30)
@@ -2285,6 +2299,8 @@ class LotteryView(View):
         self.stopped = True
         return super().stop()
 
+
+# 🎯 복권 명령어 슬래시 커맨드
 @tree.command(name="복권", description="복권 3개 중 하나를 선택해보세요", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
 async def 복권(interaction: discord.Interaction, 베팅액: int):
@@ -2292,17 +2308,28 @@ async def 복권(interaction: discord.Interaction, 베팅액: int):
 
     if 베팅액 < 1000:
         return await interaction.response.send_message(
-            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **1,000원**입니다.", discord.Color.red()), ephemeral=False)
+            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **1,000원**입니다.", discord.Color.red()),
+            ephemeral=False
+        )
 
     if get_balance(user_id) < 베팅액:
         return await interaction.response.send_message(
-            embed=create_embed("💸 잔액 부족", f"잔액: **{get_balance(user_id):,}원**", discord.Color.red()), ephemeral=False)
+            embed=create_embed("💸 잔액 부족", f"잔액: **{get_balance(user_id):,}원**", discord.Color.red()),
+            ephemeral=False
+        )
 
     add_balance(user_id, -베팅액)
     view = LotteryView(user_id=interaction.user.id, 베팅액=베팅액)
+
     await interaction.response.send_message(
-        embed=create_embed("🎟 복권 게임 시작!", "3개의 이모지 중 하나를 선택해주세요.\n당첨되면 **2배 보상!**", discord.Color.blue()),
-        view=view, ephemeral=False)
+        embed=create_embed(
+            "🎟 복권 게임 시작!",
+            "3개의 이모지 중 하나를 선택해주세요.\n당첨되면 **3배 보상!**",
+            discord.Color.blue()
+        ),
+        view=view,
+        ephemeral=False
+    )
 
 
 @tree.command(name="슬롯", description="애니메이션 슬롯머신 게임!", guild=discord.Object(id=GUILD_ID))
