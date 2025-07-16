@@ -2577,6 +2577,22 @@ async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
     await interaction.response.send_message(
         embed=create_embed("📥 투자 완료", f"**{종목}** {수량}주 구매 완료!\n총 투자금: **{총액:,}원**", discord.Color.blue(), user_id))
 
+# ✅ 종목 자동완성
+@투자.autocomplete("종목")
+async def 종목_자동완성(interaction: discord.Interaction, current: str):
+    stocks = load_stocks()
+    current_lower = current.lower()
+
+    return [
+        app_commands.Choice(name=name, value=name)
+        for name in stocks
+        if current_lower in name.lower()
+    ][:25]
+
+
+
+
+
 @투자.autocomplete("수량")
 async def 수량_자동완성(interaction: discord.Interaction, current: str):
     user_id = str(interaction.user.id)
