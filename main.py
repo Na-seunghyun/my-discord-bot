@@ -3181,8 +3181,14 @@ async def auto_oduk_lotto():
 @tree.command(name="로또참여현황", description="오늘의 오덕로또 참여 현황을 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def 로또참여현황(interaction: discord.Interaction):
     now = datetime.now(KST)
-    draw_start = now - timedelta(days=1)
-    draw_end = now
+
+    today_9am = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    if now < today_9am:
+        draw_end = today_9am
+        draw_start = draw_end - timedelta(days=1)
+    else:
+        draw_start = today_9am
+        draw_end = draw_start + timedelta(days=1)
 
     all_entries = load_oduk_lotto_entries()
     filtered_entries = {}
@@ -3218,7 +3224,7 @@ async def 로또참여현황(interaction: discord.Interaction):
         field_value = f"총 {combo_count}개 조합 참여"
 
         current_embed.add_field(
-            name=f"👤 {username} ({len(combos)}개 조합)",
+            name=f"👤 {username} ({combo_count}개 조합)",
             value=field_value,
             inline=False
         )
@@ -3249,15 +3255,26 @@ async def 로또참여현황(interaction: discord.Interaction):
 
 
 
+
 # ✅ 오덕로또 참여 명령어
 @tree.command(name="오덕로또참여", description="오덕로또에 참여합니다 (1조합당 2,000원)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(수량="1~10개의 조합 수량 선택", 수동번호들="자동 또는 6개 숫자 (예: 3,5,12,19,22,41)")
 async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수동번호들: str):
     user_id = str(interaction.user.id)
-    today = datetime.now(KST).date().isoformat()
+    now = datetime.now(KST)
+
+    # ✅ 현재 회차 범위 계산
+    draw_start = now - timedelta(days=1)
+    draw_end = now
 
     data = load_oduk_lotto_entries()
-    user_entries_today = data.get(today, {}).get(user_id, [])
+
+    # ✅ 현재 회차에 유저 참여 기록 필터링
+    user_entries_today = [
+        record for record in data
+        if record["user_id"] == user_id and draw_start <= datetime.fromisoformat(record["timestamp"]) < draw_end
+    ]
+
     if len(user_entries_today) + 수량 > 20:
         return await interaction.response.send_message(
             embed=discord.Embed(title="❌ 참여 초과", description="하루 최대 **20조합**까지만 참여할 수 있습니다.", color=discord.Color.red()), ephemeral=True)
@@ -3290,11 +3307,14 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
     add_oduk_pool(cost)
     pool_amt = get_oduk_pool_amount()
 
-    if today not in data:
-        data[today] = {}
-    if user_id not in data[today]:
-        data[today][user_id] = []
-    data[today][user_id].extend(entries)
+    # ✅ 새 구조에 맞춰 기록 저장
+    timestamp = now.isoformat()
+    for combo in entries:
+        data.append({
+            "user_id": user_id,
+            "combo": combo,
+            "timestamp": timestamp
+        })
     save_oduk_lotto_entries(data)
 
     joined = "\n".join([f"🎟️ 조합 {i+1}: {', '.join(map(str, combo))}" for i, combo in enumerate(entries)])
@@ -3307,9 +3327,6 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
     embed = discord.Embed(title="🎯 오덕로또 참여 완료", description=desc, color=discord.Color.blue())
     embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
     await interaction.response.send_message(embed=embed)
-
-# ⚠️ 당첨 로직은 별도 코드로 추가될 수 있습니다.
-
 
 
 
@@ -3344,9 +3361,9 @@ async def on_ready():
     # 초대 캐시 초기화 및 저장
     global invites_cache
     invites_cache = {}
-    
+
     global oduk_pool_cache
-    oduk_pool_cache = load_oduk_pool()  # 캐시 로딩
+    oduk_pool_cache = load_oduk_pool()
     print(f"🔄 오덕 캐시 로딩됨: {oduk_pool_cache}")
 
     for guild in bot.guilds:
@@ -3370,7 +3387,6 @@ async def on_ready():
     except Exception as e:
         print(f"❌ 초대 캐시 저장 실패: {e}")
 
-    # 초대 캐시 주기적 자동 갱신 시작
     try:
         auto_refresh_invites.start()
         print("⏱ 초대 캐시 자동 갱신 루프 시작됨")
@@ -3389,14 +3405,12 @@ async def on_ready():
     else:
         print(f"❌ GUILD_ID {GUILD_ID}에 해당하는 서버를 찾을 수 없습니다.")
 
-    # 자동 전적 수집 루프 시작
     try:
         auto_collect_pubg_stats.start()
         print("📦 전적 자동 수집 루프 시작됨")
     except RuntimeError:
         print("⚠️ auto_collect_pubg_stats 루프는 이미 실행 중입니다.")
 
-    # 기타 루프
     try:
         check_voice_channels_for_streaming.start()
     except Exception as e:
@@ -3407,17 +3421,16 @@ async def on_ready():
     except Exception:
         print("⚠️ auto_update_valid_ids 루프는 이미 실행 중일 수 있음.")
 
-        # ✅ 여기에 추가
+    # ✅ 오덕로또 추첨 루프 (매일 오전 9시 정시)
+    from datetime import time as dt_time
     try:
-        auto_oduk_lotto.start()
-        print("⏰ 오덕로또 자동 추첨 루프 시작됨")
+        if not auto_oduk_lotto.is_running():
+            auto_oduk_lotto.change_interval(time=dt_time(hour=9, tzinfo=KST))
+            auto_oduk_lotto.start()
+            print("⏰ 오덕로또 자동 추첨 루프 시작됨 (오전 9시 기준)")
     except RuntimeError:
         print("⚠️ auto_oduk_lotto 루프는 이미 실행 중입니다.")
 
-
-
-
-    
     # 음성 채널 자동 퇴장 타이머
     await asyncio.sleep(3)
     for guild in bot.guilds:
