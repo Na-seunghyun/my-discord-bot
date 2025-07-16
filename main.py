@@ -2156,6 +2156,9 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     )
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
+
+
+
 @tree.command(name="도박", description="알로항 스타일 도박 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 500원부터 도박할 수 있습니다")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
@@ -2177,27 +2180,27 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
-    # ✅ 정렬 안정 & 위치 정확한 시각화 바 생성
-    def create_graph_bar(success_chance: int, roll: int, width: int = 30) -> tuple[str, str]:
+    # ✅ 시각화 막대 생성 (성공=■, 실패=·, 위치=⚡/❌)
+    def create_graph_bar(success_chance: int, roll: int, width: int = 30) -> str:
         success_pos = round(success_chance / 100 * width)
         roll_pos = round(roll / 100 * width)
 
         bar = ""
-        pointer_line = ""
         for i in range(width):
-            bar += "■" if i < success_pos else "·"
-            pointer_line += "↑" if i == roll_pos else " "
+            if i == roll_pos:
+                bar += "⚡" if roll <= success_chance else "❌"
+            else:
+                bar += "■" if i < success_pos else "·"
+        return f"[{bar}]"
 
-        return f"[{bar}]", pointer_line
-
-    bar, pointer = create_graph_bar(success_chance, roll)
+    bar = create_graph_bar(success_chance, roll)
 
     if roll <= success_chance:
         add_balance(user_id, 베팅액 * 2)
         embed = create_embed("🎉 도박 성공!",
             f"성공확률: **{success_chance}%**\n"
             f"굴린 값: **{roll}** (🎯 성공 범위 이내!)\n\n"
-            f"{bar}\n{pointer} (굴린 값: {roll})\n"
+            f"{bar}\n"
             f"{roll} ≤ {success_chance} → 성공!\n"
             f"**+{베팅액:,}원** 획득!",
             discord.Color.green(), user_id)
@@ -2207,7 +2210,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         embed = create_embed("💀 도박 실패!",
             f"성공확률: **{success_chance}%**\n"
             f"굴린 값: **{roll}** (❌ 실패 범위)\n\n"
-            f"{bar}\n{pointer} (굴린 값: {roll})\n"
+            f"{bar}\n"
             f"{roll} > {success_chance} → 실패!\n"
             f"**-{베팅액:,}원** 손실...\n\n"
             f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
@@ -2215,6 +2218,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             discord.Color.red(), user_id)
 
     await interaction.response.send_message(embed=embed)
+
 
 
 
