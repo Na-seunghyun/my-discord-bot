@@ -2885,23 +2885,33 @@ async def auto_oduk_lotto():
     if not entries_today:
         result_str = "😢 오늘은 로또에 참여한 유저가 없어 상금이 이월됩니다."
     else:
-        answer = sorted(random.sample(range(1, 46), 6))
-        winner_id = None
+        answer = sorted(random.sample(range(1, 46), 4))
+        winner_counts = {}  # user_id: 당첨 횟수
+
         for uid, combos in entries_today.items():
             for combo in combos:
                 if sorted(combo) == answer:
-                    winner_id = uid
-                    break
-            if winner_id:
-                break
+                    winner_counts[uid] = winner_counts.get(uid, 0) + 1
 
         result_str = f"🎯 정답 번호: {', '.join(map(str, answer))}\n\n"
-        if winner_id:
+
+        total_hits = sum(winner_counts.values())
+        if total_hits > 0:
             amount = pool.get("amount", 0)
-            add_balance(winner_id, amount)
+            share = amount // total_hits
+
+            for uid, hit_count in winner_counts.items():
+                add_balance(uid, share * hit_count)
+
             pool["amount"] = 0
-            pool["last_winner"] = winner_id
-            result_str += f"🎉 <@{winner_id}> 님이 로또에 당첨되었습니다!\n💰 상금 **{amount:,}원** 지급 완료!"
+            pool["last_winner"] = ", ".join(winner_counts.keys())
+
+            lines = []
+            for uid, hit_count in winner_counts.items():
+                total_prize = share * hit_count
+                lines.append(f"🎉 <@{uid}> {hit_count}회 당첨! → **{total_prize:,}원** 지급")
+
+            result_str += "\n".join(lines)
         else:
             result_str += "😥 당첨자가 없어 상금이 이월됩니다."
 
@@ -2913,7 +2923,6 @@ async def auto_oduk_lotto():
 
     embed = discord.Embed(title="📢 오덕로또 추첨 결과", description=result_str, color=discord.Color.gold())
 
-    # ✅ 로또 결과를 보낼 채널 설정
     for guild in bot.guilds:
         channel = discord.utils.get(guild.text_channels, name="오덕도박장")
         if channel:
@@ -2921,7 +2930,6 @@ async def auto_oduk_lotto():
                 await channel.send(embed=embed)
             except Exception as e:
                 print(f"❌ 로또 결과 전송 실패: {e}")
-
 
 
 @auto_oduk_lotto.before_loop
@@ -3020,11 +3028,11 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
     entries = []
     for _ in range(수량):
         if 수동번호들.strip().lower() == "자동":
-            combo = sorted(random.sample(range(1, 46), 6))
+            combo = sorted(random.sample(range(1, 46), 4))
         else:
             try:
                 parts = [int(n.strip()) for n in 수동번호들.split(",")]
-                if len(parts) != 6 or not all(1 <= n <= 45 for n in parts):
+                if len(parts) != 4 or not all(1 <= n <= 45 for n in parts):
                     raise ValueError
                 combo = sorted(parts)
             except:
