@@ -2699,6 +2699,86 @@ async def 수량_자동완성(interaction: discord.Interaction, current: int):
     ]
 
 
+
+@tree.command(name="자동투자", description="보유 금액 내 랜덤 종목 자동 분산 투자", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(금액="투자할 총 금액 (최소 1,000원)")
+async def 자동투자(interaction: discord.Interaction, 금액: int):
+    user_id = str(interaction.user.id)
+    balance = get_balance(user_id)
+
+    if 금액 < 1000:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 금액 오류", "최소 **1,000원** 이상만 가능합니다.", discord.Color.red()), ephemeral=True)
+
+    if balance < 금액:
+        return await interaction.response.send_message(
+            embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()), ephemeral=True)
+
+    stocks = load_stocks()
+    종목들 = list(stocks.keys())
+    random.shuffle(종목들)
+
+    남은금액 = 금액
+    수수료총합 = 0
+    투자결과 = []
+    investments = load_investments()
+
+    for 종목 in 종목들:
+        단가 = stocks[종목]["price"]
+        실단가 = int(단가 * 1.01)
+        수량 = 남은금액 // 실단가
+        if 수량 < 1:
+            continue
+
+        총액 = 수량 * 실단가
+        실제구매가 = 수량 * 단가
+        수수료 = 총액 - 실제구매가
+
+        add_balance(user_id, -총액)
+        수수료총합 += 수수료
+        남은금액 -= 총액
+
+        투자결과.append(f"📈 **{종목}** {수량}주 구매 (**{총액:,}원**)")
+
+        investments.append({
+            "user_id": user_id,
+            "stock": 종목,
+            "shares": 수량,
+            "price_per_share": 단가,
+            "timestamp": datetime.now().isoformat()
+        })
+
+        if 남은금액 < 1000:
+            break
+
+    save_investments(investments)
+    add_oduk_pool(수수료총합)
+    oduk_amount = get_oduk_pool_amount()
+
+    if not 투자결과:
+        return await interaction.response.send_message(
+            embed=create_embed("🤷 자동투자 실패", "해당 금액으로 구매 가능한 종목이 없습니다.", discord.Color.orange()), ephemeral=False)
+
+    await interaction.response.send_message(
+        embed=create_embed(
+            "🎯 자동투자 완료",
+            (
+                f"총 투자금: **{금액:,}원** 중 사용액: **{금액 - 남은금액:,}원**\n"
+                f"💸 수수료 적립: **{수수료총합:,}원** → 오덕잔고 적립 완료\n"
+                f"🏦 현재 오덕잔고: **{oduk_amount:,}원**\n\n" +
+                "\n".join(투자결과)
+            ),
+            discord.Color.teal(),
+            user_id
+        )
+    )
+
+
+
+
+
+
+
 # ✅ /내투자
 @tree.command(name="내투자", description="현재 보유 중인 투자 내역을 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def 내투자(interaction: discord.Interaction):
