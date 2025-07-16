@@ -2577,16 +2577,29 @@ async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
     await interaction.response.send_message(
         embed=create_embed("📥 투자 완료", f"**{종목}** {수량}주 구매 완료!\n총 투자금: **{총액:,}원**", discord.Color.blue(), user_id))
 
-@투자.autocomplete("종목")
-async def 종목_자동완성(interaction: discord.Interaction, current: str):
+@투자.autocomplete("수량")
+async def 수량_자동완성(interaction: discord.Interaction, current: str):
+    user_id = str(interaction.user.id)
     stocks = load_stocks()
-    current_lower = current.lower()
 
+    selected_stock = interaction.namespace.종목
+    if not selected_stock or selected_stock not in stocks:
+        return []
+
+    단가 = stocks[selected_stock]["price"]
+    잔액 = get_balance(user_id)
+
+    최대_수량 = 잔액 // 단가
+    if 최대_수량 < 1:
+        return [app_commands.Choice(name="❌ 잔액 부족: 구매 불가", value=0)]
+
+    # ✅ 최대 수량만 추천
     return [
-        app_commands.Choice(name=name, value=name)
-        for name in stocks
-        if current_lower in name.lower()
-    ][:25]  # Discord 제한: 최대 25개까지만
+        app_commands.Choice(
+            name=f"📈 최대 구매 가능: {최대_수량}주 ({최대_수량 * 단가:,}원)",
+            value=최대_수량
+        )
+    ]
 
 # ✅ /내투자
 @tree.command(name="내투자", description="현재 보유 중인 투자 내역을 확인합니다", guild=discord.Object(id=GUILD_ID))
