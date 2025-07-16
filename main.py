@@ -2584,15 +2584,21 @@ async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
             embed=create_embed("❌ 수량 오류", "최소 **1주** 이상 구매해야 합니다.", discord.Color.red()), ephemeral=False)
 
     단가 = stocks[종목]["price"]
-    실단가 = int(단가 * (1 + purchase_fee_rate))  # ✅ 수수료 포함
+    실단가 = int(단가 * (1 + purchase_fee_rate))  # ✅ 수수료 포함 단가
     총액 = 실단가 * 수량
+    실제구매가 = 단가 * 수량
+    수수료 = 총액 - 실제구매가
 
     if get_balance(user_id) < 총액:
         return await interaction.response.send_message(
             embed=create_embed("💸 잔액 부족", f"보유 잔액: **{get_balance(user_id):,}원**\n필요 금액 (수수료 포함): **{총액:,}원**", discord.Color.red()), ephemeral=False)
 
-    add_balance(user_id, -총액)
+    # ✅ 수수료 적립
+    add_oduk_pool(수수료)
+    oduk_amount = get_oduk_pool_amount()
 
+    # ✅ 잔액 차감 및 투자 저장
+    add_balance(user_id, -총액)
     investments = load_investments()
     investments.append({
         "user_id": user_id,
@@ -2603,8 +2609,21 @@ async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
     })
     save_investments(investments)
 
+    # ✅ 메시지 전송
     await interaction.response.send_message(
-        embed=create_embed("📥 투자 완료", f"**{종목}** {수량}주 구매 완료!\n총 투자금 (수수료 포함): **{총액:,}원**", discord.Color.blue(), user_id))
+        embed=create_embed(
+            "📥 투자 완료",
+            (
+                f"**{종목}** {수량}주 구매 완료!\n"
+                f"총 투자금 (수수료 포함): **{총액:,}원**\n"
+                f"💸 적립된 수수료: **{수수료:,}원**\n"
+                f"🏦 현재 오덕잔고: **{oduk_amount:,}원**"
+            ),
+            discord.Color.blue(),
+            user_id
+        )
+    )
+
 
 
 # ✅ 종목 자동완성
