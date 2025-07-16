@@ -2821,12 +2821,23 @@ async def process_investments():
         else:
             return random.randint(-30, 30)
 
+    delisted_stocks = []
+
     # 주식 가격 업데이트
     for name, stock in stocks.items():
         change = generate_change()
         old_price = stock["price"]
-        new_price = max(100, int(old_price * (1 + change / 100)))
+        new_price = int(old_price * (1 + change / 100))
 
+        # 💀 상장폐지 처리: 100원 미만 시 재상장
+        if new_price < 100:
+            delisted_stocks.append(name)
+            stock["price"] = 150
+            stock["change"] = 0
+            report += f"💀 [{name}] 상장폐지 후 재상장 (가격 < 100원) → 150원으로 초기화\n"
+            continue
+
+        # 📉 분할 조건
         if new_price > 30_000:
             new_price = new_price // 10
             split_report += f"📣 [{name}] 주식 분할: 1주 → 10주, 가격 ↓ {old_price:,} → {new_price:,}원\n"
@@ -2847,17 +2858,22 @@ async def process_investments():
         stock = inv["stock"]
         shares = inv["shares"]
         old_price = inv["price_per_share"]
-        new_price = stocks[stock]["price"]
         timestamp = isoparse(inv["timestamp"]).astimezone(KST)
 
-        # 직전 정산 이후에 구매한 주식만 정산
         if timestamp < last_chart_time:
             continue
 
         if timestamp < now:
-            diff = new_price - old_price
-            total = new_price * shares
+            # 주식 가격 변동 반영
+            change = stocks[stock]["change"]
+            real_new_price = int(old_price * (1 + change / 100))
+            if real_new_price < 1:
+                real_new_price = 1
+
+            diff = real_new_price - old_price
+            total = real_new_price * shares
             profit = diff * shares
+
             add_balance(user_id, total)
 
             history.append({
@@ -2865,7 +2881,7 @@ async def process_investments():
                 "stock": stock,
                 "shares": shares,
                 "buy_price": old_price,
-                "sell_price": new_price,
+                "sell_price": real_new_price,
                 "profit": profit,
                 "timestamp": now.isoformat()
             })
@@ -2874,20 +2890,17 @@ async def process_investments():
         else:
             new_list.append(inv)
 
-    # 투자 목록 갱신 및 기록 저장
     save_investments(new_list)
     if history:
         save_investment_history(history)
 
-    # 정산된 유저들에게 DM 전송
     for user_id in updated_users:
         try:
             user = await bot.fetch_user(int(user_id))
-            await send_investment_summary(user, user_id, history)  # ✅ history 기반
+            await send_investment_summary(user, user_id, history)
         except Exception as e:
             print(f"❌ {user_id}님에게 정산 DM 전송 실패: {e}")
 
-    # 채널에 정산 결과 알림
     if split_report:
         report += f"\n{split_report}"
 
@@ -2899,7 +2912,6 @@ async def process_investments():
             except Exception as e:
                 print(f"❌ 오덕코인 채널 전송 실패: {e}")
 
-    # 마지막 정산 시각 갱신
     save_last_chart_time(now)
 
 
