@@ -2208,13 +2208,17 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     else:
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
-        embed = create_embed("💀 도박 실패!",
-            f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-            f"-{베팅액:,}원 손실...\n"
-            f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
-            f"🎟️ `/오덕로또참여`로 참여하세요!"
-            
-            discord.Color.red(), user_id)
+        embed = create_embed(
+            "💀 도박 실패!",
+            (
+                f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
+                f"-{베팅액:,}원 손실...\n"
+                f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
+                f"🎟️ `/오덕로또참여`로 도전하세요!"
+            ),
+            discord.Color.red(),
+            user_id
+        )
 
     await interaction.response.send_message(embed=embed)
 
