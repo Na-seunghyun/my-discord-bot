@@ -2170,27 +2170,23 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         return await interaction.response.send_message(
             embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**\n베팅액: **{베팅액:,}원**", discord.Color.red()), ephemeral=False)
 
-    # 베팅 차감
+    # 💸 베팅 차감
     add_balance(user_id, -베팅액)
 
+    # 🎲 확률 계산
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
-    # ✅ 고정폭 막대 생성 함수
+    # ✅ 정렬 안정 & 위치 정확한 시각화 바 생성
     def create_graph_bar(success_chance: int, roll: int, width: int = 30) -> tuple[str, str]:
+        success_pos = round(success_chance / 100 * width)
+        roll_pos = round(roll / 100 * width)
+
         bar = ""
         pointer_line = ""
-
         for i in range(width):
-            value = int(i * (100 / width)) + 1  # 1~100에 대응
-            if value <= success_chance:
-                bar += "■"
-            else:
-                bar += "·"  # 실패 영역은 점으로 표현
-            if value <= roll < value + int(100 / width):
-                pointer_line += "↑"
-            else:
-                pointer_line += " "
+            bar += "■" if i < success_pos else "·"
+            pointer_line += "↑" if i == roll_pos else " "
 
         return f"[{bar}]", pointer_line
 
@@ -2201,7 +2197,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         embed = create_embed("🎉 도박 성공!",
             f"성공확률: **{success_chance}%**\n"
             f"굴린 값: **{roll}** (🎯 성공 범위 이내!)\n\n"
-            f"[1 - 100]\n{bar}\n{pointer} (굴린 값: {roll})\n"
+            f"{bar}\n{pointer} (굴린 값: {roll})\n"
             f"{roll} ≤ {success_chance} → 성공!\n"
             f"**+{베팅액:,}원** 획득!",
             discord.Color.green(), user_id)
@@ -2211,7 +2207,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         embed = create_embed("💀 도박 실패!",
             f"성공확률: **{success_chance}%**\n"
             f"굴린 값: **{roll}** (❌ 실패 범위)\n\n"
-            f"[1 - 100]\n{bar}\n{pointer} (굴린 값: {roll})\n"
+            f"{bar}\n{pointer} (굴린 값: {roll})\n"
             f"{roll} > {success_chance} → 실패!\n"
             f"**-{베팅액:,}원** 손실...\n\n"
             f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
