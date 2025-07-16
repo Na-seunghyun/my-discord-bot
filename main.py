@@ -3059,10 +3059,10 @@ def save_oduk_lotto_entries(data):
 
 
 
+
+
 # ✅ 자동 추첨 로직 (6개 선택, 정답 4개 + 보너스 1개)
-@tasks.loop(hours=24)
 async def auto_oduk_lotto():
-    await bot.wait_until_ready()
     now = datetime.now(KST)
     draw_start = now - timedelta(days=1)
     draw_end = now
@@ -3087,9 +3087,7 @@ async def auto_oduk_lotto():
     else:
         answer = sorted(random.sample(range(1, 46), 4))
         bonus = random.choice([n for n in range(1, 46) if n not in answer])
-        tier1 = []
-        tier2 = []
-        tier3 = []
+        tier1, tier2, tier3 = [], [], []
 
         for uid, combos in filtered_entries.items():
             for combo in combos:
@@ -3106,7 +3104,6 @@ async def auto_oduk_lotto():
         amount = get_oduk_pool_amount()
         tier2_pool = int(amount * 0.2)
         tier1_pool = int(amount * 0.8)
-
         lines = []
         notified_users = set()
 
@@ -3162,7 +3159,7 @@ async def auto_oduk_lotto():
 
     oduk_pool_cache["last_lotto_date"] = now.date().isoformat()
     save_oduk_pool(oduk_pool_cache)
-    save_oduk_lotto_entries(all_entries)  # 기록은 초기화하지 않음
+    save_oduk_lotto_entries(all_entries)
 
     embed = discord.Embed(title="📢 오덕로또 추첨 결과", description=result_str, color=discord.Color.gold())
     for guild in bot.guilds:
@@ -3172,6 +3169,7 @@ async def auto_oduk_lotto():
                 await channel.send("@everyone 오늘의 오덕로또 결과입니다!", embed=embed)
             except Exception as e:
                 print(f"❌ 로또 결과 전송 실패: {e}")
+
 
 
 
@@ -3434,15 +3432,23 @@ async def on_ready():
     except Exception:
         print("⚠️ auto_update_valid_ids 루프는 이미 실행 중일 수 있음.")
 
-    # ✅ 오덕로또 추첨 루프 (매일 오전 9시 정시)
-    from datetime import time as dt_time
+    # ✅ 오덕로또 스케줄러 시작 (매일 오전 9시)
     try:
-        if not auto_oduk_lotto.is_running():
-            auto_oduk_lotto.change_interval(time=dt_time(hour=9, tzinfo=KST))
-            auto_oduk_lotto.start()
-            print("⏰ 오덕로또 자동 추첨 루프 시작됨 (오전 9시 기준)")
-    except RuntimeError:
-        print("⚠️ auto_oduk_lotto 루프는 이미 실행 중입니다.")
+        async def schedule_daily_lotto():
+            while True:
+                now = datetime.now(KST)
+                next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+                if now >= next_run:
+                    next_run += timedelta(days=1)
+                wait_sec = (next_run - now).total_seconds()
+                print(f"🕘 다음 로또 추첨까지 {int(wait_sec)}초 대기")
+                await asyncio.sleep(wait_sec)
+                await auto_oduk_lotto()
+
+        asyncio.create_task(schedule_daily_lotto())
+        print("⏰ 오덕로또 추첨 스케줄러 시작됨")
+    except Exception as e:
+        print(f"❌ schedule_daily_lotto 실행 실패: {e}")
 
     # 음성 채널 자동 퇴장 타이머
     await asyncio.sleep(3)
