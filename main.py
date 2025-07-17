@@ -3489,6 +3489,126 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
 
 
 
+@tree.command(name="수동추첨", description="오덕로또를 수동으로 즉시 추첨합니다 (관리자 전용)", guild=discord.Object(id=GUILD_ID))
+async def 수동추첨(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.manage_guild:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 서버 관리자만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
+    await interaction.response.send_message("🔁 수동 추첨을 시작합니다...", ephemeral=True)
+
+    now = datetime.now(KST)
+    draw_start = now - timedelta(days=1)
+    draw_end = now
+
+    all_entries = load_oduk_lotto_entries()
+    filtered_entries = {}
+    for record in all_entries:
+        timestamp = datetime.fromisoformat(record["timestamp"])
+        if draw_start <= timestamp < draw_end:
+            uid = record["user_id"]
+            combo = record["combo"]
+            filtered_entries.setdefault(uid, []).append(combo)
+
+    if not filtered_entries:
+        return await interaction.followup.send("😢 참여자가 없어 수동추첨을 실행할 수 없습니다.", ephemeral=True)
+
+    # ✅ 정답 번호 생성
+    answer = sorted(random.sample(range(1, 46), 4))
+    bonus = random.choice([n for n in range(1, 46) if n not in answer])
+    tier1, tier2, tier3 = [], [], []
+
+    for uid, combos in filtered_entries.items():
+        for combo in combos:
+            match = len(set(combo) & set(answer))
+            if match == 4:
+                tier1.append(uid)
+            elif match == 3 and bonus in combo:
+                tier2.append(uid)
+            elif match == 3:
+                tier3.append(uid)
+
+    result_str = f"🎯 정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n\n"
+    amount = get_oduk_pool_amount()
+    tier2_pool = int(amount * 0.2)
+    tier1_pool = int(amount * 0.8)
+    lines = []
+    notified_users = set()
+
+    if tier3:
+        for uid in tier3:
+            add_balance(uid, 5000)
+            try:
+                user = await bot.fetch_user(int(uid))
+                await user.send(f"🎉 [수동추첨] 오덕로또 3등 당첨! 5,000원 지급 🎉")
+            except:
+                pass
+            notified_users.add(uid)
+        lines.append(f"🥉 3등 {len(tier3)}명 (3개 일치) → 5,000원 고정 지급")
+
+    leftover = 0
+    if tier2:
+        share = tier2_pool // len(tier2)
+        for uid in tier2:
+            add_balance(uid, share)
+            if uid not in notified_users:
+                try:
+                    user = await bot.fetch_user(int(uid))
+                    await user.send(f"🎉 [수동추첨] 오덕로또 2등 당첨! {share:,}원 지급 🎉")
+                except:
+                    pass
+                notified_users.add(uid)
+        leftover += tier2_pool % len(tier2)
+        lines.append(f"🥈 2등 {len(tier2)}명 (3개 + 보너스) → 1인당 {share:,}원")
+    else:
+        leftover += tier2_pool
+        lines.append("🥈 2등 당첨자 없음 → 상금 이월")
+
+    if tier1:
+        share = tier1_pool // len(tier1)
+        for uid in tier1:
+            add_balance(uid, share)
+            if uid not in notified_users:
+                try:
+                    user = await bot.fetch_user(int(uid))
+                    await user.send(f"🎉 [수동추첨] 오덕로또 1등 당첨! {share:,}원 획득하셨습니다!")
+                except:
+                    pass
+                notified_users.add(uid)
+        leftover += tier1_pool % len(tier1)
+        lines.append(f"🏆 1등 {len(tier1)}명 (4개 일치) → 1인당 {share:,}원")
+    else:
+        leftover += tier1_pool
+        lines.append("🏆 1등 당첨자 없음 → 상금 이월")
+
+    result_str += "\n".join(lines)
+
+    # ❗ 수동 추첨이므로 날짜는 저장하지 않음
+    oduk_pool_cache["amount"] = leftover
+    save_oduk_pool(oduk_pool_cache)
+    save_oduk_lotto_entries(all_entries)
+
+    embed = discord.Embed(
+        title="📢 [수동] 오덕로또 추첨 결과",
+        description=result_str,
+        color=discord.Color.purple()
+    )
+
+    # 모든 길드에 발송
+    for guild in bot.guilds:
+        channel = discord.utils.get(guild.text_channels, name="오덕도박장")
+        if channel:
+            try:
+                await channel.send("@everyone 테스트용 수동추첨 결과입니다!", embed=embed)
+            except Exception as e:
+                print(f"❌ 수동추첨 결과 전송 실패: {e}")
+
+    print("✅ 수동추첨 완료됨")
+
+
+
 
 
 
