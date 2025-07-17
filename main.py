@@ -3208,8 +3208,8 @@ def save_oduk_lotto_entries(data):
 
 
 
-# ✅ 자동 추첨 로직 (6개 선택, 정답 4개 + 보너스 1개)
-async def auto_oduk_lotto():
+# ✅ 자동 오덕로또 추첨 함수
+async def auto_oduk_lotto(force: bool = False):
     now = datetime.now(KST)
     draw_start = now - timedelta(days=1)
     draw_end = now
@@ -3223,7 +3223,8 @@ async def auto_oduk_lotto():
             combo = record["combo"]
             filtered_entries.setdefault(uid, []).append(combo)
 
-    if oduk_pool_cache.get("last_lotto_date") == now.date().isoformat():
+    # ✅ 자동 추첨일 경우, 중복 방지
+    if not force and oduk_pool_cache.get("last_lotto_date") == now.date().isoformat():
         print("🟨 이미 오늘의 로또 추첨이 완료됨")
         return
 
@@ -3304,18 +3305,28 @@ async def auto_oduk_lotto():
         oduk_pool_cache["last_winner"] = ", ".join(set(tier1 + tier2 + tier3))
         result_str += "\n".join(lines)
 
-    oduk_pool_cache["last_lotto_date"] = now.date().isoformat()
-    save_oduk_pool(oduk_pool_cache)
-    save_oduk_lotto_entries(all_entries)
+    # ✅ 자동 추첨일 경우에만 날짜 저장
+    if not force:
+        oduk_pool_cache["last_lotto_date"] = now.date().isoformat()
 
-    embed = discord.Embed(title="📢 오덕로또 추첨 결과", description=result_str, color=discord.Color.gold())
+    # ✅ 캐시 저장 및 참여 기록 초기화
+    save_oduk_pool(oduk_pool_cache)
+    save_oduk_lotto_entries([])  # 🔄 참여 기록 초기화
+
+    embed_title = "📢 오덕로또 추첨 결과" if not force else "📢 [수동] 오덕로또 추첨 결과"
+    embed = discord.Embed(title=embed_title, description=result_str, color=discord.Color.gold() if not force else discord.Color.purple())
+
     for guild in bot.guilds:
         channel = discord.utils.get(guild.text_channels, name="오덕도박장")
         if channel:
             try:
-                await channel.send("@everyone 오늘의 오덕로또 결과입니다!", embed=embed)
+                tag = "@everyone 오늘의 오덕로또 결과입니다!" if not force else "@everyone 테스트용 수동추첨 결과입니다!"
+                await channel.send(tag, embed=embed)
             except Exception as e:
                 print(f"❌ 로또 결과 전송 실패: {e}")
+
+    print("✅ 오덕로또 추첨 완료됨" + (" (수동)" if force else ""))
+
 
 
 
