@@ -169,9 +169,7 @@ def load_oduk_pool():
     }
 
     if not os.path.exists(ODUK_POOL_FILE):
-        with open(ODUK_POOL_FILE, "w", encoding="utf-8") as f:
-            json.dump(default_data, f, indent=2)
-        return default_data
+        return None  # ✅ 파일 없으면 초기화하지 않고 None 반환
 
     with open(ODUK_POOL_FILE, "r", encoding="utf-8") as f:
         try:
@@ -179,11 +177,11 @@ def load_oduk_pool():
         except json.JSONDecodeError:
             data = {}
 
-    # 누락된 키를 채워줌
     for key in default_data:
         data.setdefault(key, default_data[key])
 
     return data
+
 
 
 
@@ -192,10 +190,22 @@ def save_oduk_pool(data):
         json.dump(data, f, indent=2)
 
 def add_oduk_pool(amount: int):
+    global oduk_pool_cache  # 전역 캐시를 수정할 거면 꼭 필요함
+
+    if not oduk_pool_cache:
+        # 처음 호출된 경우, 캐시를 생성하면서 초기화
+        oduk_pool_cache = {
+            "amount": 0,
+            "last_lotto_date": "",
+            "last_winner": ""
+        }
+
     if "amount" not in oduk_pool_cache:
         oduk_pool_cache["amount"] = 0
+
     oduk_pool_cache["amount"] += amount
     save_oduk_pool(oduk_pool_cache)
+
 
 
 def get_oduk_pool_amount() -> int:
@@ -3729,7 +3739,12 @@ async def on_ready():
 
     global oduk_pool_cache
     oduk_pool_cache = load_oduk_pool()
+    if oduk_pool_cache is None:
+        print("⚠️ 오덕 잔고 파일이 아직 없습니다. 처음 사용할 때 생성됩니다.")
+    oduk_pool_cache = {}  # 또는 None 그대로 둬도 됨
+    else:
     print(f"🔄 오덕 캐시 로딩됨: {oduk_pool_cache}")
+   
 
     for guild in bot.guilds:
         try:
