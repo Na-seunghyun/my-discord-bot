@@ -192,8 +192,11 @@ def save_oduk_pool(data):
         json.dump(data, f, indent=2)
 
 def add_oduk_pool(amount: int):
+    if "amount" not in oduk_pool_cache:
+        oduk_pool_cache["amount"] = 0
     oduk_pool_cache["amount"] += amount
     save_oduk_pool(oduk_pool_cache)
+
 
 def get_oduk_pool_amount() -> int:
     return oduk_pool_cache.get("amount", 0)
