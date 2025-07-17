@@ -2076,7 +2076,7 @@ async def auto_collect_pubg_stats():
             # 실패 멤버 파일 관련 처리 삭제
             # failed_members.clear() 도 제거하여 사이클 중 실패 데이터 유지
 
-            await asyncio.sleep(60 * 60 * 3)
+            await asyncio.sleep(60 * 60 * 6)
         else:
             await asyncio.sleep(60)
 
