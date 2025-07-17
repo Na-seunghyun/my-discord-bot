@@ -1712,6 +1712,8 @@ async def 개별소환(interaction: discord.Interaction):
     await interaction.response.send_message("소환할 멤버를 선택하세요:", view=view, ephemeral=True)
 
 
+
+
 # ✅ 팀 이동 버튼 View 클래스
 class TeamMoveView(discord.ui.View):
     def __init__(self, teams, empty_channels, origin_channel):
@@ -1722,7 +1724,7 @@ class TeamMoveView(discord.ui.View):
         self.moved = False
 
         self.initial_members = set()
-        for team in teams[1:]:  # 팀1 제외
+        for team in teams[1:]:  # 팀1 제외 (원래 채널)
             self.initial_members.update(team)
 
     @discord.ui.button(label="🚀 팀 이동 시작", style=discord.ButtonStyle.green)
@@ -1731,41 +1733,46 @@ class TeamMoveView(discord.ui.View):
             await interaction.response.send_message("이미 이동 완료됨", ephemeral=True)
             return
 
-        self.moved = True
         button.disabled = True
-
         try:
             original_message = await interaction.original_response()
             await original_message.edit(view=self)
         except discord.NotFound:
             await interaction.followup.send("⚠️ 메시지를 찾을 수 없어 버튼 UI를 수정하지 못했습니다.", ephemeral=True)
 
-        # ✅ 이동 못한 유저 추적용 리스트
         skipped_users = []
 
-        # ✅ 실제 팀 이동
-        for team, channel in zip(self.teams[1:], self.empty_channels):  # 팀2부터
-            for member in team:
-                try:
-                    if member in self.initial_members:
-                        if member.voice and member.voice.channel == self.origin_channel:
-                            await member.move_to(channel)
-                            await asyncio.sleep(0.1)
-                        else:
-                            skipped_users.append(member.display_name)
-                except Exception as e:
-                    print(f"이동 중 오류 발생: {member.display_name}: {e}")
-                    skipped_users.append(member.display_name)
+        async def move_member(member, target_channel):
+            try:
+                if member in self.initial_members:
+                    if member.voice and member.voice.channel == self.origin_channel:
+                        await member.move_to(target_channel)
+                    else:
+                        skipped_users.append(member.display_name)
+            except Exception as e:
+                print(f"이동 중 오류 발생: {member.display_name}: {e}")
+                skipped_users.append(member.display_name)
 
-        # ✅ 이동 실패 유저 안내
+        # ✅ 팀2부터 멤버 이동 (병렬)
+        tasks = []
+        for team, channel in zip(self.teams[1:], self.empty_channels):
+            for member in team:
+                tasks.append(move_member(member, channel))
+
+        await asyncio.gather(*tasks)
+
+        self.moved = True
+        self.stop()
+
         if skipped_users:
             names = ", ".join(skipped_users)
             await interaction.followup.send(
-                f"⚠️ 아래 유저는 이동 전 다른 채널로 옮겨져 이동되지 않았습니다:\n{name}",
+                f"⚠️ 아래 유저는 이동 전 다른 채널로 옮겨져 이동되지 않았습니다:\n{names}",
                 ephemeral=True
             )
 
-        self.stop()
+
+
 
 
 # ✅ 슬래시 명령어: /팀짜기
