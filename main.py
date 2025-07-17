@@ -1736,12 +1736,14 @@ class TeamMoveView(discord.ui.View):
             await interaction.response.send_message("이미 이동 완료됨", ephemeral=True)
             return
 
+        # ✅ 인터랙션 응답 예약 (상호작용 실패 방지)
+        await interaction.response.defer(ephemeral=True)
+
         button.disabled = True
         try:
             await interaction.message.edit(view=self)
         except Exception as e:
             print(f"⚠️ 메시지 편집 실패: {e}")
-            await interaction.response.send_message("⚠️ 메시지를 편집할 수 없습니다.", ephemeral=True)
             return
 
         skipped_users = []
@@ -1768,13 +1770,15 @@ class TeamMoveView(discord.ui.View):
         self.moved = True
         self.stop()
 
+        # ✅ 이동 결과 응답
         if skipped_users:
             names = ", ".join(skipped_users)
             await interaction.followup.send(
                 f"⚠️ 아래 유저는 이동 전 다른 채널로 옮겨져 이동되지 않았습니다:\n{names}",
                 ephemeral=True
             )
-
+        else:
+            await interaction.followup.send("✅ 모든 팀원이 정상적으로 이동되었습니다!", ephemeral=True)
 
 
 
