@@ -3335,6 +3335,32 @@ async def auto_oduk_lotto(force: bool = False):
 
         oduk_pool_cache["amount"] = leftover
         oduk_pool_cache["last_winner"] = ", ".join(set(tier1 + tier2 + tier3))
+
+        # ✅ guild 객체 (단일 서버 기준)
+        guild = bot.guilds[0]
+
+        # ✅ 유저 멘션 함수
+        def get_mention(uid):
+            member = guild.get_member(int(uid))
+            return member.mention if member else f"<@{uid}>"
+
+        # ✅ 멘션 포함 메시지 생성
+        if tier3:
+            mentions = ", ".join([get_mention(uid) for uid in tier3])
+            lines.append(f"🥉 3등 {len(tier3)}명 (3개 일치) → 5,000원 고정 지급\n  {mentions}")
+
+        if tier2:
+            mentions = ", ".join([get_mention(uid) for uid in tier2])
+            lines.append(f"🥈 2등 {len(tier2)}명 (3개 + 보너스) → 1인당 {share:,}원\n  {mentions}")
+        else:
+            lines.append("🥈 2등 당첨자 없음 → 상금 이월")
+
+        if tier1:
+            mentions = ", ".join([get_mention(uid) for uid in tier1])
+            lines.append(f"🏆 1등 {len(tier1)}명 (4개 일치) → 1인당 {share:,}원\n  {mentions}")
+        else:
+            lines.append("🏆 1등 당첨자 없음 → 상금 이월")
+
         result_str += "\n".join(lines)
 
         # ✨ 3. 이월 상금 출력 추가
@@ -3416,10 +3442,12 @@ async def 로또참여현황(interaction: discord.Interaction):
     )
     field_count = 0
 
+    guild = interaction.guild  # ✅ 현재 명령 실행된 서버
+
     for uid, combos in filtered_entries.items():
         try:
-            user = await bot.fetch_user(int(uid))
-            username = user.display_name
+            member = guild.get_member(int(uid))  # ✅ 서버 기준 멤버
+            username = member.display_name if member else f"Unknown({uid})"
         except:
             username = f"Unknown({uid})"
 
@@ -3452,6 +3480,7 @@ async def 로또참여현황(interaction: discord.Interaction):
             color=discord.Color.green()),
         ephemeral=True
     )
+
 
 
 
