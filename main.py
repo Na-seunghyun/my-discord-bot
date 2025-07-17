@@ -3337,13 +3337,16 @@ async def auto_oduk_lotto(force: bool = False):
         oduk_pool_cache["last_winner"] = ", ".join(set(tier1 + tier2 + tier3))
         result_str += "\n".join(lines)
 
+        # ✨ 3. 이월 상금 출력 추가
+        result_str += f"\n\n💰 이월된 상금: {leftover:,}원"
+
     # ✅ 자동 추첨일 경우에만 날짜 저장
     if not force:
         oduk_pool_cache["last_lotto_date"] = now.date().isoformat()
 
     # ✅ 캐시 저장 및 참여 기록 초기화
     save_oduk_pool(oduk_pool_cache)
-    save_oduk_lotto_entries([])  # 🔄 참여 기록 초기화
+    save_oduk_lotto_entries([])
 
     embed_title = "📢 오덕로또 추첨 결과" if not force else "📢 [수동] 오덕로또 추첨 결과"
     embed = discord.Embed(title=embed_title, description=result_str, color=discord.Color.gold() if not force else discord.Color.purple())
@@ -3357,8 +3360,10 @@ async def auto_oduk_lotto(force: bool = False):
             except Exception as e:
                 print(f"❌ 로또 결과 전송 실패: {e}")
 
-    print("✅ 오덕로또 추첨 완료됨" + (" (수동)" if force else ""))
-
+    # ✨ 4. 디버깅용 로그 추가
+    print(f"✅ 오덕로또 추첨 완료됨! 정답: {answer} + 보너스({bonus})")
+    print(f"🥇 1등: {len(tier1)}명 | 🥈 2등: {len(tier2)}명 | 🥉 3등: {len(tier3)}명")
+    print(f"💰 이월된 상금: {leftover:,}원" + (" (수동)" if force else ""))
 
 
 
