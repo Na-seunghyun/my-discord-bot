@@ -112,7 +112,7 @@ def save_investments(data):
 
 
 
-oduk_pool_cache = {}
+oduk_pool_cache = load_oduk_pool()
 
 
 
