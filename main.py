@@ -3432,9 +3432,12 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
     user_id = str(interaction.user.id)
     now = datetime.now(KST)
 
-    # ✅ 현재 회차 범위 계산
-    draw_start = now - timedelta(days=1)
-    draw_end = now
+    # ✅ 현재 회차 범위 계산 (매일 오전 9시 기준)
+    draw_start = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    if now < draw_start:
+        draw_start -= timedelta(days=1)
+    draw_end = draw_start + timedelta(days=1)
+    next_reset = draw_end
 
     data = load_oduk_lotto_entries()
 
@@ -3446,7 +3449,17 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
 
     if len(user_entries_today) + 수량 > 20:
         return await interaction.response.send_message(
-            embed=discord.Embed(title="❌ 참여 초과", description="하루 최대 **20조합**까지만 참여할 수 있습니다.", color=discord.Color.red()), ephemeral=True)
+            embed=discord.Embed(
+                title="❌ 참여 초과",
+                description=(
+                    f"이번 회차에는 최대 **20조합**까지만 참여할 수 있습니다.\n"
+                    f"현재 {len(user_entries_today)}조합 참여 중이며, 이번 요청으로 {수량}조합은 초과됩니다.\n"
+                    f"⏰ 제한은 <t:{int(next_reset.timestamp())}:R>에 초기화됩니다."
+                ),
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
 
     if 수량 < 1 or 수량 > 10:
         return await interaction.response.send_message(
@@ -3469,14 +3482,20 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
                 combo = sorted(parts)
             except:
                 return await interaction.response.send_message(
-                    embed=discord.Embed(title="❌ 번호 오류", description="수동 입력 시 1~45 사이의 **6개 숫자**를 쉼표로 입력해주세요.", color=discord.Color.red()), ephemeral=True)
+                    embed=discord.Embed(
+                        title="❌ 번호 오류",
+                        description="수동 입력 시 1~45 사이의 **6개 숫자**를 쉼표로 입력해주세요.",
+                        color=discord.Color.red()
+                    ),
+                    ephemeral=True
+                )
         entries.append(combo)
 
     add_balance(user_id, -cost)
     add_oduk_pool(cost)
     pool_amt = get_oduk_pool_amount()
 
-    # ✅ 새 구조에 맞춰 기록 저장
+    # ✅ 기록 저장
     timestamp = now.isoformat()
     for combo in entries:
         data.append({
@@ -3491,11 +3510,16 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
         f"{수량}조합 참여 완료! 총 **{cost:,}원** 차감되었습니다.\n\n"
         f"{joined}\n\n"
         f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
-        f"🎯 내일 오전 9시에 자동 추첨됩니다!"
+        f"⏰ 다음 추첨: <t:{int(draw_end.timestamp())}:F>\n"
+        f"🕓 제한 초기화까지: <t:{int(draw_end.timestamp())}:R>\n"
+        f"🎯 매일 오전 9시에 자동 추첨됩니다!"
     )
+
     embed = discord.Embed(title="🎯 오덕로또 참여 완료", description=desc, color=discord.Color.blue())
     embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
     await interaction.response.send_message(embed=embed)
+
+
 
 
 
