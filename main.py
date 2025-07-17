@@ -3599,7 +3599,7 @@ async def 수동추첨(interaction: discord.Interaction):
     # ❗ 수동 추첨이므로 날짜는 저장하지 않음
     oduk_pool_cache["amount"] = leftover
     save_oduk_pool(oduk_pool_cache)
-    save_oduk_lotto_entries(all_entries)
+    save_oduk_lotto_entries([])  # ✅ 여기만 바꿔주면 됨
 
     embed = discord.Embed(
         title="📢 [수동] 오덕로또 추첨 결과",
