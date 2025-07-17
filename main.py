@@ -598,7 +598,7 @@ async def auto_disconnect_after_timeout(member, voice_channel, text_channel):
                 text_channel = discord.utils.get(member.guild.text_channels, name="봇알림")
 
             if text_channel:
-                await text_channel.send(f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 자동 퇴장 처리되었습니다.")
+                await text_channel.send(f"⏰ {member.mention}님이 '밥좀묵겠습니다' 채널에 20분 이상 머물러 토끼록끼가 후라이팬으로 강력하게 후려쳐 만리장성으로 날려버렸습니다.")
             print(f"🚪 {member.display_name}님 자동 퇴장 완료")
 
             auto_kicked_members.pop(member.id, None)
