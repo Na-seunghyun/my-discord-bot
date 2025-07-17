@@ -111,8 +111,7 @@ def save_investments(data):
 
 
 
-from oduk_pool_utils import load_oduk_pool
-oduk_pool_cache = load_oduk_pool()
+
 
 
 
@@ -211,6 +210,14 @@ def add_oduk_pool(amount: int):
 def get_oduk_pool_amount() -> int:
     return oduk_pool_cache.get("amount", 0)
 
+
+oduk_pool_cache = load_oduk_pool()
+
+if oduk_pool_cache is None:
+    print("⚠️ 오덕 잔고 파일이 아직 없습니다. 처음 사용할 때 생성됩니다.")
+    oduk_pool_cache = {}  # or 기본값 dict
+else:
+    print(f"🔄 오덕 캐시 로딩됨: {oduk_pool_cache}")
 
 
 
