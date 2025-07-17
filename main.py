@@ -3627,30 +3627,38 @@ KST = timezone(timedelta(hours=9))
 @tree.command(name="추첨확인", description="다음 오덕로또 추첨까지 남은 시간을 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def 추첨확인(interaction: discord.Interaction):
     now = datetime.now(KST)
-    next_draw = now.replace(hour=9, minute=0, second=0, microsecond=0)
-    if now >= next_draw:
-        next_draw += timedelta(days=1)
+    next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    if now >= next_run:
+        next_run += timedelta(days=1)
 
-    unix_ts = int(next_draw.timestamp())
-    already_drawn = oduk_pool_cache.get("last_lotto_date") == now.date().isoformat()
+    unix_ts = int(next_run.timestamp())
 
-    draw_status = "✅ 오늘 추첨은 아직 진행되지 않았습니다." if not already_drawn else "⚠️ 오늘 추첨은 이미 완료되었습니다."
-    entries = load_oduk_lotto_entries()
+    # 참여자 수 확인
+    all_entries = load_oduk_lotto_entries()
     draw_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_entries = [entry for entry in entries if draw_start <= datetime.fromisoformat(entry["timestamp"]) < now]
-    entry_status = f"📥 오늘 유효한 참여 기록: **{len(today_entries)}개**"
+    draw_end = next_run
+    participant_ids = set()
 
-    message = f"""
-📢 **오덕로또 자동 추첨 안내**
+    for record in all_entries:
+        timestamp = datetime.fromisoformat(record["timestamp"])
+        if draw_start <= timestamp < draw_end:
+            participant_ids.add(record["user_id"])
 
-⏰ 다음 추첨 예정: <t:{unix_ts}:F>  
-🕓 남은 시간: <t:{unix_ts}:R>
+    participant_count = len(participant_ids)
+    is_ready = "✅ 정상 진행 예정 (참여자 있음)" if participant_count > 0 else "⚠️ 참여자가 없어 추첨이 생략될 수 있습니다."
 
-{draw_status}
-{entry_status}
-"""
+    embed = discord.Embed(
+        title="🎯 오덕로또 추첨 상태 확인",
+        description=(
+            f"⏰ **다음 추첨 예정**: <t:{unix_ts}:F> | ⏳ <t:{unix_ts}:R>\n"
+            f"{is_ready}\n"
+            f"👥 오늘 참여 인원 수: {participant_count}명"
+        ),
+        color=discord.Color.orange()
+    )
 
-    await interaction.response.send_message(message, ephemeral=True)
+    await interaction.response.send_message(embed=embed)
+
 
 
 
