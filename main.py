@@ -3621,6 +3621,42 @@ async def 수동추첨(interaction: discord.Interaction):
 
 
 
+@tree.command(name="추첨확인", description="다음 자동추첨까지 남은 시간 및 조건을 확인합니다", guild=discord.Object(id=GUILD_ID))
+async def 추첨확인(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+
+    now = datetime.now(KST)
+    next_draw = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    if now >= next_draw:
+        next_draw += timedelta(days=1)
+    seconds_left = int((next_draw - now).total_seconds())
+
+    hours = seconds_left // 3600
+    minutes = (seconds_left % 3600) // 60
+    seconds = seconds_left % 60
+    time_left_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    # 오늘 추첨 여부
+    already_drawn = oduk_pool_cache.get("last_lotto_date") == now.date().isoformat()
+    draw_status = "✅ 아직 추첨되지 않았습니다." if not already_drawn else f"⚠️ 이미 오늘({now.date()}) 추첨이 완료되었습니다."
+
+    # 오늘 참여 기록 확인
+    entries = load_oduk_lotto_entries()
+    draw_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_entries = [entry for entry in entries if draw_start <= datetime.fromisoformat(entry["timestamp"]) < now]
+    entry_status = f"📥 오늘 유효한 참여 기록 수: **{len(today_entries)}개**"
+    if not today_entries:
+        entry_status += " → ⚠️ 추첨해도 당첨자가 없을 수 있습니다."
+
+    embed = discord.Embed(
+        title="📊 오덕로또 자동추첨 상태 확인",
+        color=discord.Color.teal()
+    )
+    embed.add_field(name="⏰ 남은 시간", value=f"`{time_left_str}` (HH:MM:SS)", inline=False)
+    embed.add_field(name="📅 오늘 추첨 여부", value=draw_status, inline=False)
+    embed.add_field(name="📝 참여 현황", value=entry_status, inline=False)
+
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 
