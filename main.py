@@ -3739,11 +3739,12 @@ async def on_ready():
 
     global oduk_pool_cache
     oduk_pool_cache = load_oduk_pool()
+
     if oduk_pool_cache is None:
         print("⚠️ 오덕 잔고 파일이 아직 없습니다. 처음 사용할 때 생성됩니다.")
-    oduk_pool_cache = {}  # 또는 None 그대로 둬도 됨
+        oduk_pool_cache = {}  # 또는 기본값 딕셔너리
     else:
-    print(f"🔄 오덕 캐시 로딩됨: {oduk_pool_cache}")
+        print(f"🔄 오덕 캐시 로딩됨: {oduk_pool_cache}")
    
 
     for guild in bot.guilds:
