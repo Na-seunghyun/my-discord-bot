@@ -1738,10 +1738,11 @@ class TeamMoveView(discord.ui.View):
 
         button.disabled = True
         try:
-            original_message = await interaction.original_response()
-            await original_message.edit(view=self)
-        except discord.NotFound:
-            await interaction.followup.send("⚠️ 메시지를 찾을 수 없어 버튼 UI를 수정하지 못했습니다.", ephemeral=True)
+            await interaction.message.edit(view=self)
+        except Exception as e:
+            print(f"⚠️ 메시지 편집 실패: {e}")
+            await interaction.response.send_message("⚠️ 메시지를 편집할 수 없습니다.", ephemeral=True)
+            return
 
         skipped_users = []
 
@@ -1756,7 +1757,7 @@ class TeamMoveView(discord.ui.View):
                 print(f"이동 중 오류 발생: {member.display_name}: {e}")
                 skipped_users.append(member.display_name)
 
-        # ✅ 팀2부터 멤버 이동 (병렬)
+        # ✅ 병렬 이동 처리
         tasks = []
         for team, channel in zip(self.teams[1:], self.empty_channels):
             for member in team:
@@ -1778,13 +1779,13 @@ class TeamMoveView(discord.ui.View):
 
 
 
-# ✅ 슬래시 명령어: /팀짜기
+# ✅ /팀짜기 명령어
 @tree.command(name="팀짜기", description="음성 채널 팀 나누기", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(team_size="팀당 인원 수")
 @app_commands.choices(team_size=[
-    app_commands.Choice(name="2", value=2),
-    app_commands.Choice(name="3", value=3),
-    app_commands.Choice(name="4", value=4),
+    app_commands.Choice(name="2명", value=2),
+    app_commands.Choice(name="3명", value=3),
+    app_commands.Choice(name="4명", value=4),
 ])
 async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Choice[int]):
     vc = interaction.user.voice.channel if interaction.user.voice else None
@@ -1793,7 +1794,7 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
         return
 
     members = [m for m in vc.members if not m.bot]
-    if len(members) < team_size.value * 2:
+    if len(members) < team_size.value + 1:
         await interaction.response.send_message("❌ 팀을 나누기엔 인원이 부족합니다.", ephemeral=True)
         return
 
@@ -1807,7 +1808,7 @@ async def 팀짜기(interaction: discord.Interaction, team_size: app_commands.Ch
     ]
 
     if len(empty_channels) < len(teams) - 1:
-        await interaction.response.send_message("❌ 빈 채널 부족", ephemeral=True)
+        await interaction.response.send_message("❌ 빈 채널이 부족합니다.", ephemeral=True)
         return
 
     msg = f"🎲 **팀 나누기 완료!**\n\n**팀 1 (현재 채널):** {', '.join(m.display_name for m in teams[0])}\n"
