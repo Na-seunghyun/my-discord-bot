@@ -3966,6 +3966,8 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
     add_balance(user_id, -cost)
     add_oduk_pool(cost)
     pool_amt = get_oduk_pool_amount()
+    tier1_pool = int(pool_amt * 0.8)
+    tier2_pool = int(pool_amt * 0.2)
     timestamp = now.isoformat()
     for combo in entries:
         data.append({
