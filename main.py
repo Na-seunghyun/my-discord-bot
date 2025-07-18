@@ -221,7 +221,10 @@ def load_oduk_pool():
     }
 
     if not os.path.exists(ODUK_POOL_FILE):
-        return None  # ✅ 파일 없으면 초기화하지 않고 None 반환
+        # ✅ 초기값 저장 후 반환
+        with open(ODUK_POOL_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_data, f, indent=2)
+        return default_data
 
     with open(ODUK_POOL_FILE, "r", encoding="utf-8") as f:
         try:
@@ -233,6 +236,7 @@ def load_oduk_pool():
         data.setdefault(key, default_data[key])
 
     return data
+
 
 
 
