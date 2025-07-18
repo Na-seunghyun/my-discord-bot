@@ -2128,17 +2128,34 @@ from datetime import datetime, timezone, timedelta
 import json
 import os
 import asyncio
-import random
 
 # 🕰️ 한국 시간대
 KST = timezone(timedelta(hours=9))
 
 # 📁 저장 파일 경로
 DAILY_CLAIMS_FILE = "daily_claims.json"
+WEEKLY_CLAIMS_FILE = "weekly_claims.json"
+
+DAILY_REWARD = 50000
+WEEKLY_REWARD = 500000
 
 
+# ✅ 잔액 관련 함수 (예시로 기본구조 제공 — 실제 구현은 사용중인 balance 시스템으로 대체)
+def get_balance(user_id):
+    with open("balance.json", "r", encoding="utf-8") as f:
+        balances = json.load(f)
+    return balances.get(str(user_id), {}).get("amount", 0)
 
-# ✅ 파일로부터 일일 수령 기록 로드
+def add_balance(user_id, amount):
+    with open("balance.json", "r", encoding="utf-8") as f:
+        balances = json.load(f)
+    user_data = balances.get(str(user_id), {"amount": 0})
+    user_data["amount"] += amount
+    balances[str(user_id)] = user_data
+    with open("balance.json", "w", encoding="utf-8") as f:
+        json.dump(balances, f, indent=2, ensure_ascii=False)
+
+# ✅ 일일 수령 기록 로드/저장
 def load_daily_claims():
     if not os.path.exists(DAILY_CLAIMS_FILE):
         with open(DAILY_CLAIMS_FILE, "w", encoding="utf-8") as f:
@@ -2146,43 +2163,74 @@ def load_daily_claims():
     with open(DAILY_CLAIMS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-# ✅ 일일 수령 기록 저장
 def save_daily_claims(data):
     with open(DAILY_CLAIMS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# ✅ 주간 수령 기록 로드/저장
+def load_weekly_claims():
+    if not os.path.exists(WEEKLY_CLAIMS_FILE):
+        with open(WEEKLY_CLAIMS_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
+    with open(WEEKLY_CLAIMS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_weekly_claims(data):
+    with open(WEEKLY_CLAIMS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 # ✅ 최초 로딩
 daily_claims = load_daily_claims()
+weekly_claims = load_weekly_claims()
 
+# ✅ 봇 인스턴스 (예시용 — 실제 봇에 맞게 수정)
+intents = discord.Intents.default()
+intents.members = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+tree = bot.tree
+GUILD_ID = YOUR_GUILD_ID_HERE  # 숫자형 서버 ID로 바꿔주세요
 
 # ✅ /돈줘 명령어
-@tree.command(name="돈줘", description="하루에 한 번 5만원 지급", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="돈줘", description="하루 1회 보상 + 주 1회 보상을 지급받습니다", guild=discord.Object(id=GUILD_ID))
 async def 돈줘(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
-    today = datetime.now(KST).date().isoformat()
+    now = datetime.now(KST)
+    today = now.date().isoformat()
+    current_week = now.strftime("%Y-%W")  # ex: 2025-29
 
-    if daily_claims.get(user_id) == today:
+    daily_given = daily_claims.get(user_id) == today
+    weekly_given = weekly_claims.get(user_id) == current_week
+
+    if daily_given and weekly_given:
         embed = discord.Embed(
-            title="❌ 이미 수령하셨습니다",
-            description="오늘은 이미 받으셨습니다. 내일 다시 시도해주세요.",
+            title="❌ 이미 수령 완료",
+            description="오늘과 이번 주 보상을 모두 수령하셨습니다.\n내일 또는 다음 주에 다시 이용해주세요.",
             color=discord.Color.red()
         )
         return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # ✅ 5만원 지급
-    add_balance(user_id, 50000)
-    daily_claims[user_id] = today
+    reward_msgs = []
+
+    if not daily_given:
+        add_balance(user_id, DAILY_REWARD)
+        daily_claims[user_id] = today
+        reward_msgs.append(f"📅 **일일 보상 {DAILY_REWARD:,}원 지급 완료!**")
+
+    if not weekly_given:
+        add_balance(user_id, WEEKLY_REWARD)
+        weekly_claims[user_id] = current_week
+        reward_msgs.append(f"🗓 **주간 보상 {WEEKLY_REWARD:,}원 지급 완료!**")
+
     save_daily_claims(daily_claims)
+    save_weekly_claims(weekly_claims)
 
     embed = discord.Embed(
         title="💰 돈이 지급되었습니다!",
-        description="하루 한 번! **50,000원**이 지급되었습니다.\n도박은 책임감 있게!",
+        description="\n".join(reward_msgs),
         color=discord.Color.green()
     )
     embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
     await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
 
 # ⏰ 자정마다 daily_claims 초기화
 @tasks.loop(hours=24)
@@ -2191,7 +2239,6 @@ async def reset_daily_claims():
     daily_claims = {}
     save_daily_claims(daily_claims)
     print("✅ daily_claims 초기화 완료 (한국 시 기준 자정)")
-
 
 # ⏱️ 루프 시작 전: 자정까지 대기
 @reset_daily_claims.before_loop
@@ -2202,6 +2249,134 @@ async def before_reset():
     wait_seconds = (next_midnight - now).total_seconds()
     print(f"⏳ 자정까지 {int(wait_seconds)}초 대기 후 daily_claims 초기화 시작")
     await asyncio.sleep(wait_seconds)
+
+
+
+from discord import app_commands
+import discord
+
+# ✅ /돈줘기록 – 본인의 수령 상태 확인
+@tree.command(name="돈줘기록", description="내가 돈을 마지막으로 언제 받았는지 확인합니다.", guild=discord.Object(id=GUILD_ID))
+async def 돈줘기록(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    now = datetime.now(KST)
+    today = now.date().isoformat()
+    current_week = now.strftime("%Y-%W")
+
+    last_daily = daily_claims.get(user_id)
+    last_weekly = weekly_claims.get(user_id)
+
+    daily_status = f"✅ 오늘({today}) 수령함" if last_daily == today else "❌ 오늘 아직 수령 안 함"
+    weekly_status = f"✅ 이번 주({current_week}) 수령함" if last_weekly == current_week else "❌ 이번 주 아직 수령 안 함"
+
+    embed = discord.Embed(title="📋 돈줘 수령 기록", color=discord.Color.blue())
+    embed.add_field(name="📅 일일 보상", value=daily_status, inline=False)
+    embed.add_field(name="🗓 주간 보상", value=weekly_status, inline=False)
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+
+
+# ✅ /돈줘초기화 – 개별 또는 전체 초기화 (채널관리자 전용)
+@tree.command(name="돈줘초기화", description="돈줘 수령 기록을 초기화합니다 (관리자 전용)", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(
+    대상="기록을 초기화할 유저 (미입력 시 전체 초기화)"
+)
+async def 돈줘초기화(interaction: discord.Interaction, 대상: discord.User = None):
+    # ✅ 권한 확인
+    role_names = [role.name for role in interaction.user.roles]
+    if "채널관리자" not in role_names:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 권한 없음", "**채널관리자** 역할만 사용 가능합니다.", discord.Color.red()),
+            ephemeral=True
+        )
+
+    global daily_claims, weekly_claims
+    updated_count = 0
+
+    if 대상:
+        uid = str(대상.id)
+        if uid in daily_claims:
+            daily_claims.pop(uid)
+        if uid in weekly_claims:
+            weekly_claims.pop(uid)
+        save_daily_claims(daily_claims)
+        save_weekly_claims(weekly_claims)
+
+        embed = discord.Embed(
+            title="✅ 개별 초기화 완료",
+            description=f"{대상.mention}님의 수령 기록이 초기화되었습니다.",
+            color=discord.Color.green()
+        )
+    else:
+        daily_claims.clear()
+        weekly_claims.clear()
+        save_daily_claims(daily_claims)
+        save_weekly_claims(weekly_claims)
+
+        embed = discord.Embed(
+            title="✅ 전체 초기화 완료",
+            description="모든 유저의 돈줘 수령 기록이 초기화되었습니다.",
+            color=discord.Color.green()
+        )
+
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+
+
+
+@tree.command(name="돈줘설정", description="일일 및 주간 보상 금액을 설정합니다 (관리자 전용)", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(일일지급액="1회 지급되는 일일 보상 금액", 주간지급액="1회 지급되는 주간 보상 금액")
+async def 돈줘설정(interaction: discord.Interaction, 일일지급액: int, 주간지급액: int):
+    # ✅ 권한 확인
+    role_names = [role.name for role in interaction.user.roles]
+    if "채널관리자" not in role_names:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 권한 없음", "이 명령어는 **채널관리자**만 사용할 수 있습니다.", discord.Color.red()),
+            ephemeral=True
+        )
+
+    global DAILY_REWARD, WEEKLY_REWARD
+    DAILY_REWARD = 일일지급액
+    WEEKLY_REWARD = 주간지급액
+
+    embed = discord.Embed(
+        title="⚙️ 돈줘 설정 변경 완료",
+        description=f"📅 일일 보상: **{일일지급액:,}원**\n🗓 주간 보상: **{주간지급액:,}원**",
+        color=discord.Color.orange()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+
+
+@tree.command(name="돈줘통계", description="일일 및 주간 보상 수령 인원을 확인합니다 (관리자 전용)", guild=discord.Object(id=GUILD_ID))
+async def 돈줘통계(interaction: discord.Interaction):
+    # ✅ 권한 확인
+    role_names = [role.name for role in interaction.user.roles]
+    if "채널관리자" not in role_names:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 권한 없음", "이 명령어는 **채널관리자**만 사용할 수 있습니다.", discord.Color.red()),
+            ephemeral=True
+        )
+
+    now = datetime.now(KST)
+    today = now.date().isoformat()
+    current_week = now.strftime("%Y-%W")
+
+    daily_count = sum(1 for date in daily_claims.values() if date == today)
+    weekly_count = sum(1 for week in weekly_claims.values() if week == current_week)
+
+    embed = discord.Embed(
+        title="📊 돈줘 수령 통계",
+        description=(
+            f"📅 오늘 수령한 유저 수: **{daily_count}명**\n"
+            f"🗓 이번 주 수령한 유저 수: **{weekly_count}명**"
+        ),
+        color=discord.Color.purple()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+
+
+
 
 
 
@@ -3358,9 +3533,9 @@ def generate_change():
 
 
 
-@tree.command(name="잔액초기화", description="모든 유저의 잔액을 0원으로 초기화합니다 (채널관리자 전용)", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="잔액초기화", description="모든 유저의 잔액 및 기록을 초기화합니다 (채널관리자 전용)", guild=discord.Object(id=GUILD_ID))
 async def 잔액초기화(interaction: discord.Interaction):
-    # 역할 이름이 '채널관리자'인 경우만 허용
+    # ✅ 채널관리자 권한 확인
     role_names = [role.name for role in interaction.user.roles]
     if "채널관리자" not in role_names:
         return await interaction.response.send_message(
@@ -3368,14 +3543,14 @@ async def 잔액초기화(interaction: discord.Interaction):
             ephemeral=True
         )
 
-    # ✅ 잔액 초기화
+    # ✅ 1. 도박 잔액 초기화
     balances = load_balances()
     for uid in balances:
         balances[uid]["amount"] = 0
         balances[uid]["last_updated"] = datetime.utcnow().isoformat()
     save_balances(balances)
 
-    # ✅ 오덕로또 상금 풀 초기화
+    # ✅ 2. 오덕로또 데이터 초기화
     global oduk_pool_cache
     oduk_pool_cache = {
         "amount": 0,
@@ -3383,14 +3558,17 @@ async def 잔액초기화(interaction: discord.Interaction):
         "last_winner": ""
     }
     save_oduk_pool(oduk_pool_cache)
-
-    # ✅ 오덕로또 참여 기록 초기화
     save_oduk_lotto_entries({})
+
+    # ✅ 3. 투자 데이터 초기화 (종목은 유지)
+    save_investments([])  # 보유 주식 초기화
+    save_investment_history([])  # 수익 히스토리 초기화
+    save_last_chart_time(datetime.utcnow())  # 주가 갱신 기준 초기화
 
     await interaction.response.send_message(
         embed=create_embed(
             "✅ 초기화 완료",
-            f"총 {len(balances)}명의 잔액과 오덕로또 관련 데이터가 초기화되었습니다.",
+            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
             discord.Color.green()
         ),
         ephemeral=False
@@ -3948,23 +4126,25 @@ KST = timezone(timedelta(hours=9))
 
 @tree.command(name="추첨확인", description="다음 오덕로또 추첨까지 남은 시간을 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def 추첨확인(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True)  # ⏳ 응답 지연 방지
+    await interaction.response.defer(thinking=True)
 
     now = datetime.now(KST)
-    next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
-    if now >= next_run:
-        next_run += timedelta(days=1)
 
-    unix_ts = int(next_run.timestamp())
-    draw_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # 🕘 다음 추첨: 오늘 오전 9시 또는 내일 오전 9시
+    next_draw = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    if now >= next_draw:
+        next_draw += timedelta(days=1)
+    prev_draw = next_draw - timedelta(days=1)
 
-    # ✅ 참여자 수 계산 최적화
+    unix_ts = int(next_draw.timestamp())
+
+    # 🎟️ 참여 기록 불러오기
     data = load_oduk_lotto_entries()
     participant_ids = {
         record["user_id"]
         for record in data
         if "timestamp" in record
-        and draw_start <= datetime.fromisoformat(record["timestamp"]) < next_run
+        and prev_draw <= datetime.fromisoformat(record["timestamp"]) < next_draw
     }
 
     count = len(participant_ids)
@@ -3975,12 +4155,13 @@ async def 추첨확인(interaction: discord.Interaction):
         description=(
             f"⏰ **다음 추첨 예정**: <t:{unix_ts}:F> | ⏳ <t:{unix_ts}:R>\n"
             f"{status}\n"
-            f"👥 오늘 참여 인원 수: {count}명"
+            f"👥 이번 회차 참여 인원 수: {count}명"
         ),
         color=discord.Color.orange()
     )
 
     await interaction.followup.send(embed=embed)
+
 
 
 
@@ -4024,14 +4205,14 @@ async def monitor_discord_ping():
 
     # 📢 자유채팅방에 메시지 전송
     for guild in bot.guilds:
-        channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+        channel = discord.utils.get(guild.text_channels, name="봇알림")
         if channel:
             embed = discord.Embed(
                 title=f"{level} 디스코드 핑 지연 감지",
                 description=(
                     f"현재 서버의 디스코드 API 핑이 **{ping_ms}ms**로 지연되고 있습니다.\n\n"
                     "명령어 반응 지연 또는 음성 끊김 현상이 발생할 수 있습니다.\n"
-                    "잠시 후 다시 정상화될 수 있어요!"
+                    "잠시 후 다시 정상화될 수 있어요!, 토끼록끼는 핑에 예민해요"
                 ),
                 color=color
             )
