@@ -3968,38 +3968,39 @@ KST = timezone(timedelta(hours=9))
 
 @tree.command(name="추첨확인", description="다음 오덕로또 추첨까지 남은 시간을 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def 추첨확인(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)  # ⏳ 응답 지연 방지
+
     now = datetime.now(KST)
     next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
     if now >= next_run:
         next_run += timedelta(days=1)
 
     unix_ts = int(next_run.timestamp())
-
-    # 참여자 수 확인
-    all_entries = load_oduk_lotto_entries()
     draw_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    draw_end = next_run
-    participant_ids = set()
 
-    for record in all_entries:
-        timestamp = datetime.fromisoformat(record["timestamp"])
-        if draw_start <= timestamp < draw_end:
-            participant_ids.add(record["user_id"])
+    # ✅ 참여자 수 계산 최적화
+    data = load_oduk_lotto_entries()
+    participant_ids = {
+        record["user_id"]
+        for record in data
+        if "timestamp" in record
+        and draw_start <= datetime.fromisoformat(record["timestamp"]) < next_run
+    }
 
-    participant_count = len(participant_ids)
-    is_ready = "✅ 정상 진행 예정 (참여자 있음)" if participant_count > 0 else "⚠️ 참여자가 없어 추첨이 생략될 수 있습니다."
+    count = len(participant_ids)
+    status = "✅ 정상 진행 예정 (참여자 있음)" if count > 0 else "⚠️ 참여자가 없어 추첨이 생략될 수 있습니다."
 
     embed = discord.Embed(
         title="🎯 오덕로또 추첨 상태 확인",
         description=(
             f"⏰ **다음 추첨 예정**: <t:{unix_ts}:F> | ⏳ <t:{unix_ts}:R>\n"
-            f"{is_ready}\n"
-            f"👥 오늘 참여 인원 수: {participant_count}명"
+            f"{status}\n"
+            f"👥 오늘 참여 인원 수: {count}명"
         ),
         color=discord.Color.orange()
     )
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
 
