@@ -2119,7 +2119,7 @@ daily_claims = load_daily_claims()
 
 
 # ✅ /돈줘 명령어
-@tree.command(name="돈줘", description="하루에 한 번 5000원 지급", guild=discord.Object(id=GUILD_ID))
+@tree.command(name="돈줘", description="하루에 한 번 5만원 지급", guild=discord.Object(id=GUILD_ID))
 async def 돈줘(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     today = datetime.now(KST).date().isoformat()
@@ -2132,14 +2132,14 @@ async def 돈줘(interaction: discord.Interaction):
         )
         return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # ✅ 이 부분은 잘 연결된 상태입니다
-    add_balance(user_id, 5000)
+    # ✅ 5만원 지급
+    add_balance(user_id, 50000)
     daily_claims[user_id] = today
     save_daily_claims(daily_claims)
 
     embed = discord.Embed(
         title="💰 돈이 지급되었습니다!",
-        description="하루 한 번! **5,000원**이 지급되었습니다.\n도박은 책임감 있게!",
+        description="하루 한 번! **50,000원**이 지급되었습니다.\n도박은 책임감 있게!",
         color=discord.Color.green()
     )
     embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
@@ -2194,6 +2194,13 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
 @tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 500원부터 도박 가능")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
+    # ✅ 오덕도박장 채널 ID
+    if interaction.channel.id != 1394331814642057418:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
     user_id = str(interaction.user.id)
     balance = get_balance(user_id)
 
@@ -2369,7 +2376,15 @@ class LotteryView(View):
 @tree.command(name="복권", description="복권 3개 중 하나를 선택해보세요", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
 async def 복권(interaction: discord.Interaction, 베팅액: int):
+    # ✅ 허용된 채널: 오덕도박장, 오덕코인
+    if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
     user_id = str(interaction.user.id)
+
 
     if 베팅액 < 1000:
         return await interaction.response.send_message(
@@ -2400,9 +2415,17 @@ async def 복권(interaction: discord.Interaction, 베팅액: int):
 @tree.command(name="슬롯", description="애니메이션 슬롯머신 게임!", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
 async def 슬롯(interaction: discord.Interaction, 베팅액: int):
+    # ✅ 허용된 채널: 오덕도박장, 오덕코인
+    if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
     user_id = str(interaction.user.id)
     symbols = ["🍒", "🍋", "🍇", "🍉", "💎"]
     balance = get_balance(user_id)
+
 
     if 베팅액 < 1000:
         return await interaction.response.send_message(
@@ -2635,10 +2658,18 @@ def save_investment_history(history):
 @tree.command(name="투자", description="종목을 선택하고 몇 주를 살지 정합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(종목="투자할 종목 이름", 수량="구매할 주식 수 (최소 1주)")
 async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
+    # ✅ 허용된 채널: 오덕도박장, 오덕코인
+    if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
     user_id = str(interaction.user.id)
     종목 = 종목.strip()
     stocks = load_stocks()
     purchase_fee_rate = 0.01  # ✅ 수수료 1%
+
 
     if 종목 not in stocks:
         return await interaction.response.send_message(
@@ -2736,8 +2767,16 @@ async def 수량_자동완성(interaction: discord.Interaction, current: int):
 @tree.command(name="자동투자", description="무작위 종목에 입력한 금액 내에서 자동 분산 투자", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(금액="투자할 총 금액 (최소 1,000원)")
 async def 자동투자(interaction: discord.Interaction, 금액: int):
+    # ✅ 허용된 채널: 오덕도박장, 오덕코인
+    if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
     user_id = str(interaction.user.id)
     balance = get_balance(user_id)
+
 
     if 금액 < 1000:
         return await interaction.response.send_message(
@@ -3009,7 +3048,7 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
 
 
 
-@tasks.loop(hours=2)
+@tasks.loop(minutes=30)  # ✅ 30분마다 자동 실행
 async def process_investments():
     stocks = load_stocks()
     investments = load_investments()
@@ -3019,7 +3058,7 @@ async def process_investments():
     last_chart_time = load_last_chart_time().astimezone(KST)
     now = datetime.now(KST)
 
-    report = f"📊 [2시간 주기 투자 종목 변동 - {now.strftime('%m/%d %H:%M')}]\n\n"
+    report = f"📊 [30분 주기 투자 종목 변동 - {now.strftime('%m/%d %H:%M')}]\n\n"
 
     split_report = ""
 
@@ -3493,14 +3532,20 @@ async def 로또참여현황(interaction: discord.Interaction):
 
 
 
-# ✅ 오덕로또 참여 명령어
 @tree.command(name="오덕로또참여", description="오덕로또에 참여합니다 (1조합당 2,000원)", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(수량="1~10개의 조합 수량 선택", 수동번호들="자동 또는 6개 숫자 (예: 3,5,12,19,22,41)")
+@app_commands.describe(수량="1~50개의 조합 수량 선택", 수동번호들="자동 또는 6개 숫자 (예: 3,5,12,19,22,41)")
 async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수동번호들: str):
+    # ✅ 허용된 채널: 오덕도박장, 오덕코인
+    if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
     user_id = str(interaction.user.id)
     now = datetime.now(KST)
 
-    # ✅ 현재 회차 범위 계산 (매일 오전 9시 기준)
+    # ✅ 회차 계산 (오전 9시 기준)
     draw_start = now.replace(hour=9, minute=0, second=0, microsecond=0)
     if now < draw_start:
         draw_start -= timedelta(days=1)
@@ -3508,35 +3553,33 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
     next_reset = draw_end
 
     data = load_oduk_lotto_entries()
-
-    # ✅ 현재 회차에 유저 참여 기록 필터링
     user_entries_today = [
-        record for record in data
-        if record["user_id"] == user_id and draw_start <= datetime.fromisoformat(record["timestamp"]) < draw_end
+        r for r in data
+        if r["user_id"] == user_id and draw_start <= datetime.fromisoformat(r["timestamp"]) < draw_end
     ]
 
     if len(user_entries_today) + 수량 > 50:
         return await interaction.response.send_message(
-            embed=discord.Embed(
-                title="❌ 참여 초과",
-                description=(
-                    f"이번 회차에는 최대 **50조합**까지만 참여할 수 있습니다.\n"
-                    f"현재 {len(user_entries_today)}조합 참여 중이며, 이번 요청으로 {수량}조합은 초과됩니다.\n"
-                    f"⏰ 제한은 <t:{int(next_reset.timestamp())}:R>에 초기화됩니다."
-                ),
-                color=discord.Color.red()
+            content=(
+                f"❌ 참여 초과: 이번 회차에는 최대 **50조합**까지만 참여할 수 있습니다.\n"
+                f"현재 {len(user_entries_today)}조합 참여 중이며, 이번 요청으로 {수량}조합은 초과됩니다.\n"
+                f"⏰ 제한은 <t:{int(next_reset.timestamp())}:R>에 초기화됩니다."
             ),
             ephemeral=True
         )
 
-    if 수량 < 1 or 수량 > 10:
+    if 수량 < 1 or 수량 > 50:
         return await interaction.response.send_message(
-            embed=discord.Embed(title="❌ 참여 실패", description="1~10개의 조합만 한 번에 참여할 수 있습니다.", color=discord.Color.red()), ephemeral=True)
+            content="❌ 1~50개의 조합만 한 번에 참여할 수 있습니다.",
+            ephemeral=True
+        )
 
     cost = 수량 * 2000
     if get_balance(user_id) < cost:
         return await interaction.response.send_message(
-            embed=discord.Embed(title="💸 잔액 부족", description=f"{수량}조합 × 2,000원 = **{cost:,}원** 필요", color=discord.Color.red()), ephemeral=True)
+            content=f"💸 잔액 부족: {수량}조합 × 2,000원 = **{cost:,}원** 필요",
+            ephemeral=True
+        )
 
     entries = []
     for _ in range(수량):
@@ -3550,20 +3593,15 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
                 combo = sorted(parts)
             except:
                 return await interaction.response.send_message(
-                    embed=discord.Embed(
-                        title="❌ 번호 오류",
-                        description="수동 입력 시 1~45 사이의 **6개 숫자**를 쉼표로 입력해주세요.",
-                        color=discord.Color.red()
-                    ),
+                    content="❌ 번호 오류: 수동 입력 시 1~45 사이의 **6개 숫자**를 쉼표로 입력해주세요.",
                     ephemeral=True
                 )
         entries.append(combo)
 
+    # ✅ 처리
     add_balance(user_id, -cost)
     add_oduk_pool(cost)
     pool_amt = get_oduk_pool_amount()
-
-    # ✅ 기록 저장
     timestamp = now.isoformat()
     for combo in entries:
         data.append({
@@ -3573,6 +3611,7 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
         })
     save_oduk_lotto_entries(data)
 
+    # ✅ 일반 텍스트 메시지로 출력
     joined = "\n".join([f"🎟️ 조합 {i+1}: {', '.join(map(str, combo))}" for i, combo in enumerate(entries)])
     desc = (
         f"{수량}조합 참여 완료! 총 **{cost:,}원** 차감되었습니다.\n\n"
@@ -3580,12 +3619,11 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
         f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
         f"⏰ 다음 추첨: <t:{int(draw_end.timestamp())}:F>\n"
         f"🕓 제한 초기화까지: <t:{int(draw_end.timestamp())}:R>\n"
-        f"🎯 매일 오전 9시에 자동 추첨됩니다!"
+        f"🎯 매일 오전 9시에 자동 추첨됩니다!\n"
+        f"\n💰 현재 잔액: {get_balance(user_id):,}원"
     )
 
-    embed = discord.Embed(title="🎯 오덕로또 참여 완료", description=desc, color=discord.Color.blue())
-    embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(content=desc)
 
 
 
