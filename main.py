@@ -2018,8 +2018,10 @@ if os.path.exists("failed_members.json"):
 # ✅ slash command: 저장 실패한 유저 확인
 @tree.command(name="저장실패", description="저장에 실패한 멤버들을 조회합니다.", guild=discord.Object(id=GUILD_ID))
 async def 저장실패(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)  # ⏳ 먼저 응답 예약
+
     if not failed_members:
-        await interaction.response.send_message("✅ 현재 저장에 실패한 멤버는 없습니다.", ephemeral=False)
+        await interaction.followup.send("✅ 현재 저장에 실패한 멤버는 없습니다.", ephemeral=False)
         return
 
     mentions = []
@@ -2035,7 +2037,8 @@ async def 저장실패(interaction: discord.Interaction):
         description="\n".join(mentions),
         color=discord.Color.red()
     )
-    await interaction.response.send_message(embed=embed, ephemeral=False)
+    await interaction.followup.send(embed=embed, ephemeral=False)  # ⏱ 후속 응답
+
 
 # ✅ 자동 수집 메인 루프
 async def start_pubg_collection():
