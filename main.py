@@ -4134,7 +4134,7 @@ async def on_ready():
                 print(f"🔄 재시작 후 타이머 적용됨: {member.display_name}")
 
     # ✅ 투자 시스템 초기화 및 루프 시작
-    initialize_stocks()
+    ensure_stocks_filled()
 
     if not os.path.exists(INVESTMENT_FILE):
         with open(INVESTMENT_FILE, "w", encoding="utf-8") as f:
