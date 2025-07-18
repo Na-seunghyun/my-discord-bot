@@ -3460,7 +3460,7 @@ async def process_investments():
             # ✅ 새 종목 자동 상장
             new_name = create_new_stock(stocks)
             if new_name:
-                report += f"✨ 신규 종목 상장: [{new_name}] (랜덤 생성)\n"
+                report += f"✨ 신규 종목 상장: [{new_name}] (랜덤 생성) → {stocks[new_name]['price']:,}원\n"
 
         else:
             # 📈 분할
