@@ -2904,7 +2904,6 @@ async def 내투자(interaction: discord.Interaction):
 
 
 
-# ✅ 투자왕 커맨드
 @tree.command(name="투자왕", description="지금까지 가장 많은 수익을 낸 유저 랭킹", guild=discord.Object(id=GUILD_ID))
 async def 투자왕(interaction: discord.Interaction):
     file_path = "investment_history.json"
@@ -2936,22 +2935,26 @@ async def 투자왕(interaction: discord.Interaction):
         uid = entry["user_id"]
         profits[uid] = profits.get(uid, 0) + entry.get("profit", 0)
 
-    # ✅ 상위 10명 정렬
-    top_users = sorted(profits.items(), key=lambda x: x[1], reverse=True)[:10]
+    if not profits:
+        return await interaction.response.send_message(
+            embed=create_embed("📭 랭킹 없음", "아직 수익이 기록된 유저가 없습니다.", discord.Color.light_grey()),
+            ephemeral=True
+        )
 
-    embed = discord.Embed(title="👑 투자왕 TOP 10", color=discord.Color.gold())
+    # ✅ 상위 10명 / 하위 3명
+    top_users = sorted(profits.items(), key=lambda x: x[1], reverse=True)[:10]
+    bottom_users = sorted(profits.items(), key=lambda x: x[1])[:3]
+
+    embed = discord.Embed(title="👑 투자왕 랭킹", color=discord.Color.gold())
+    guild = interaction.guild
+
+    # 🥇 상위 10명
+    embed.add_field(name="📈 상위 TOP 10", value="⠀", inline=False)
     for rank, (user_id, total_profit) in enumerate(top_users, 1):
         name = f"Unknown ({user_id})"
         try:
-            guild = interaction.guild
-            member = guild.get_member(int(user_id))
-            if member is None:
-                try:
-                    member = await guild.fetch_member(int(user_id))
-                except discord.NotFound:
-                    member = None
-            if member:
-                name = member.nick or member.name
+            member = guild.get_member(int(user_id)) or await guild.fetch_member(int(user_id))
+            name = member.nick or member.name if member else name
         except Exception as e:
             print(f"❌ 사용자 정보 조회 실패: {user_id} / {e}")
 
@@ -2961,7 +2964,24 @@ async def 투자왕(interaction: discord.Interaction):
             inline=False
         )
 
+    # 📉 하위 3명
+    embed.add_field(name="📉 하위 TOP 3 (손해왕)", value="⠀", inline=False)
+    for rank, (user_id, total_profit) in enumerate(bottom_users, 1):
+        name = f"Unknown ({user_id})"
+        try:
+            member = guild.get_member(int(user_id)) or await guild.fetch_member(int(user_id))
+            name = member.nick or member.name if member else name
+        except Exception as e:
+            print(f"❌ 사용자 정보 조회 실패: {user_id} / {e}")
+
+        embed.add_field(
+            name=f"하위 {rank}위 - {name}",
+            value=f"누적 손익: **{total_profit:,}원**",
+            inline=False
+        )
+
     await interaction.response.send_message(embed=embed, ephemeral=False)
+
 
 
 # ✅ 유저에게 투자 정산 결과를 DM으로 보내는 함수 (정산된 내역 기반)
@@ -2971,6 +2991,12 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
 
     if not user_history:
         return
+
+    # 📉 너무 많은 종목 보유 시 상위 40개까지만 표시
+    too_many = False
+    if len(user_history) > 40:
+        user_history = user_history[:40]
+        too_many = True
 
     total_invested = sum(h["buy_price"] * h["shares"] for h in user_history)
     total_returned = sum(h["sell_price"] * h["shares"] for h in user_history)
@@ -2992,6 +3018,7 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
     # 개별 종목 정산 내역
     embeds = [summary_embed]
     current_embed = discord.Embed(title="📈 개별 종목 정산", color=discord.Color.teal())
+
     for i, h in enumerate(user_history):
         stock = h["stock"]
         shares = h["shares"]
@@ -3000,9 +3027,15 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
         invested = buy_price * shares
         returned = sell_price * shares
         profit = returned - invested
-        rate = round((sell_price - buy_price) / buy_price * 100, 2)
+
+        # 🧮 손익률 계산 (0 나눗셈 방지)
+        if buy_price == 0:
+            rate = 0.0
+        else:
+            rate = round((sell_price - buy_price) / buy_price * 100, 2)
+
         sign = "+" if profit > 0 else ""
-        emoji = "📈" if profit >= 0 else "📉"
+        emoji = "🟢📈" if profit >= 0 else "🔴📉"
 
         # 💬 급등/급락 멘트 추가
         funny_comment = ""
@@ -3023,12 +3056,14 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
             inline=False
         )
 
-        # 24개 넘으면 새 Embed
+        # 24개마다 새 Embed로 분할
         if (i + 1) % 24 == 0:
             embeds.append(current_embed)
             current_embed = discord.Embed(title="📈 개별 종목 정산 (계속)", color=discord.Color.teal())
 
     if len(current_embed.fields) > 0:
+        if too_many:
+            current_embed.set_footer(text="※ 종목이 많아 상위 40개까지만 표시됩니다.")
         embeds.append(current_embed)
 
     # DM 전송
@@ -3036,7 +3071,9 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
         for embed in embeds:
             await user.send(embed=embed)
     except discord.Forbidden:
-        print(f"❌ {user.name}님에게 DM 전송 실패")
+        print(f"❌ {user.name}님에게 DM 전송 실패 (권한 없음)")
+    except discord.HTTPException as e:
+        print(f"❌ {user.name}님에게 DM 전송 실패 (HTTP 오류): {e}")
 
 
 
