@@ -3476,12 +3476,21 @@ async def 로또참여현황(interaction: discord.Interaction):
         )
 
     embeds = []
+    pool_amt = get_oduk_pool_amount()
+    tier1_pool = int(pool_amt * 0.8)
+    tier2_pool = int(pool_amt * 0.2)
+
     current_embed = discord.Embed(
         title=f"🎯 오덕로또 참여 현황\n({draw_start.strftime('%m/%d %H:%M')} ~ {draw_end.strftime('%m/%d %H:%M')})",
-        description="현재 회차에 참여한 유저 목록입니다.",
+        description=(
+            "현재 회차에 참여한 유저 목록입니다.\n\n"
+            f"🏆 1등 당첨 시 예상 상금: **{tier1_pool:,}원** (당첨자 1명 기준)\n"
+            f"🥈 2등 당첨 시 예상 상금: **{tier2_pool:,}원** (당첨자 1명 기준)"
+        ),
         color=discord.Color.teal()
     )
     field_count = 0
+
 
     guild = interaction.guild  # ✅ 현재 명령 실행된 서버
 
@@ -3617,6 +3626,8 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
         f"{수량}조합 참여 완료! 총 **{cost:,}원** 차감되었습니다.\n\n"
         f"{joined}\n\n"
         f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
+        f"🏆 1등 당첨 시 예상 상금: **{tier1_pool:,}원** (당첨자 1명 기준)\n"
+        f"🥈 2등 당첨 시 예상 상금: **{tier2_pool:,}원** (당첨자 1명 기준)\n"
         f"⏰ 다음 추첨: <t:{int(draw_end.timestamp())}:F>\n"
         f"🕓 제한 초기화까지: <t:{int(draw_end.timestamp())}:R>\n"
         f"🎯 매일 오전 9시에 자동 추첨됩니다!\n"
