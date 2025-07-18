@@ -4004,6 +4004,70 @@ async def 추첨확인(interaction: discord.Interaction):
 
 
 
+from discord.ext import tasks
+from datetime import datetime
+
+# 📡 핑 모니터링 경고 기준 (ms 단위)
+PING_WARNING = 200
+PING_CRITICAL = 400
+
+# ⏱️ 각각의 알림 시간 (중복 방지용)
+last_warning_alert_time = None
+last_critical_alert_time = None
+
+@tasks.loop(seconds=60)  # 매 1분마다 확인
+async def monitor_discord_ping():
+    global last_warning_alert_time, last_critical_alert_time
+
+    ping_ms = round(bot.latency * 1000)
+    now = datetime.utcnow()
+
+    # 200ms 미만이면 정상 → 아무것도 안 함
+    if ping_ms < PING_WARNING:
+        return
+
+    # 🚨 심각 경고
+    if ping_ms >= PING_CRITICAL:
+        if last_critical_alert_time and (now - last_critical_alert_time).total_seconds() < 1800:
+            return  # 30분 내 중복 차단
+        last_critical_alert_time = now
+        level = "🚨 **심각**"
+        color = discord.Color.red()
+
+    # ⚠️ 주의 경고
+    elif ping_ms >= PING_WARNING:
+        if last_warning_alert_time and (now - last_warning_alert_time).total_seconds() < 1800:
+            return  # 30분 내 중복 차단
+        last_warning_alert_time = now
+        level = "⚠️ **주의**"
+        color = discord.Color.orange()
+
+    # 📢 자유채팅방에 메시지 전송
+    for guild in bot.guilds:
+        channel = discord.utils.get(guild.text_channels, name="자유채팅방")
+        if channel:
+            embed = discord.Embed(
+                title=f"{level} 디스코드 핑 지연 감지",
+                description=(
+                    f"현재 서버의 디스코드 API 핑이 **{ping_ms}ms**로 지연되고 있습니다.\n\n"
+                    "명령어 반응 지연 또는 음성 끊김 현상이 발생할 수 있습니다.\n"
+                    "잠시 후 다시 정상화될 수 있어요!"
+                ),
+                color=color
+            )
+            embed.set_footer(text="🛰️ 오덕봇 자동 모니터링 시스템")
+            await channel.send(embed=embed)
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -4012,6 +4076,7 @@ async def 추첨확인(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     print(f"🤖 봇 로그인됨: {bot.user}")
+    monitor_discord_ping.start()  # ✅ 이 줄 추가
     await asyncio.sleep(2)  # 약간 대기
 
     for guild in bot.guilds:
