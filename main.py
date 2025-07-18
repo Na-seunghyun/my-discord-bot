@@ -3270,12 +3270,15 @@ async def auto_oduk_lotto(force: bool = False):
 
         for uid, combos in filtered_entries.items():
             for combo in combos:
-                match = len(set(combo) & set(answer))
+                matched = set(combo) & set(answer)
+                match = len(matched)
+                has_bonus = bonus in combo
+
                 if match == 4:
                     tier1.append(uid)
-                elif match == 3 and bonus in combo:
+                elif match == 3 and has_bonus:
                     tier2.append(uid)
-                elif match == 3:
+                elif match == 3 or (match == 2 and has_bonus):
                     tier3.append(uid)
 
         result_str = f"🎯 정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n\n"
@@ -3288,18 +3291,34 @@ async def auto_oduk_lotto(force: bool = False):
         leftover = 0
 
         guild = bot.guilds[0]
+
         def get_mention(uid):
             member = guild.get_member(int(uid))
             return member.mention if member else f"<@{uid}>"
 
-        # 3등 (공지 전용)
-        if tier3:
-            for uid in tier3:
-                add_balance(uid, 5000)
-            mentions = ", ".join([get_mention(uid) for uid in tier3])
-            lines.append(f"🥉 3등 {len(tier3)}명 (3개 일치) → 1인당 5,000원\n  {mentions}")
+        # ✅ 1등
+        if tier1:
+            share = tier1_pool // len(tier1)
+            for uid in tier1:
+                add_balance(uid, share)
+                try:
+                    user = await bot.fetch_user(int(uid))
+                    await user.send(
+                        f"🏆🎉 오덕로또 **1등** 당첨!\n"
+                        f"정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n"
+                        f"🏆 상금: **{share:,}원**\n축하드립니다!"
+                    )
+                except:
+                    pass
+                notified_users.add(uid)
+            leftover += tier1_pool % len(tier1)
+            mentions = ", ".join([get_mention(uid) for uid in tier1])
+            lines.append(f"🏆 **1등** {len(tier1)}명 (4개 일치) → **1인당 {share:,}원**\n  {mentions}")
+        else:
+            leftover += tier1_pool
+            lines.append("🏆 **1등 당첨자 없음 → 상금 이월**")
 
-        # 2등 (DM 발송)
+        # ✅ 2등
         if tier2:
             share = tier2_pool // len(tier2)
             for uid in tier2:
@@ -3307,7 +3326,9 @@ async def auto_oduk_lotto(force: bool = False):
                 try:
                     user = await bot.fetch_user(int(uid))
                     await user.send(
-                        f"🥈 오덕로또 2등 당첨!\n정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n🥈 상금: {share:,}원\n축하드립니다!"
+                        f"🥈 오덕로또 2등 당첨!\n"
+                        f"정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n"
+                        f"🥈 상금: {share:,}원\n축하드립니다!"
                     )
                 except:
                     pass
@@ -3319,28 +3340,14 @@ async def auto_oduk_lotto(force: bool = False):
             leftover += tier2_pool
             lines.append("🥈 2등 당첨자 없음 → 상금 이월")
 
-        # 1등 (가장 강조 & 맨 위 출력 & DM 발송)
-        if tier1:
-            share = tier1_pool // len(tier1)
-            for uid in tier1:
-                add_balance(uid, share)
-                try:
-                    user = await bot.fetch_user(int(uid))
-                    await user.send(
-                        f"🏆🎉 오덕로또 **1등** 당첨!\n정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n🏆 상금: **{share:,}원**\n축하드립니다!"
-                    )
-                except:
-                    pass
-                notified_users.add(uid)
-            leftover += tier1_pool % len(tier1)
-            mentions = ", ".join([get_mention(uid) for uid in tier1])
-            lines.insert(0, f"🏆 **1등** {len(tier1)}명 (4개 일치) → **1인당 {share:,}원**\n  {mentions}")
+        # ✅ 3등 (공지 전용)
+        if tier3:
+            for uid in tier3:
+                add_balance(uid, 5000)
+            mentions = ", ".join([get_mention(uid) for uid in tier3])
+            lines.append(f"🥉 3등 {len(tier3)}명 (3개 일치 또는 2개+보너스) → 1인당 5,000원\n  {mentions}")
         else:
-            leftover += tier1_pool
-            lines.insert(0, "🏆 **1등 당첨자 없음 → 상금 이월**")
-
-        oduk_pool_cache["amount"] = leftover
-        oduk_pool_cache["last_winner"] = ", ".join(set(tier1 + tier2 + tier3))
+            lines.append("🥉 3등 당첨자 없음 → 상금 없음")
 
         result_str += "\n".join(lines)
         result_str += f"\n\n💰 이월된 상금: {leftover:,}원"
@@ -3601,12 +3608,15 @@ async def 수동추첨(interaction: discord.Interaction):
 
     for uid, combos in filtered_entries.items():
         for combo in combos:
-            match = len(set(combo) & set(answer))
+            matched = set(combo) & set(answer)
+            match = len(matched)
+            has_bonus = bonus in combo
+
             if match == 4:
                 tier1.append(uid)
-            elif match == 3 and bonus in combo:
+            elif match == 3 and has_bonus:
                 tier2.append(uid)
-            elif match == 3:
+            elif (match == 3) or (match == 2 and has_bonus):
                 tier3.append(uid)
 
     result_str = f"🎯 정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n\n"
@@ -3619,16 +3629,32 @@ async def 수동추첨(interaction: discord.Interaction):
     leftover = 0
 
     guild = interaction.guild  # 현재 명령어 실행한 서버 기준
+
     def get_mention(uid):
         member = guild.get_member(int(uid))
         return member.mention if member else f"<@{uid}>"
 
-    # ✅ 3등 (공지 전용)
-    if tier3:
-        for uid in tier3:
-            add_balance(uid, 5000)
-        mentions = ", ".join([get_mention(uid) for uid in tier3])
-        lines.append(f"🥉 3등 {len(tier3)}명 (3개 일치) → 1인당 5,000원\n  {mentions}")
+    # ✅ 1등
+    if tier1:
+        share = tier1_pool // len(tier1)
+        for uid in tier1:
+            add_balance(uid, share)
+            try:
+                user = await bot.fetch_user(int(uid))
+                await user.send(
+                    f"🏆🎉 [수동추첨] 오덕로또 **1등** 당첨!\n"
+                    f"정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n"
+                    f"🏆 상금: **{share:,}원**\n축하드립니다!"
+                )
+            except:
+                pass
+            notified_users.add(uid)
+        leftover += tier1_pool % len(tier1)
+        mentions = ", ".join([get_mention(uid) for uid in tier1])
+        lines.append(f"🏆 **1등** {len(tier1)}명 (4개 일치) → **1인당 {share:,}원**\n  {mentions}")
+    else:
+        leftover += tier1_pool
+        lines.append("🏆 **1등 당첨자 없음 → 상금 이월**")
 
     # ✅ 2등
     if tier2:
@@ -3638,7 +3664,9 @@ async def 수동추첨(interaction: discord.Interaction):
             try:
                 user = await bot.fetch_user(int(uid))
                 await user.send(
-                    f"🥈 [수동추첨] 오덕로또 2등 당첨!\n정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n🥈 상금: {share:,}원\n축하드립니다!"
+                    f"🥈 [수동추첨] 오덕로또 2등 당첨!\n"
+                    f"정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n"
+                    f"🥈 상금: {share:,}원\n축하드립니다!"
                 )
             except:
                 pass
@@ -3650,25 +3678,14 @@ async def 수동추첨(interaction: discord.Interaction):
         leftover += tier2_pool
         lines.append("🥈 2등 당첨자 없음 → 상금 이월")
 
-    # ✅ 1등 (가장 강조, DM 발송)
-    if tier1:
-        share = tier1_pool // len(tier1)
-        for uid in tier1:
-            add_balance(uid, share)
-            try:
-                user = await bot.fetch_user(int(uid))
-                await user.send(
-                    f"🏆🎉 [수동추첨] 오덕로또 **1등** 당첨!\n정답 번호: {', '.join(map(str, answer))} + 보너스({bonus})\n🏆 상금: **{share:,}원**\n축하드립니다!"
-                )
-            except:
-                pass
-            notified_users.add(uid)
-        leftover += tier1_pool % len(tier1)
-        mentions = ", ".join([get_mention(uid) for uid in tier1])
-        lines.insert(0, f"🏆 **1등** {len(tier1)}명 (4개 일치) → **1인당 {share:,}원**\n  {mentions}")
+    # ✅ 3등
+    if tier3:
+        for uid in tier3:
+            add_balance(uid, 5000)
+        mentions = ", ".join([get_mention(uid) for uid in tier3])
+        lines.append(f"🥉 3등 {len(tier3)}명 (3개 일치) → 1인당 5,000원\n  {mentions}")
     else:
-        leftover += tier1_pool
-        lines.insert(0, "🏆 **1등 당첨자 없음 → 상금 이월**")
+        lines.append("🥉 3등 당첨자 없음 → 상금 없음")
 
     result_str += "\n".join(lines)
     result_str += f"\n\n💰 이월된 상금: {leftover:,}원"
