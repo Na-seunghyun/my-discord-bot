@@ -105,7 +105,7 @@ CATEGORY_PARTS = [
 used_names = set()
 def generate_random_stock_name():
     for _ in range(100):
-        name = f"{random.choice(KOREAN_PARTS)}{random.choice(ENGLISH_PARTS)}"
+        name = f"{random.choice(KOREAN_PARTS)}{random.choice(CATEGORY_PARTS)}"
         if name not in used_names:
             used_names.add(name)
             return name
