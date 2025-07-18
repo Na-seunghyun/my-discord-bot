@@ -3048,7 +3048,24 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
 
 
 
-@tasks.loop(minutes=30)  # ✅ 30분마다 자동 실행
+def get_mention(user_id):
+    return f"<@{user_id}>"
+
+def split_message_chunks(message: str, max_length: int = 1900):
+    lines = message.splitlines(keepends=True)
+    chunks = []
+    current = ""
+    for line in lines:
+        if len(current) + len(line) > max_length:
+            chunks.append(current)
+            current = line
+        else:
+            current += line
+    if current:
+        chunks.append(current)
+    return chunks
+
+@tasks.loop(minutes=30)
 async def process_investments():
     stocks = load_stocks()
     investments = load_investments()
@@ -3059,57 +3076,22 @@ async def process_investments():
     now = datetime.now(KST)
 
     report = f"📊 [30분 주기 투자 종목 변동 - {now.strftime('%m/%d %H:%M')}]\n\n"
-
     split_report = ""
+    total_fees_collected = 0
 
-    # 수수료 설정
-    purchase_fee_rate = 0.01  # 매수 시 1% 수수료
-    sell_fee_rate = 0.01      # 매도 시 1% 수수료 (이익 시 적용)
-    total_fees_collected = 0  # 오덕잔고 누적 수수료
-
-    # 가격 변동 함수 (희박하게 -100%, +100%)
-    def generate_change():
-        r = random.random()
-        if r < 0.015:
-            return 100
-        elif r < 0.045:
-            return -100
-        else:
-            return random.randint(-30, 30)
+    purchase_fee_rate = 0.01
+    sell_fee_rate = 0.01
 
     delisted_stocks = set()
     price_changes = {}
+    gain_records = {}
+    loss_records = {}
 
-    # 주식 가격 업데이트
     for name, stock in stocks.items():
         change = generate_change()
         old_price = stock["price"]
         new_price = int(old_price * (1 + change / 100))
-
-        price_changes[name] = (old_price, change)
-
-        if new_price < 100:
-            delisted_stocks.add(name)
-            stock["price"] = 150
-            stock["change"] = 0
-            report += f"💀 [{name}] 상장폐지 후 재상장 (가격 < 100원) → 150원으로 초기화\n"
-            continue
-
-        if new_price > 30_000:
-            new_price = new_price // 10
-            split_report += f"📣 [{name}] 주식 분할: 1주 → 10주, 가격 ↓ {old_price:,} → {new_price:,}원\n"
-
-        stock["price"] = new_price
-        stock["change"] = change
-        symbol = "📈" if change > 0 else ("📉" if change < 0 else "💥" if change in [-100, 100] else "➖")
-        report += f"{symbol} {name}: {change:+}% → {new_price:,}원\n"
-
-        if change == 100:
-            report += f"🔥 [{name}] 급등! 내부자 냄새가 나는 100% 상승입니다!\n"
-        elif change == -100:
-            report += f"💣 [{name}] 폭락! -100% 손실, 이제 이 주식은 기억 속으로...\n"
-
-    save_stocks(stocks)
+        price_changes[name] = (old_price, change, new_price)
 
     history = []
     updated_users = set()
@@ -3126,7 +3108,7 @@ async def process_investments():
 
         if timestamp < now:
             if stock in price_changes:
-                prev_price, change = price_changes[stock]
+                prev_price, change, new_price = price_changes[stock]
                 real_new_price = int(old_price * (1 + change / 100))
                 if real_new_price < 1:
                     real_new_price = 1
@@ -3147,12 +3129,18 @@ async def process_investments():
                 total_fees_collected += fee_on_sell
 
             profit = sell_total - invested
-
             add_balance(user_id, sell_total)
 
             comment = ""
             if stock in delisted_stocks:
                 comment = "⚠ 상장폐지로 정산 후 초기화된 종목입니다."
+
+            if stock in price_changes:
+                _, change, _ = price_changes[stock]
+                if change == 100:
+                    gain_records.setdefault(stock, []).append((user_id, profit))
+                elif change == -100:
+                    loss_records.setdefault(stock, []).append((user_id, profit))
 
             history.append({
                 "user_id": user_id,
@@ -3164,30 +3152,54 @@ async def process_investments():
                 "timestamp": now.isoformat(),
                 "comment": comment
             })
-
             updated_users.add(user_id)
         else:
             new_list.append(inv)
 
+    for name, stock in stocks.items():
+        if name not in price_changes:
+            continue
+
+        old_price, change, new_price = price_changes[name]
+
+        symbol = "📈" if change > 0 else ("📉" if change < 0 else "💥" if change in [-100, 100] else "➖")
+        report += f"{symbol} {name}: {change:+}% → {new_price:,}원\n"
+
+        if change == 100:
+            report += f"🔥 [{name}] 급등! 내부자 냄새가 나는 100% 상승입니다!\n"
+        elif change == -100:
+            report += f"💣 [{name}] 폭락! -100% 손실, 이제 이 주식은 기억 속으로...\n"
+
+        if new_price > 30_000:
+            new_price = new_price // 10
+            split_report += f"📣 [{name}] 주식 분할: 1주 → 10주, 가격 ↓ {old_price:,} → {new_price:,}원\n"
+
+        if new_price < 100:
+            delisted_stocks.add(name)
+            stock["price"] = 150
+            stock["change"] = 0
+            report += f"💀 [{name}] 상장폐지 후 재상장 (가격 < 100원) → 150원으로 초기화\n"
+        else:
+            stock["price"] = new_price
+            stock["change"] = change
+
+    save_stocks(stocks)
     save_investments(new_list)
     if history:
         save_investment_history(history)
 
-    # ✅ 오덕잔고에 수수료 적립
     def add_oduk_pool(amount):
         try:
             with open("oduk_pool.json", "r", encoding="utf-8") as f:
                 pool = json.load(f)
         except:
             pool = {"amount": 0}
-
         pool["amount"] = pool.get("amount", 0) + amount
         with open("oduk_pool.json", "w", encoding="utf-8") as f:
             json.dump(pool, f, indent=2)
 
     add_oduk_pool(total_fees_collected)
 
-    # ✅ 오덕잔고 총액 불러오기
     try:
         with open("oduk_pool.json", "r", encoding="utf-8") as f:
             pool = json.load(f)
@@ -3195,8 +3207,34 @@ async def process_investments():
     except:
         oduk_amount = total_fees_collected
 
-    # ✅ 수수료 및 오덕잔고 안내 추가
     report += f"\n💰 이번 정산 수수료 수익: {total_fees_collected:,}원 적립\n🏦 현재 오덕잔고: {oduk_amount:,}원\n"
+
+    # 수익/손실자 출력
+    for stock, records in gain_records.items():
+        report += f"\n🤑 [{stock}] +100% 상승 수익자 명단\n"
+        for user_id, profit in records:
+            mention = get_mention(user_id)
+            report += f"  {mention}: **+{profit:,}원** 수익\n"
+
+    for stock, records in loss_records.items():
+        report += f"\n😭 [{stock}] -100% 폭락 손실자 명단\n"
+        for user_id, profit in records:
+            mention = get_mention(user_id)
+            report += f"  {mention}: **{profit:,}원** 손실\n"
+
+    if split_report:
+        report += f"\n{split_report}"
+
+    chunks = split_message_chunks(report)
+
+    for guild in bot.guilds:
+        ch = discord.utils.get(guild.text_channels, name="오덕코인")
+        if ch:
+            for chunk in chunks:
+                try:
+                    await ch.send(chunk)
+                except Exception as e:
+                    print(f"❌ 오덕코인 채널 전송 실패: {e}")
 
     for user_id in updated_users:
         try:
@@ -3205,18 +3243,18 @@ async def process_investments():
         except Exception as e:
             print(f"❌ {user_id}님에게 정산 DM 전송 실패: {e}")
 
-    if split_report:
-        report += f"\n{split_report}"
-
-    for guild in bot.guilds:
-        ch = discord.utils.get(guild.text_channels, name="오덕코인")
-        if ch:
-            try:
-                await ch.send(report)
-            except Exception as e:
-                print(f"❌ 오덕코인 채널 전송 실패: {e}")
-
     save_last_chart_time(now)
+
+def generate_change():
+    r = random.random()
+    if r < 0.015:
+        return 100
+    elif r < 0.045:
+        return -100
+    else:
+        return random.randint(-30, 30)
+
+
 
 
 
