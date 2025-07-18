@@ -2183,12 +2183,6 @@ def save_weekly_claims(data):
 daily_claims = load_daily_claims()
 weekly_claims = load_weekly_claims()
 
-# ✅ 봇 인스턴스 (예시용 — 실제 봇에 맞게 수정)
-intents = discord.Intents.default()
-intents.members = True
-bot = commands.Bot(command_prefix="!", intents=intents)
-tree = bot.tree
-GUILD_ID = YOUR_GUILD_ID_HERE  # 숫자형 서버 ID로 바꿔주세요
 
 # ✅ /돈줘 명령어
 @tree.command(name="돈줘", description="하루 1회 보상 + 주 1회 보상을 지급받습니다", guild=discord.Object(id=GUILD_ID))
