@@ -3520,7 +3520,7 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
             embed=discord.Embed(
                 title="❌ 참여 초과",
                 description=(
-                    f"이번 회차에는 최대 **20조합**까지만 참여할 수 있습니다.\n"
+                    f"이번 회차에는 최대 **50조합**까지만 참여할 수 있습니다.\n"
                     f"현재 {len(user_entries_today)}조합 참여 중이며, 이번 요청으로 {수량}조합은 초과됩니다.\n"
                     f"⏰ 제한은 <t:{int(next_reset.timestamp())}:R>에 초기화됩니다."
                 ),
