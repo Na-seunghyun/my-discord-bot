@@ -3245,10 +3245,18 @@ async def send_investment_summary(user: discord.User, user_id: str, history: lis
 
         # 💬 급등/급락 멘트 추가
         funny_comment = ""
-        if rate == 100.0:
+        # 💬 급등/급락 멘트 추가 (rate 기준)
+        if rate == 200.0:
+            funny_comment = "\n🚀 *이건 그냥 로켓 아닙니까? 200% 수익이라니...*"
+        elif rate == 100.0:
             funny_comment = "\n🔥 *내부자 아니죠? 100% 급등은 너무했잖아요!*"
+        elif rate >= 50.0:
+            funny_comment = "\n📈 *이 정도면 투자 천재 아닙니까?*"
+        elif rate <= -50.0 and rate > -100.0:
+            funny_comment = "\n⚠️ *이 손실은 좀... 눈물 납니다.*"
         elif rate == -100.0:
             funny_comment = "\n💣 *텅장 완료... 투자금이 증발했습니다. 🙃*"
+
 
         current_embed.add_field(
             name=f"{emoji} [{stock}] {sign}{rate}%",
@@ -3316,7 +3324,7 @@ def create_new_stock(stocks: dict) -> str:
         name = generate_random_stock_name()
         if name not in stocks:
             stocks[name] = {
-                "price": random.randint(500, 3000),
+                "price": random.randint(1000, 5000),  # ✅ 수정됨
                 "change": 0
             }
             return name
@@ -3415,6 +3423,7 @@ async def process_investments():
         else:
             new_list.append(inv)
 
+
     # ✅ 가격 반영 및 상장/폐지 처리
     updated_stock_names = list(stocks.keys())
     for name in updated_stock_names:
@@ -3426,8 +3435,19 @@ async def process_investments():
         symbol = "📈" if change > 0 else ("📉" if change < 0 else "💥" if change in [-100, 100] else "➖")
         report += f"{symbol} {name}: {change:+}% → {new_price:,}원\n"
 
-        if change == 100:
+        # ✅ 변동폭에 따라 메시지 출력
+        if change == 200:
+            report += f"🚀 [{name}]이 상한가 두 배! 슈퍼급등으로 투자자 환호!\n"
+        elif change == 100:
             report += f"🔥 [{name}] 급등! 내부자 냄새가 나는 100% 상승입니다!\n"
+        elif change == 50:
+            report += f"⏫ [{name}] 강한 상승! 50%나 뛰었습니다!\n"
+        elif change == 30:
+            report += f"📈 [{name}] 좋은 흐름! 안정적인 30% 상승.\n"
+        elif change == -30:
+            report += f"📉 [{name}] 불안한 하락세... -30% 손실.\n"
+        elif change == -50:
+            report += f"⚠️ [{name}] 심상치 않다... -50% 급락!\n"
         elif change == -100:
             report += f"💣 [{name}] 폭락! -100% 손실, 이제 이 주식은 기억 속으로...\n"
 
@@ -3450,6 +3470,7 @@ async def process_investments():
 
             stocks[name]["price"] = new_price
             stocks[name]["change"] = change
+
 
     # ✅ 종목 부족 시 추가 보완
     while len(stocks) < MAX_STOCKS:
@@ -3515,12 +3536,22 @@ async def process_investments():
 
 def generate_change():
     r = random.random()
-    if r < 0.015:
-        return 100
-    elif r < 0.045:
-        return -100
+    if r < 0.01:
+        return 200    # 🚀 슈퍼 급등
+    elif r < 0.03:
+        return 100    # 🔥 급등
+    elif r < 0.06:
+        return 50     # 👍 강한 상승
+    elif r < 0.10:
+        return -100   # 💥 폭락
+    elif r < 0.14:
+        return -50    # ⚠ 큰 하락
+    elif r < 0.20:
+        return 30     # 🌱 보통 상승
+    elif r < 0.28:
+        return -30    # 🍂 보통 하락
     else:
-        return random.randint(-30, 30)
+        return random.randint(-15, 15)  # 📉📈 일반 변동
 
 
 
