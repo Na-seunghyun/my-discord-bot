@@ -3475,6 +3475,8 @@ async def 로또참여현황(interaction: discord.Interaction):
             ephemeral=False
         )
 
+    max_embeds = 10
+    max_fields_per_embed = 25
     embeds = []
     pool_amt = get_oduk_pool_amount()
     tier1_pool = int(pool_amt * 0.8)
@@ -3490,13 +3492,17 @@ async def 로또참여현황(interaction: discord.Interaction):
         color=discord.Color.teal()
     )
     field_count = 0
+    embed_count = 1
 
-
-    guild = interaction.guild  # ✅ 현재 명령 실행된 서버
+    guild = interaction.guild
+    total_displayed_users = 0
 
     for uid, combos in filtered_entries.items():
+        if embed_count > max_embeds:
+            break  # ❗️더 이상 embed 생성 안 함
+
         try:
-            member = guild.get_member(int(uid))  # ✅ 서버 기준 멤버
+            member = guild.get_member(int(uid))
             username = member.display_name if member else f"Unknown({uid})"
         except:
             username = f"Unknown({uid})"
@@ -3510,24 +3516,33 @@ async def 로또참여현황(interaction: discord.Interaction):
             inline=False
         )
         field_count += 1
+        total_displayed_users += 1
 
-        if field_count >= 25:
+        if field_count >= max_fields_per_embed:
+            current_embed.set_footer(text=f"🕘 다음 추첨까지 남은 시간: {time_left_str}")
             embeds.append(current_embed)
             current_embed = discord.Embed(color=discord.Color.teal())
             field_count = 0
+            embed_count += 1
 
-    if field_count > 0:
+    # 마지막 embed 처리
+    if field_count > 0 and embed_count <= max_embeds:
         current_embed.set_footer(text=f"🕘 다음 추첨까지 남은 시간: {time_left_str}")
         embeds.append(current_embed)
 
     for embed in embeds:
         await interaction.channel.send(embed=embed)
 
+    desc_text = f"총 {len(filtered_entries)}명 참여.\n"
+    if total_displayed_users < len(filtered_entries):
+        desc_text += f"⚠️ 참여 인원이 많아 상위 {total_displayed_users}명까지만 표시되었습니다."
+
     await interaction.response.send_message(
         embed=discord.Embed(
             title="📊 참여 현황 출력됨",
-            description=f"총 {len(filtered_entries)}명 참여.",
-            color=discord.Color.green()),
+            description=desc_text,
+            color=discord.Color.green()
+        ),
         ephemeral=True
     )
 
