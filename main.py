@@ -3340,12 +3340,27 @@ async def auto_oduk_lotto(force: bool = False):
             leftover += tier2_pool
             lines.append("🥈 2등 당첨자 없음 → 상금 이월")
 
-        # ✅ 3등 (공지 전용)
+        # ✅ 3등 (공지 전용, 중복 표시)
         if tier3:
-            for uid in tier3:
-                add_balance(uid, 5000)
-            mentions = ", ".join([get_mention(uid) for uid in tier3])
-            lines.append(f"🥉 3등 {len(tier3)}명 (3개 일치 또는 2개+보너스) → 1인당 5,000원\n  {mentions}")
+            from collections import Counter
+
+            count_by_uid = Counter(tier3)
+            for uid, count in count_by_uid.items():
+                add_balance(uid, 5000 * count)
+
+            def format_mentions(counter):
+                mentions = []
+                for uid, count in counter.items():
+                    mention = get_mention(uid)
+                    if count > 1:
+                        mentions.append(f"{mention} × {count}회")
+                    else:
+                        mentions.append(f"{mention}")
+                return ", ".join(mentions)
+
+            lines.append(
+                f"🥉 3등 {len(tier3)}명 (3개 일치 또는 2개+보너스) → 1인당 5,000원\n  {format_mentions(count_by_uid)}"
+            )
         else:
             lines.append("🥉 3등 당첨자 없음 → 상금 없음")
 
@@ -3377,6 +3392,7 @@ async def auto_oduk_lotto(force: bool = False):
     print(f"✅ 오덕로또 추첨 완료됨! 정답: {answer} + 보너스({bonus})")
     print(f"🥇 1등: {len(tier1)}명 | 🥈 2등: {len(tier2)}명 | 🥉 3등: {len(tier3)}명")
     print(f"💰 이월된 상금: {leftover:,}원" + (" (수동)" if force else ""))
+
 
 
 
@@ -3682,10 +3698,22 @@ async def 수동추첨(interaction: discord.Interaction):
     if tier3:
         for uid in tier3:
             add_balance(uid, 5000)
-        mentions = ", ".join([get_mention(uid) for uid in tier3])
-        lines.append(f"🥉 3등 {len(tier3)}명 (3개 일치) → 1인당 5,000원\n  {mentions}")
+
+        from collections import Counter
+        counts = Counter(tier3)
+        formatted_mentions = []
+        for uid, count in counts.items():
+            mention = get_mention(uid)
+            if count > 1:
+                formatted_mentions.append(f"{mention} × {count}회")
+            else:
+                formatted_mentions.append(mention)
+
+        mention_line = ", ".join(formatted_mentions)
+        lines.append(f"🥉 3등 {len(tier3)}건 (3개 일치 또는 2개+보너스) → 1인당 5,000원\n  {mention_line}")
     else:
         lines.append("🥉 3등 당첨자 없음 → 상금 없음")
+
 
     result_str += "\n".join(lines)
     result_str += f"\n\n💰 이월된 상금: {leftover:,}원"
