@@ -67,45 +67,98 @@ WARNINGS_FILE = "warnings.json"
 BADWORDS_FILE = "badwords.txt"
 
 
+import os
+import json
+import random
 
-# 📁 투자 관련 파일
+# 📁 파일 경로
 INVESTMENT_FILE = "investments.json"
 STOCKS_FILE = "stocks.json"
 
-# 📈 종목 목록 (30개, 1주당 가격 500~3000원)
-STOCK_LIST = [
-    "로켓스탁", "피자코인", "와사비바이오", "버블티엔터", "슬로우버거",
-    "햄버그금융", "망고소프트", "초코우유랩", "블루문제약", "펭귄테크",
-    "파스타홀딩스", "자몽바이오", "고래투자사", "슈퍼감자", "썬더모터스",
-    "큐브엔터", "하늘은행", "크림소프트", "베이컨솔루션", "구름캐피탈",
-    "레몬IT", "눈송이로지스", "브로콜리랩", "타코앤스탁", "딸기엔터프라이즈",
-    "펑크테크놀로지", "라떼헬스케어", "미소캐시", "오로라디지털", "스푼리서치"
+# ✅ 최대 종목 수
+MAX_STOCKS = 30
+
+# ✅ 종목 이름 생성용 한글 조합 확장
+KOREAN_PARTS = [
+    # 감성 단어
+    "오로라", "크림", "달빛", "스노우", "블루", "버터", "하늘", "라레", "소울", "루나",
+    "피치", "아보카도", "우주", "몽길", "카카오", "마카론", "구름", "퍽키", "선셋", "무지개",
+    "초코", "멜로디", "코튼", "허니", "미넛", "밤하늘", "브리즈", "해피", "그레이", "플레인",
+    "민트", "라일락", "달콤", "보라빛", "노을", "자몽", "바닐라", "시나몬", "비건", "마시멜로",
+    "반딧불", "딸기", "아이스", "열대어", "초여름", "봄비", "해질녘", "모카", "카페", "체리"
 ]
 
-def initialize_stocks():
-    if not os.path.exists(STOCKS_FILE):
-        stocks = {name: {"price": random.randint(500, 3000), "change": 0} for name in STOCK_LIST}
-        with open(STOCKS_FILE, "w", encoding="utf-8") as f:
-            json.dump(stocks, f, indent=2)
+CATEGORY_PARTS = [
+    # 산업/분야
+    "랩", "소프트", "테크", "스튜디오", "웍스", "마켓", "네트웍스", "그룹", "다이나믹스", "클라우드",
+    "시스템", "바이브스", "캐피탈", "푸드", "모터스", "헬스", "솔루션", "디지털", "미디어", "엔진",
+    "센터", "팩토리", "파이낸스", "이노베이션", "컨설팅", "링크", "네이션", "컴퍼니", "벤처스", "코퍼레이션",
+    "랩스", "테크놀로지", "마이데이터", "핀테크", "AI랩", "플랫폼", "파트너스", "트레이딩", "이커머스", "에듀",
+    "에너지", "바이오텍", "헬스케어", "디자인", "제약", "자동차", "항공", "우주", "로봇", "반도체",
+    "스포츠", "패션", "음악", "출판", "게임즈", "VR", "AR", "모바일", "광고", "광학",
+    "생명과학", "환경", "농업", "식품", "금융", "물류", "유통", "부동산", "산업", "제조",
+    "기술", "창업", "혁신", "정보", "보안", "네트워크", "AI", "블록체인", "데이터", "연구소",
+    "협동조합", "재단", "협회", "클럽", "매니지먼트", "에이전시", "서비스", "하우스", "셀", "엔터프라이즈"
+]
 
+# ✅ 래더망 종목 이름 생성
+used_names = set()
+def generate_random_stock_name():
+    for _ in range(100):
+        name = f"{random.choice(KOREAN_PARTS)}{random.choice(ENGLISH_PARTS)}"
+        if name not in used_names:
+            used_names.add(name)
+            return name
+    return None
+
+# ✅ 종목 1개 생성
+def create_new_stock(stocks: dict) -> str:
+    for _ in range(50):  # 중복 회피 최대 50번 시도
+        name = generate_random_stock_name()
+        if name and name not in stocks:
+            stocks[name] = {
+                "price": random.randint(500, 3000),
+                "change": 0
+            }
+            return name
+    return None  # 실패 시
+
+# ✅ 초기화 또는 부족 시 종목 생성
+def ensure_stocks_filled():
+    stocks = {}
+    if os.path.exists(STOCKS_FILE):
+        with open(STOCKS_FILE, "r", encoding="utf-8") as f:
+            stocks = json.load(f)
+
+    while len(stocks) < MAX_STOCKS:
+        create_new_stock(stocks)
+
+    with open(STOCKS_FILE, "w", encoding="utf-8") as f:
+        json.dump(stocks, f, indent=2)
+
+# ✅ 종목 등록 로드하기
 def load_stocks():
-    initialize_stocks()
+    ensure_stocks_filled()
     with open(STOCKS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
+# ✅ 종목 저장
 def save_stocks(data):
     with open(STOCKS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
+# ✅ 투자 내역 로드하기
 def load_investments():
     if not os.path.exists(INVESTMENT_FILE):
         return []
     with open(INVESTMENT_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
+# ✅ 투자 내역 저장
 def save_investments(data):
     with open(INVESTMENT_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+
 
 
 
@@ -3102,6 +3155,20 @@ def split_message_chunks(message: str, max_length: int = 1900):
         chunks.append(current)
     return chunks
 
+MAX_STOCKS = 30  # 종목 유지 개수
+
+# ✅ 종목 생성 함수 (중복 회피)
+def create_new_stock(stocks: dict) -> str:
+    for _ in range(30):
+        name = generate_random_stock_name()
+        if name not in stocks:
+            stocks[name] = {
+                "price": random.randint(500, 3000),
+                "change": 0
+            }
+            return name
+    return None
+
 @tasks.loop(minutes=30)
 async def process_investments():
     stocks = load_stocks()
@@ -3124,6 +3191,7 @@ async def process_investments():
     gain_records = {}
     loss_records = {}
 
+    # ✅ 가격 변동 계산
     for name, stock in stocks.items():
         change = generate_change()
         old_price = stock["price"]
@@ -3133,6 +3201,7 @@ async def process_investments():
     history = []
     updated_users = set()
 
+    # ✅ 투자 정산
     for inv in investments:
         user_id = inv["user_id"]
         stock = inv["stock"]
@@ -3170,7 +3239,7 @@ async def process_investments():
 
             comment = ""
             if stock in delisted_stocks:
-                comment = "⚠ 상장폐지로 정산 후 초기화된 종목입니다."
+                comment = "⚠ 상장폐지로 정산 후 삭제된 종목입니다."
 
             if stock in price_changes:
                 _, change, _ = price_changes[stock]
@@ -3193,7 +3262,9 @@ async def process_investments():
         else:
             new_list.append(inv)
 
-    for name, stock in stocks.items():
+    # ✅ 가격 반영 및 상장/폐지 처리
+    updated_stock_names = list(stocks.keys())
+    for name in updated_stock_names:
         if name not in price_changes:
             continue
 
@@ -3207,18 +3278,29 @@ async def process_investments():
         elif change == -100:
             report += f"💣 [{name}] 폭락! -100% 손실, 이제 이 주식은 기억 속으로...\n"
 
-        if new_price > 30_000:
-            new_price = new_price // 10
-            split_report += f"📣 [{name}] 주식 분할: 1주 → 10주, 가격 ↓ {old_price:,} → {new_price:,}원\n"
-
+        # 📉 상장폐지 → 삭제 후 신규 상장
         if new_price < 100:
             delisted_stocks.add(name)
-            stock["price"] = 150
-            stock["change"] = 0
-            report += f"💀 [{name}] 상장폐지 후 재상장 (가격 < 100원) → 150원으로 초기화\n"
+            del stocks[name]  # 완전 삭제
+            report += f"💀 [{name}] 상장폐지 (가격 < 100원)\n"
+
+            # ✅ 새 종목 자동 상장
+            new_name = create_new_stock(stocks)
+            if new_name:
+                report += f"✨ 신규 종목 상장: [{new_name}] (랜덤 생성)\n"
+
         else:
-            stock["price"] = new_price
-            stock["change"] = change
+            # 📈 분할
+            if new_price > 30_000:
+                new_price = new_price // 10
+                split_report += f"📣 [{name}] 주식 분할: 1주 → 10주, 가격 ↓ {old_price:,} → {new_price:,}원\n"
+
+            stocks[name]["price"] = new_price
+            stocks[name]["change"] = change
+
+    # ✅ 종목 부족 시 추가 보완
+    while len(stocks) < MAX_STOCKS:
+        create_new_stock(stocks)
 
     save_stocks(stocks)
     save_investments(new_list)
@@ -3246,28 +3328,23 @@ async def process_investments():
 
     report += f"\n💰 이번 정산 수수료 수익: {total_fees_collected:,}원 적립\n🏦 현재 오덕잔고: {oduk_amount:,}원\n"
 
-    # 수익/손실자 출력
     for stock, records in gain_records.items():
         report += f"\n🤑 [{stock}] +100% 상승 수익자 명단\n"
         for user_id, profit in records:
-            mention = get_mention(user_id)
-            report += f"  {mention}: **+{profit:,}원** 수익\n"
+            report += f"  {get_mention(user_id)}: **+{profit:,}원** 수익\n"
 
     for stock, records in loss_records.items():
         report += f"\n😭 [{stock}] -100% 폭락 손실자 명단\n"
         for user_id, profit in records:
-            mention = get_mention(user_id)
-            report += f"  {mention}: **{profit:,}원** 손실\n"
+            report += f"  {get_mention(user_id)}: **{profit:,}원** 손실\n"
 
     if split_report:
         report += f"\n{split_report}"
 
-    chunks = split_message_chunks(report)
-
-    for guild in bot.guilds:
-        ch = discord.utils.get(guild.text_channels, name="오덕코인")
-        if ch:
-            for chunk in chunks:
+    for chunk in split_message_chunks(report):
+        for guild in bot.guilds:
+            ch = discord.utils.get(guild.text_channels, name="오덕코인")
+            if ch:
                 try:
                     await ch.send(chunk)
                 except Exception as e:
@@ -3281,6 +3358,7 @@ async def process_investments():
             print(f"❌ {user_id}님에게 정산 DM 전송 실패: {e}")
 
     save_last_chart_time(now)
+
 
 def generate_change():
     r = random.random()
