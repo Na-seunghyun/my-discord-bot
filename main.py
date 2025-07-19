@@ -520,18 +520,27 @@ async def on_member_join(member):
     if not channel:
         return
 
-    # 최신 초대 링크 받아오기
+    # ✅ 현재 초대 링크 목록 가져오기
     try:
         current_invites = await guild.invites()
     except Exception as e:
         print(f"❌ 현재 초대 링크 불러오기 실패: {e}")
         return
 
-    # 기존 초대 캐시 불러오기 (메모리 또는 파일)
+    # ✅ 최신 초대 상태를 실시간으로 캐시에 반영 (정확도 향상 핵심)
     global invites_cache
+    invites_cache[str(guild.id)] = {
+        invite.code: {
+            "uses": invite.uses,
+            "inviter_id": invite.inviter.id if invite.inviter else None
+        }
+        for invite in current_invites
+    }
+
+    # ✅ 비교용으로 직전에 저장된 캐시 불러오기
     old_invites = invites_cache.get(str(guild.id), {})
 
-    # fallback: invites_cache.json에서 불러오기
+    # ✅ fallback: invites_cache.json 파일에서 불러오기 (초기 실행 대비)
     if not old_invites:
         try:
             with open("invites_cache.json", "r", encoding="utf-8") as f:
@@ -542,7 +551,7 @@ async def on_member_join(member):
             print(f"❌ invites_cache.json 로딩 실패: {e}")
             old_invites = {}
 
-    # 누가 초대한 것인지 비교
+    # ✅ 누가 초대한 것인지 비교
     inviter = None
     for invite in current_invites:
         old = old_invites.get(invite.code)
@@ -552,14 +561,14 @@ async def on_member_join(member):
                 inviter = guild.get_member(inviter_id)
             break
 
-    # 입장 시간
+    # ✅ 입장 시간 계산
     KST = timezone(timedelta(hours=9))
     joined_dt = datetime.now(tz=KST)
     timestamp = int(joined_dt.timestamp())
     formatted_time = joined_dt.strftime("%Y-%m-%d %H:%M:%S")
     relative_time = f"<t:{timestamp}:R>"  # 예: 1분 전
 
-    # 임베드 작성
+    # ✅ 환영 임베드 생성
     embed = discord.Embed(
         title="🎊 신입 멤버 출몰!",
         description=f"😎 {member.mention} 님이 **화려하게 입장!** 🎉",
@@ -575,9 +584,11 @@ async def on_member_join(member):
 
     embed.add_field(name="입장 시간", value=f"{formatted_time} ({relative_time})", inline=True)
 
+    # ✅ 메시지 전송 및 버튼 추가
     message = await channel.send(embed=embed)
     view = WelcomeButton(member=member, original_message=message)
     await message.edit(view=view)
+
 
 
 
