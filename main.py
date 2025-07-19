@@ -2774,8 +2774,7 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
 
     selection_view = SelectionView()
     selection_message = await interaction.followup.send(
-        "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)
-❌ 중복 선택 불가입니다.",
+         "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)\n❌ 중복 선택 불가입니다.",
         view=selection_view
     )
 
@@ -2836,6 +2835,7 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
         await interaction.channel.send("\n".join(result))
 
     # view 이미 전달되었으므로 편집 생략됨
+
 
 
 
