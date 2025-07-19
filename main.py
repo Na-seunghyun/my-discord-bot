@@ -2867,9 +2867,10 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
 
 
             # ✅ 세금 계산 및 오덕로또 적립
-            tax = int(self.amount * 0.1)
-            net_gain = self.amount * 2 - tax
-            add_oduk_pool(tax)
+            total_bet = self.amount * 2                  # 전체 배팅금: 10만 원
+            tax = int(total_bet * 0.1)                   # 전체의 10% → 1만 원
+            net_gain = total_bet - tax                   # 승자는 9만 원 수령 (5만 걸고 4만 이익)
+            add_oduk_pool(tax)                           # 오덕로또 적립은 1만 원
 
             pool_amount = get_oduk_pool_amount()  # 세금 적립 이후 최신 값 재조회
             
