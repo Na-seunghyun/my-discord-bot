@@ -2504,6 +2504,7 @@ async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액:
 
     add_balance(보낸이, -금액)
     add_balance(받는이, 금액)
+    log_transfer(보낸이, 받는이, 금액)  # ✅ 이 줄 추가!
 
     embed = discord.Embed(
         title="✅ 송금 완료",
@@ -4328,10 +4329,9 @@ async def 송금확인(interaction: discord.Interaction, 대상: discord.User):
     chunks = split_message_chunks(desc)
     for i, chunk in enumerate(chunks):
         if i == 0:
-            await interaction.response.send_message(chunk, ephemeral=True)
+            await interaction.response.send_message(chunk)  # ✅ 공개
         else:
-            await interaction.followup.send(chunk, ephemeral=True)
-
+            await interaction.followup.send(chunk)          # ✅ 공개
 
 
 
