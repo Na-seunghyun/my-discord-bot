@@ -2756,10 +2756,10 @@ def create_embed(title: str, description: str, color: discord.Color, user_id: st
 
 
 
+# ✅ 배틀 기록 유틸리티
 BATTLE_STATS_FILE = "battle_stats.json"
+PAIR_STATS_FILE = "pair_stats.json"
 
-
-# ✅ 배틀 기록 불러오기
 def load_battle_stats():
     if not os.path.exists(BATTLE_STATS_FILE):
         with open(BATTLE_STATS_FILE, "w", encoding="utf-8") as f:
@@ -2767,12 +2767,10 @@ def load_battle_stats():
     with open(BATTLE_STATS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-# ✅ 배틀 기록 저장
 def save_battle_stats(data):
     with open(BATTLE_STATS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-# ✅ 날짜 기반 기록 추가
 def add_battle_result(user_id, wins, losses, profit):
     today = datetime.utcnow().strftime("%Y-%m-%d")
     data = load_battle_stats()
@@ -2781,7 +2779,6 @@ def add_battle_result(user_id, wins, losses, profit):
     data[user_id].append({"date": today, "wins": wins, "losses": losses, "profit": profit})
     save_battle_stats(data)
 
-# ✅ 1달 내 기록 합산
 def summarize_last_month(data):
     cutoff = datetime.utcnow() - timedelta(days=30)
     result = {}
@@ -2800,11 +2797,22 @@ def summarize_last_month(data):
                 new_records.append(r)
         if wins + losses > 0:
             result[uid] = {"wins": wins, "losses": losses, "profit": profit}
-        data[uid] = new_records  # 오래된 기록 삭제
+        data[uid] = new_records
     save_battle_stats(data)
     return result
 
-# 실제 명령어
+def load_pair_stats():
+    if not os.path.exists(PAIR_STATS_FILE):
+        with open(PAIR_STATS_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+    with open(PAIR_STATS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_pair_stats(data):
+    with open(PAIR_STATS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+# ✅ 도박 배틀 명령어
 @tree.command(name="도박배틀", description="특정 유저와 1:1 도박 배틀을 시작합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="도전할 유저", 배팅금액="서로 걸 금액")
 async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member, 배팅금액: int):
@@ -2861,11 +2869,9 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
             balances[str(loser.id)]["amount"] -= self.amount
             save_balances(balances)
 
-            # ✅ 월 기준 통계 저장
             add_battle_result(str(winner.id), 1, 0, self.amount)
             add_battle_result(str(loser.id), 0, 1, -self.amount)
 
-            # ✅ 두 유저 간 전적 계산
             pair_stats = load_pair_stats()
             uid1, uid2 = sorted([str(self.caller.id), str(self.target.id)])
             key = f"{uid1}_{uid2}"
@@ -2875,11 +2881,10 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
             save_pair_stats(pair_stats)
 
             total = pair_stats[key][uid1] + pair_stats[key][uid2]
-            wins = pair_stats[key][str(self.caller.id)]
-            losses = pair_stats[key][str(self.target.id)]
-            winrate = round((wins / total) * 100, 1) if total > 0 else 0
+            caller_wins = pair_stats[key][str(self.caller.id)]
+            target_wins = pair_stats[key][str(self.target.id)]
+            winrate = round((caller_wins / total) * 100, 1) if total > 0 else 0
 
-            # ✅ 오덕 로또 잔고 출력
             oduk_pool = load_oduk_pool()
             pool_amount = oduk_pool.get("amount", 0)
 
@@ -2892,7 +2897,7 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
             await interaction.channel.send(
                 f"🎲 도박 배틀 결과: {self.caller.mention} vs {self.target.mention}\n"
                 f"🏆 승자: **{winner.mention}**님! **{self.amount * 2:,}원** 획득!\n\n"
-                f"📊 전적 ({self.caller.display_name} vs {self.target.display_name}): {wins}승 {losses}패 (승률 {winrate}%)\n"
+                f"📊 전체 전적 ({self.caller.display_name} vs {self.target.display_name}): {caller_wins}승 {target_wins}패 (승률 {winrate}%)\n"
                 f"💰 현재 오덕로또 상금: **{pool_amount:,}원**\n"
                 f"🎟️ `/오덕로또참여`로 오늘의 운도 시험해보세요!"
             )
@@ -2913,6 +2918,7 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
         view=view
     )
     view.message = await interaction.original_response()
+
 
 
 
@@ -3869,10 +3875,15 @@ async def 초기화(interaction: discord.Interaction):
     with open("battle_stats.json", "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False, indent=2)
 
+
+    # ✅ 6. 1:1 배틀 전적 초기화
+    with open("pair_stats.json", "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=2)
+        
     await interaction.response.send_message(
         embed=create_embed(
             "✅ 초기화 완료",
-            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록, **송금 내역**, **배틀 전적**이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
+            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록, **송금 내역**, **배틀 전적**, **1:1 전적**이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
             discord.Color.green()
         ),
         ephemeral=False
