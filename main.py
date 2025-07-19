@@ -2755,6 +2755,7 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
                 return await i.response.send_message("잔액이 부족합니다.", ephemeral=True)
             add_balance(uid, -베팅액)
             participants.append(uid)
+            await i.response.send_message("✅ 참여 완료!", ephemeral=True)
             await interaction.channel.send(f"✅ [참여 완료] {get_mention(uid)} 님이 참여했습니다! ({len(participants)}명 참여중)")
 
     await interaction.response.send_message(
@@ -2774,12 +2775,18 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
     class SelectionView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=None)
+            self.update_buttons()
+
+        def update_buttons(self):
+            self.clear_items()
             for icon in icons:
-                self.add_item(IconButton(icon))
+                used = icon in chosen_icons.values()
+                self.add_item(IconButton(icon, used, self))
 
     class IconButton(discord.ui.Button):
-        def __init__(self, label):
-            super().__init__(label=label, style=discord.ButtonStyle.secondary)
+        def __init__(self, label, disabled, parent_view):
+            super().__init__(label=label, style=discord.ButtonStyle.secondary, disabled=disabled)
+            self.parent_view = parent_view
 
         async def callback(self, i: discord.Interaction):
             uid = str(i.user.id)
@@ -2792,8 +2799,9 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
 
             chosen_icons[uid] = self.label
             locked_users.add(uid)
-            self.disabled = True
-            await i.response.edit_message(view=self)
+
+            await i.response.defer()
+            await i.message.edit(view=SelectionView())
             await i.channel.send(f"✅ {get_mention(uid)} 님이 선택한 아이콘: {self.label}")
 
             if len(chosen_icons) == len(participants):
@@ -2820,6 +2828,7 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
         "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)\n❌ 중복 선택 불가입니다.",
         view=SelectionView()
     )
+
 
 
 
