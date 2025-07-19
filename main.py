@@ -3318,13 +3318,12 @@ def split_message_chunks(message: str, max_length: int = 1900):
 
 MAX_STOCKS = 30  # 종목 유지 개수
 
-# ✅ 종목 생성 함수 (중복 회피)
 def create_new_stock(stocks: dict) -> str:
     for _ in range(30):
         name = generate_random_stock_name()
         if name not in stocks:
             stocks[name] = {
-                "price": random.randint(1000, 5000),  # ✅ 수정됨
+                "price": random.randint(1000, 5000),
                 "change": 0
             }
             return name
@@ -3349,10 +3348,8 @@ async def process_investments():
 
     delisted_stocks = set()
     price_changes = {}
-    gain_records = {}
-    loss_records = {}
+    change_records = {200: {}, 100: {}, 50: {}, -50: {}, -100: {}}
 
-    # ✅ 가격 변동 계산
     for name, stock in stocks.items():
         change = generate_change()
         old_price = stock["price"]
@@ -3362,7 +3359,6 @@ async def process_investments():
     history = []
     updated_users = set()
 
-    # ✅ 투자 정산
     for inv in investments:
         user_id = inv["user_id"]
         stock = inv["stock"]
@@ -3398,16 +3394,10 @@ async def process_investments():
             profit = sell_total - invested
             add_balance(user_id, sell_total)
 
-            comment = ""
-            if stock in delisted_stocks:
-                comment = "⚠ 상장폐지로 정산 후 삭제된 종목입니다."
-
             if stock in price_changes:
                 _, change, _ = price_changes[stock]
-                if change == 100:
-                    gain_records.setdefault(stock, []).append((user_id, profit))
-                elif change == -100:
-                    loss_records.setdefault(stock, []).append((user_id, profit))
+                if change in change_records:
+                    change_records[change].setdefault(stock, []).append((user_id, profit))
 
             history.append({
                 "user_id": user_id,
@@ -3416,17 +3406,13 @@ async def process_investments():
                 "buy_price": old_price,
                 "sell_price": real_new_price,
                 "profit": profit,
-                "timestamp": now.isoformat(),
-                "comment": comment
+                "timestamp": now.isoformat()
             })
             updated_users.add(user_id)
         else:
             new_list.append(inv)
 
-
-    # ✅ 가격 반영 및 상장/폐지 처리
-    updated_stock_names = list(stocks.keys())
-    for name in updated_stock_names:
+    for name in list(stocks.keys()):
         if name not in price_changes:
             continue
 
@@ -3435,7 +3421,6 @@ async def process_investments():
         symbol = "📈" if change > 0 else ("📉" if change < 0 else "💥" if change in [-100, 100] else "➖")
         report += f"{symbol} {name}: {change:+}% → {new_price:,}원\n"
 
-        # ✅ 변동폭에 따라 메시지 출력
         if change == 200:
             report += f"🚀 [{name}]이 상한가 두 배! 슈퍼급등으로 투자자 환호!\n"
         elif change == 100:
@@ -3451,28 +3436,20 @@ async def process_investments():
         elif change == -100:
             report += f"💣 [{name}] 폭락! -100% 손실, 이제 이 주식은 기억 속으로...\n"
 
-        # 📉 상장폐지 → 삭제 후 신규 상장
         if new_price < 100:
             delisted_stocks.add(name)
-            del stocks[name]  # 완전 삭제
+            del stocks[name]
             report += f"💀 [{name}] 상장폐지 (가격 < 100원)\n"
-
-            # ✅ 새 종목 자동 상장
             new_name = create_new_stock(stocks)
             if new_name:
                 report += f"✨ 신규 종목 상장: [{new_name}] (랜덤 생성) → {stocks[new_name]['price']:,}원\n"
-
         else:
-            # 📈 분할
             if new_price > 30_000:
                 new_price = new_price // 10
                 split_report += f"📣 [{name}] 주식 분할: 1주 → 10주, 가격 ↓ {old_price:,} → {new_price:,}원\n"
-
             stocks[name]["price"] = new_price
             stocks[name]["change"] = change
 
-
-    # ✅ 종목 부족 시 추가 보완
     while len(stocks) < MAX_STOCKS:
         create_new_stock(stocks)
 
@@ -3502,15 +3479,19 @@ async def process_investments():
 
     report += f"\n💰 이번 정산 수수료 수익: {total_fees_collected:,}원 적립\n🏦 현재 오덕잔고: {oduk_amount:,}원\n"
 
-    for stock, records in gain_records.items():
-        report += f"\n🤑 [{stock}] +100% 상승 수익자 명단\n"
-        for user_id, profit in records:
-            report += f"  {get_mention(user_id)}: **+{profit:,}원** 수익\n"
-
-    for stock, records in loss_records.items():
-        report += f"\n😭 [{stock}] -100% 폭락 손실자 명단\n"
-        for user_id, profit in records:
-            report += f"  {get_mention(user_id)}: **{profit:,}원** 손실\n"
+    for chg in [200, 100, 50, -50, -100]:
+        for stock, records in change_records[chg].items():
+            label = {
+                200: "🚀 [{stock}] +200% 슈퍼급등 수익자 명단",
+                100: "🤑 [{stock}] +100% 상승 수익자 명단",
+                50: "📈 [{stock}] +50% 상승 수익자 명단",
+                -50: "😰 [{stock}] -50% 급락 손실자 명단",
+                -100: "😭 [{stock}] -100% 폭락 손실자 명단"
+            }[chg].format(stock=stock)
+            report += f"\n{label}\n"
+            for user_id, profit in records:
+                sign = "+" if profit >= 0 else ""
+                report += f"  {get_mention(user_id)}: {sign}{profit:,}원 {'수익' if profit >= 0 else '손실'}\n"
 
     if split_report:
         report += f"\n{split_report}"
@@ -3533,25 +3514,25 @@ async def process_investments():
 
     save_last_chart_time(now)
 
-
 def generate_change():
     r = random.random()
     if r < 0.01:
-        return 200    # 🚀 슈퍼 급등
+        return 200
     elif r < 0.03:
-        return 100    # 🔥 급등
+        return 100
     elif r < 0.06:
-        return 50     # 👍 강한 상승
+        return 50
     elif r < 0.10:
-        return -100   # 💥 폭락
+        return -100
     elif r < 0.14:
-        return -50    # ⚠ 큰 하락
+        return -50
     elif r < 0.20:
-        return 30     # 🌱 보통 상승
+        return 30
     elif r < 0.28:
-        return -30    # 🍂 보통 하락
+        return -30
     else:
-        return random.randint(-15, 15)  # 📉📈 일반 변동
+        return random.randint(-15, 15)
+
 
 
 
