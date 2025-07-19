@@ -2772,39 +2772,48 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
     chosen_icons = {}
     locked_users = set()
 
+    selection_message = await interaction.followup.send(
+        "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)\n❌ 중복 선택 불가입니다.",
+        view=None
+    )
+
     class SelectionView(discord.ui.View):
         def __init__(self):
-            super().__init__(timeout=None)
-            self.update_buttons()
-
-        def update_buttons(self):
-            self.clear_items()
+            super().__init__(timeout=5)
             for icon in icons:
-                used = icon in chosen_icons.values()
-                self.add_item(IconButton(icon, used, self))
+                self.add_item(IconButton(icon))
+
+        async def on_timeout(self):
+            # 자동 선택 처리
+            for uid in participants:
+                if uid not in chosen_icons:
+                    available = [ic for ic in icons if ic not in chosen_icons.values()]
+                    if available:
+                        auto_choice = random.choice(available)
+                        chosen_icons[uid] = auto_choice
+                        await interaction.channel.send(f"⏱ {get_mention(uid)} 님이 자동 선택됨: {auto_choice}")
+            await announce_result()
 
     class IconButton(discord.ui.Button):
-        def __init__(self, label, disabled, parent_view):
-            super().__init__(label=label, style=discord.ButtonStyle.secondary, disabled=disabled)
-            self.parent_view = parent_view
+        def __init__(self, label):
+            super().__init__(label=label, style=discord.ButtonStyle.secondary)
 
         async def callback(self, i: discord.Interaction):
             uid = str(i.user.id)
             if uid not in participants:
                 return await i.response.send_message("❌ 참여자만 선택할 수 있습니다.", ephemeral=True)
             if uid in locked_users:
-                return await i.response.send_message("❌ 가능한 선택은 1회입니다.", ephemeral=True)
+                return await i.response.send_message("❌ 이미 선택하셨습니다.", ephemeral=True)
             if self.label in chosen_icons.values():
                 return await i.response.send_message("❌ 이미 선택된 아이콘입니다.", ephemeral=True)
 
             chosen_icons[uid] = self.label
             locked_users.add(uid)
-
-            await i.response.defer()
-            await i.message.edit(view=SelectionView())
-            await i.channel.send(f"✅ {get_mention(uid)} 님이 선택한 아이콘: {self.label}")
+            await i.response.send_message(f"✅ {self.label} 선택 완료!", ephemeral=True)
+            await interaction.channel.send(f"🎯 {get_mention(uid)} 님이 선택한 아이콘: {self.label}")
 
             if len(chosen_icons) == len(participants):
+                self.view.stop()
                 await announce_result()
 
     async def announce_result():
@@ -2824,11 +2833,7 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
 
         await interaction.channel.send("\n".join(result))
 
-    await interaction.followup.send(
-        "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)\n❌ 중복 선택 불가입니다.",
-        view=SelectionView()
-    )
-
+    await selection_message.edit(view=SelectionView())
 
 
 
