@@ -4222,7 +4222,7 @@ async def 추첨확인(interaction: discord.Interaction):
 
     now = datetime.now(KST)
 
-    # 🕘 다음 추첨: 오늘 오전 9시 또는 내일 오전 9시
+    # 🕘 다음 추첨 시각 계산
     next_draw = now.replace(hour=9, minute=0, second=0, microsecond=0)
     if now >= next_draw:
         next_draw += timedelta(days=1)
@@ -4242,17 +4242,23 @@ async def 추첨확인(interaction: discord.Interaction):
     count = len(participant_ids)
     status = "✅ 정상 진행 예정 (참여자 있음)" if count > 0 else "⚠️ 참여자가 없어 추첨이 생략될 수 있습니다."
 
+    # 💰 오덕로또 잔고 불러오기
+    oduk_pool = load_oduk_pool()
+    current_pool = oduk_pool.get("amount", 0)
+
     embed = discord.Embed(
         title="🎯 오덕로또 추첨 상태 확인",
         description=(
             f"⏰ **다음 추첨 예정**: <t:{unix_ts}:F> | ⏳ <t:{unix_ts}:R>\n"
             f"{status}\n"
-            f"👥 이번 회차 참여 인원 수: {count}명"
+            f"👥 이번 회차 참여 인원 수: {count}명\n"
+            f"💰 현재 오덕로또 상금: **{current_pool:,}원**"
         ),
         color=discord.Color.orange()
     )
 
     await interaction.followup.send(embed=embed)
+
 
 
 
