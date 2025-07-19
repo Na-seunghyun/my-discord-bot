@@ -2798,7 +2798,7 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
     # 이제 View 정의 후에 인스턴스 생성 및 메시지 전송
     selection_view = SelectionView()
     selection_message = await interaction.followup.send(
-        "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)❌ 중복 선택 불가입니다.",
+        "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)\n❌ 중복 선택 불가입니다.",
         view=selection_view
     )
 
