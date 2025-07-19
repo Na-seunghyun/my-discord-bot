@@ -2758,17 +2758,53 @@ def create_embed(title: str, description: str, color: discord.Color, user_id: st
 
 BATTLE_STATS_FILE = "battle_stats.json"
 
+
+# ✅ 배틀 기록 불러오기
 def load_battle_stats():
     if not os.path.exists(BATTLE_STATS_FILE):
         with open(BATTLE_STATS_FILE, "w", encoding="utf-8") as f:
-            json.dump({}, f, ensure_ascii=False, indent=2)
+            json.dump({}, f)
     with open(BATTLE_STATS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
+# ✅ 배틀 기록 저장
 def save_battle_stats(data):
     with open(BATTLE_STATS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, indent=2)
 
+# ✅ 날짜 기반 기록 추가
+def add_battle_result(user_id, wins, losses, profit):
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    data = load_battle_stats()
+    if user_id not in data:
+        data[user_id] = []
+    data[user_id].append({"date": today, "wins": wins, "losses": losses, "profit": profit})
+    save_battle_stats(data)
+
+# ✅ 1달 내 기록 합산
+def summarize_last_month(data):
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    result = {}
+    for uid, records in data.items():
+        wins = losses = profit = 0
+        new_records = []
+        for r in records:
+            try:
+                date = datetime.fromisoformat(r["date"])
+            except:
+                continue
+            if date >= cutoff:
+                wins += r.get("wins", 0)
+                losses += r.get("losses", 0)
+                profit += r.get("profit", 0)
+                new_records.append(r)
+        if wins + losses > 0:
+            result[uid] = {"wins": wins, "losses": losses, "profit": profit}
+        data[uid] = new_records  # 오래된 기록 삭제
+    save_battle_stats(data)
+    return result
+
+# 실제 명령어
 @tree.command(name="도박배틀", description="특정 유저와 1:1 도박 배틀을 시작합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="도전할 유저", 배팅금액="서로 걸 금액")
 async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member, 배팅금액: int):
@@ -2787,7 +2823,7 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
 
     class BattleConfirmView(discord.ui.View):
         def __init__(self, caller, target, amount):
-            super().__init__(timeout=30)
+            super().__init__(timeout=10)
             self.caller = caller
             self.target = target
             self.amount = amount
@@ -2825,16 +2861,27 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
             balances[str(loser.id)]["amount"] -= self.amount
             save_balances(balances)
 
-            stats = load_battle_stats()
-            for uid in [str(self.caller.id), str(self.target.id)]:
-                if uid not in stats:
-                    stats[uid] = {"wins": 0, "losses": 0, "profit": 0}
+            # ✅ 월 기준 통계 저장
+            add_battle_result(str(winner.id), 1, 0, self.amount)
+            add_battle_result(str(loser.id), 0, 1, -self.amount)
 
-            stats[str(winner.id)]["wins"] += 1
-            stats[str(winner.id)]["profit"] += self.amount
-            stats[str(loser.id)]["losses"] += 1
-            stats[str(loser.id)]["profit"] -= self.amount
-            save_battle_stats(stats)
+            # ✅ 두 유저 간 전적 계산
+            pair_stats = load_pair_stats()
+            uid1, uid2 = sorted([str(self.caller.id), str(self.target.id)])
+            key = f"{uid1}_{uid2}"
+            if key not in pair_stats:
+                pair_stats[key] = {uid1: 0, uid2: 0}
+            pair_stats[key][str(winner.id)] += 1
+            save_pair_stats(pair_stats)
+
+            total = pair_stats[key][uid1] + pair_stats[key][uid2]
+            wins = pair_stats[key][str(self.caller.id)]
+            losses = pair_stats[key][str(self.target.id)]
+            winrate = round((wins / total) * 100, 1) if total > 0 else 0
+
+            # ✅ 오덕 로또 잔고 출력
+            oduk_pool = load_oduk_pool()
+            pool_amount = oduk_pool.get("amount", 0)
 
             self.stop()
             try:
@@ -2843,8 +2890,11 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
                 pass
 
             await interaction.channel.send(
-                f"🎲 도박 배틀 결과: **{self.caller.mention} vs {self.target.mention}**\n"
-                f"🏆 승자: **{winner.mention}**님! **{self.amount * 2:,}원** 획득!"
+                f"🎲 도박 배틀 결과: {self.caller.mention} vs {self.target.mention}\n"
+                f"🏆 승자: **{winner.mention}**님! **{self.amount * 2:,}원** 획득!\n\n"
+                f"📊 전적 ({self.caller.display_name} vs {self.target.display_name}): {wins}승 {losses}패 (승률 {winrate}%)\n"
+                f"💰 현재 오덕로또 상금: **{pool_amount:,}원**\n"
+                f"🎟️ `/오덕로또참여`로 오늘의 운도 시험해보세요!"
             )
 
         @discord.ui.button(label="거절", style=discord.ButtonStyle.danger)
@@ -2858,26 +2908,24 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
                 pass
 
     view = BattleConfirmView(호출자, 대상, 배팅금액)
-    msg = await interaction.response.send_message(
+    await interaction.response.send_message(
         f"⚔️ {대상.mention}, {호출자.mention}님이 **{배팅금액:,}원** 걸고 1:1 도박 배틀을 요청했습니다!",
         view=view
     )
     view.message = await interaction.original_response()
 
 
+
+
 @tree.command(name="배틀왕", description="배틀 승률 기준 시즌 누적 랭킹을 확인합니다", guild=discord.Object(id=GUILD_ID))
 async def 배틀왕(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
 
-    file = "battle_stats.json"
-    if not os.path.exists(file):
-        return await interaction.followup.send("📭 기록된 배틀 정보가 없습니다.")
-
-    with open(file, "r", encoding="utf-8") as f:
-        stats = json.load(f)
+    data = load_battle_stats()
+    recent_stats = summarize_last_month(data)
 
     ranking = []
-    for uid, record in stats.items():
+    for uid, record in recent_stats.items():
         wins = record.get("wins", 0)
         losses = record.get("losses", 0)
         profit = record.get("profit", 0)
@@ -2893,10 +2941,9 @@ async def 배틀왕(interaction: discord.Interaction):
             "profit": profit
         })
 
-    # ✅ 승률 기준 정렬 (승률 → 승수 → 이름순)
     ranking.sort(key=lambda x: (-x["winrate"], -x["wins"], x["user_id"]))
 
-    lines = ["🏆 **배틀왕 랭킹 (시즌 누적 - 승률 기준)**\n"]
+    lines = ["🏆 **배틀왕 랭킹 (최근 1달 기준)**\n"]
     for i, r in enumerate(ranking[:10], start=1):
         try:
             user = await bot.fetch_user(int(r["user_id"]))
@@ -2908,6 +2955,7 @@ async def 배틀왕(interaction: discord.Interaction):
             f"(승률 {r['winrate']}%) | 수익: {'+' if r['profit'] > 0 else ''}{r['profit']:,}원"
         )
 
+    lines.append("\n※ 위 통계는 최근 1달 기준입니다.")
     await interaction.followup.send("\n".join(lines))
 
 
