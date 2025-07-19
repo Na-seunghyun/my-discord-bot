@@ -3826,8 +3826,8 @@ async def 오덕잔고설정(interaction: discord.Interaction, 금액: int):
 
 
 
-@tree.command(name="잔액초기화", description="모든 유저의 잔액 및 기록을 초기화합니다 (채널관리자 전용)", guild=discord.Object(id=GUILD_ID))
-async def 잔액초기화(interaction: discord.Interaction):
+@tree.command(name="초기화", description="모든 유저의 잔액 및 기록을 초기화합니다 (채널관리자 전용)", guild=discord.Object(id=GUILD_ID))
+async def 초기화(interaction: discord.Interaction):
     # ✅ 채널관리자 권한 확인
     role_names = [role.name for role in interaction.user.roles]
     if "채널관리자" not in role_names:
@@ -3865,14 +3865,19 @@ async def 잔액초기화(interaction: discord.Interaction):
     with open("transfer_log.json", "w", encoding="utf-8") as f:
         json.dump([], f, ensure_ascii=False, indent=2)
 
+    # ✅ 5. 도박 배틀 전적 초기화
+    with open("battle_stats.json", "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=2)
+
     await interaction.response.send_message(
         embed=create_embed(
             "✅ 초기화 완료",
-            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록, **송금 내역**이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
+            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록, **송금 내역**, **배틀 전적**이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
             discord.Color.green()
         ),
         ephemeral=False
     )
+
 
 
 
