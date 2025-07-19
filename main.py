@@ -2772,36 +2772,6 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
     chosen_icons = {}
     locked_users = set()
 
-    # SelectionView 정의를 먼저 해야 하므로 아래로 이동
-# # SelectionView는 아래에서 정의됨  # 이 줄은 이동됨
-    # SelectionView 정의 이후에 view 생성 및 메시지 전송
-    selection_view = SelectionView()
-    # selection_view는 아래에서 정의됨
-    pass
-
-    class SelectionView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=5)
-            for icon in icons:
-                self.add_item(IconButton(icon))
-
-        async def on_timeout(self):
-            for uid in participants:
-                if uid not in chosen_icons:
-                    available = [ic for ic in icons if ic not in chosen_icons.values()]
-                    if available:
-                        auto_choice = random.choice(available)
-                        chosen_icons[uid] = auto_choice
-                        await interaction.channel.send(f"⏱ {get_mention(uid)} 님이 자동 선택됨: {auto_choice}")
-            await announce_result()
-
-    # 이제 View 정의 후에 인스턴스 생성 및 메시지 전송
-    selection_view = SelectionView()
-    selection_message = await interaction.followup.send(
-        "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)\n❌ 중복 선택 불가입니다.",
-        view=selection_view
-    )
-
     class IconButton(discord.ui.Button):
         def __init__(self, label):
             super().__init__(label=label, style=discord.ButtonStyle.secondary)
@@ -2824,6 +2794,22 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
                 self.view.stop()
                 await announce_result()
 
+    class SelectionView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=5)
+            for icon in icons:
+                self.add_item(IconButton(icon))
+
+        async def on_timeout(self):
+            for uid in participants:
+                if uid not in chosen_icons:
+                    available = [ic for ic in icons if ic not in chosen_icons.values()]
+                    if available:
+                        auto_choice = random.choice(available)
+                        chosen_icons[uid] = auto_choice
+                        await interaction.channel.send(f"⏱ {get_mention(uid)} 님이 자동 선택됨: {auto_choice}")
+            await announce_result()
+
     async def announce_result():
         winner = next((uid for uid, icon in chosen_icons.items() if icon == correct_icon), None)
         total = len(participants) * 베팅액
@@ -2841,13 +2827,12 @@ async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
 
         await interaction.channel.send("\n".join(result))
 
-        # SelectionView 정의 이후에 view 생성 및 메시지 전송
     selection_view = SelectionView()
-    selection_message = await interaction.followup.send(
-        "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)
-❌ 중복 선택 불가입니다.",
+    await interaction.followup.send(
+        "🏰 **선택할 아이콘을 하나씩 고르세요!** (선착순)\n❌ 중복 선택 불가입니다.",
         view=selection_view
     )
+
 
 
 
