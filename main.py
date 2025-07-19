@@ -2755,13 +2755,6 @@ def create_embed(title: str, description: str, color: discord.Color, user_id: st
 
 
 
-import json
-import os
-import random
-import discord
-from discord import app_commands
-from discord.ext import commands
-from balance_utils import load_balances, save_balances  # ✅ 기존 정의된 함수들 import
 
 BATTLE_STATS_FILE = "battle_stats.json"
 
