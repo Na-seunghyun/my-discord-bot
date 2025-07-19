@@ -166,8 +166,6 @@ def save_investments(data):
 
 
 
-
-
 # 🎲 도박 기능용 상수 및 유틸
 BALANCE_FILE = "balance.json"
 
@@ -4244,8 +4242,95 @@ async def monitor_discord_ping():
             )
             embed.set_footer(text="🛰️ 오덕봇 자동 모니터링 시스템")
             await channel.send(embed=embed)
+            
+
+TRANSFER_LOG_FILE = "transfer_log.json"
+
+def load_transfer_logs():
+    if not os.path.exists(TRANSFER_LOG_FILE):
+        with open(TRANSFER_LOG_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f, indent=2)  # ✅ 빈 리스트로 초기화
+    with open(TRANSFER_LOG_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_transfer_logs(data):
+    with open(TRANSFER_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def log_transfer(sender_id, receiver_id, amount):
+    logs = load_transfer_logs()
+
+    now = datetime.now(timezone(timedelta(hours=9)))
+    cutoff = now - timedelta(days=10)
+
+    # 🔥 오래된 기록 제거 (10일 이전)
+    logs = [
+        log for log in logs
+        if datetime.fromisoformat(log["timestamp"]) >= cutoff
+    ]
+
+    # 🆕 새로운 기록 추가
+    logs.append({
+        "sender": str(sender_id),
+        "receiver": str(receiver_id),
+        "amount": amount,
+        "timestamp": now.isoformat()
+    })
+
+    save_transfer_logs(logs)
 
 
+@tree.command(name="송금확인", description="해당 유저의 송금 내역을 확인합니다", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(대상="송금 기록을 확인할 유저")
+async def 송금확인(interaction: discord.Interaction, 대상: discord.User):
+    target_id = str(대상.id)
+    logs = load_transfer_logs()
+
+    now = datetime.now(timezone(timedelta(hours=9)))
+    summary = {}
+    recent = []
+
+    for record in logs:
+        if record["sender"] == target_id:
+            receiver = record["receiver"]
+            amount = record["amount"]
+            ts = datetime.fromisoformat(record["timestamp"])
+
+            # 총합 누적
+            summary[receiver] = summary.get(receiver, 0) + amount
+
+            # 최근 5일 이내 로그 누적
+            if now - ts <= timedelta(days=5):
+                recent.append((receiver, amount, ts))
+
+    if not summary:
+        return await interaction.response.send_message(
+            embed=discord.Embed(
+                title="📭 송금 기록 없음",
+                description=f"{대상.mention}님의 송금 기록이 없습니다.",
+                color=discord.Color.light_grey()
+            ), ephemeral=True
+        )
+
+    # ⬆️ 총합 파트
+    desc = f"📤 {대상.mention}님의 송금 기록 요약\n\n"
+    for uid, total in summary.items():
+        desc += f"👤 <@{uid}>님에게 총 {total:,}원\n"
+
+    # ⬇️ 최근 5일간 로그 파트
+    if recent:
+        desc += f"\n📅 최근 5일간 송금 내역:\n"
+        recent_sorted = sorted(recent, key=lambda x: x[2], reverse=True)
+        for uid, amount, ts in recent_sorted:
+            desc += f"- <@{uid}>님에게 {amount:,}원 | {ts.strftime('%Y-%m-%d %H:%M')}\n"
+
+    # 길이 초과 방지
+    chunks = split_message_chunks(desc)
+    for i, chunk in enumerate(chunks):
+        if i == 0:
+            await interaction.response.send_message(chunk, ephemeral=True)
+        else:
+            await interaction.followup.send(chunk, ephemeral=True)
 
 
 
