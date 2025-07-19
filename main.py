@@ -2755,6 +2755,176 @@ def create_embed(title: str, description: str, color: discord.Color, user_id: st
 
 
 
+import json
+import os
+import random
+import discord
+from discord import app_commands
+from discord.ext import commands
+from balance_utils import load_balances, save_balances  # ✅ 기존 정의된 함수들 import
+
+BATTLE_STATS_FILE = "battle_stats.json"
+
+def load_battle_stats():
+    if not os.path.exists(BATTLE_STATS_FILE):
+        with open(BATTLE_STATS_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
+    with open(BATTLE_STATS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_battle_stats(data):
+    with open(BATTLE_STATS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+@tree.command(name="도박배틀", description="특정 유저와 1:1 도박 배틀을 시작합니다", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(대상="도전할 유저", 배팅금액="서로 걸 금액")
+async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member, 배팅금액: int):
+    호출자 = interaction.user
+    if 호출자.id == 대상.id:
+        return await interaction.response.send_message("❌ 자신과는 배틀할 수 없습니다.", ephemeral=True)
+
+    caller_id = str(호출자.id)
+    target_id = str(대상.id)
+
+    balances = load_balances()
+    if caller_id not in balances or balances[caller_id]["amount"] < 배팅금액:
+        return await interaction.response.send_message("❌ 배팅할 충분한 잔액이 없습니다.", ephemeral=True)
+    if target_id not in balances or balances[target_id]["amount"] < 배팅금액:
+        return await interaction.response.send_message("❌ 상대 유저가 배팅금액을 감당할 수 없습니다.", ephemeral=True)
+
+    class BattleConfirmView(discord.ui.View):
+        def __init__(self, caller, target, amount):
+            super().__init__(timeout=30)
+            self.caller = caller
+            self.target = target
+            self.amount = amount
+            self.message = None
+
+        async def on_timeout(self):
+            for child in self.children:
+                child.disabled = True
+            try:
+                if self.message:
+                    await self.message.edit(content="⏱️ 시간 초과로 배틀이 자동 취소되었습니다.", view=self)
+            except:
+                pass
+
+        @discord.ui.button(label="도전 수락", style=discord.ButtonStyle.success)
+        async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if interaction.user.id != self.target.id:
+                return await interaction.response.send_message("❌ 이 버튼은 도전 대상만 누를 수 있습니다.", ephemeral=True)
+
+            balances = load_balances()
+            if balances.get(str(self.caller.id), {}).get("amount", 0) < self.amount or \
+               balances.get(str(self.target.id), {}).get("amount", 0) < self.amount:
+                self.stop()
+                await interaction.response.send_message("❌ 한쪽 유저의 잔액이 부족해 배틀이 취소되었습니다.", ephemeral=True)
+                try:
+                    await self.message.edit(content="🚫 잔액 부족으로 배틀이 취소되었습니다.", view=None)
+                except:
+                    pass
+                return
+
+            winner = random.choice([self.caller, self.target])
+            loser = self.target if winner == self.caller else self.caller
+
+            balances[str(winner.id)]["amount"] += self.amount
+            balances[str(loser.id)]["amount"] -= self.amount
+            save_balances(balances)
+
+            stats = load_battle_stats()
+            for uid in [str(self.caller.id), str(self.target.id)]:
+                if uid not in stats:
+                    stats[uid] = {"wins": 0, "losses": 0, "profit": 0}
+
+            stats[str(winner.id)]["wins"] += 1
+            stats[str(winner.id)]["profit"] += self.amount
+            stats[str(loser.id)]["losses"] += 1
+            stats[str(loser.id)]["profit"] -= self.amount
+            save_battle_stats(stats)
+
+            self.stop()
+            try:
+                await self.message.edit(view=None)
+            except:
+                pass
+
+            await interaction.channel.send(
+                f"🎲 도박 배틀 결과: **{self.caller.mention} vs {self.target.mention}**\n"
+                f"🏆 승자: **{winner.mention}**님! **{self.amount * 2:,}원** 획득!"
+            )
+
+        @discord.ui.button(label="거절", style=discord.ButtonStyle.danger)
+        async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if interaction.user.id != self.target.id:
+                return await interaction.response.send_message("❌ 이 버튼은 도전 대상만 누를 수 있습니다.", ephemeral=True)
+            self.stop()
+            try:
+                await self.message.edit(content="🚫 배틀이 거절되었습니다.", view=None)
+            except:
+                pass
+
+    view = BattleConfirmView(호출자, 대상, 배팅금액)
+    msg = await interaction.response.send_message(
+        f"⚔️ {대상.mention}, {호출자.mention}님이 **{배팅금액:,}원** 걸고 1:1 도박 배틀을 요청했습니다!",
+        view=view
+    )
+    view.message = await interaction.original_response()
+
+
+@tree.command(name="배틀왕", description="배틀 승률 기준 시즌 누적 랭킹을 확인합니다", guild=discord.Object(id=GUILD_ID))
+async def 배틀왕(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+
+    file = "battle_stats.json"
+    if not os.path.exists(file):
+        return await interaction.followup.send("📭 기록된 배틀 정보가 없습니다.")
+
+    with open(file, "r", encoding="utf-8") as f:
+        stats = json.load(f)
+
+    ranking = []
+    for uid, record in stats.items():
+        wins = record.get("wins", 0)
+        losses = record.get("losses", 0)
+        profit = record.get("profit", 0)
+        total = wins + losses
+        if total == 0:
+            continue
+        winrate = round((wins / total) * 100, 1)
+        ranking.append({
+            "user_id": uid,
+            "wins": wins,
+            "losses": losses,
+            "winrate": winrate,
+            "profit": profit
+        })
+
+    # ✅ 승률 기준 정렬 (승률 → 승수 → 이름순)
+    ranking.sort(key=lambda x: (-x["winrate"], -x["wins"], x["user_id"]))
+
+    lines = ["🏆 **배틀왕 랭킹 (시즌 누적 - 승률 기준)**\n"]
+    for i, r in enumerate(ranking[:10], start=1):
+        try:
+            user = await bot.fetch_user(int(r["user_id"]))
+            mention = user.mention
+        except:
+            mention = f"<@{r['user_id']}>"
+        lines.append(
+            f"**{i}위. {mention}** – {r['wins']}승 {r['losses']}패 "
+            f"(승률 {r['winrate']}%) | 수익: {'+' if r['profit'] > 0 else ''}{r['profit']:,}원"
+        )
+
+    await interaction.followup.send("\n".join(lines))
+
+
+
+
+
+
+
+
+
 
 
 
