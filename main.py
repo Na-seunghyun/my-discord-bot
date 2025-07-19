@@ -1605,20 +1605,33 @@ class ChannelConfirmButton(discord.ui.Button):
             ]
             excluded_note = ""
 
-        moved_members = []
-
+        # ✅ 이동 대상 수집
+        members_to_move = []
         for ch in target_channels:
             for member in ch.members:
                 if member.bot:
                     continue
                 if member.voice and member.voice.channel.id == vc.id:
-                    continue  # 나와 같은 채널은 스킵
-                try:
-                    await member.move_to(vc)
-                    moved_members.append(member.display_name)
-                    await asyncio.sleep(0.5)
-                except Exception as e:
-                    print(f"❌ {member.display_name} 이동 실패: {e}")
+                    continue
+                members_to_move.append(member)
+
+        # ✅ 고속 이동 함수 정의
+        async def move_members_in_batches(members, target_vc, batch_size=4, delay=0.3):
+            moved_names = []
+            for i in range(0, len(members), batch_size):
+                batch = members[i:i+batch_size]
+                tasks = [m.move_to(target_vc) for m in batch]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for member, result in zip(batch, results):
+                    if isinstance(result, Exception):
+                        print(f"❌ {member.display_name} 이동 실패: {result}")
+                    else:
+                        moved_names.append(member.display_name)
+                await asyncio.sleep(delay)
+            return moved_names
+
+        # ✅ 이동 실행
+        moved_members = await move_members_in_batches(members_to_move, vc)
 
         if not moved_members:
             await interaction.followup.send("⚠️ 이동할 멤버가 없습니다.", ephemeral=True)
@@ -1640,6 +1653,7 @@ class ChannelConfirmButton(discord.ui.Button):
             await interaction.message.edit(view=None)
         except discord.NotFound:
             pass
+
 
 
 class ChannelSelectView(discord.ui.View):
