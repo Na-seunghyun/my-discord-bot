@@ -2732,6 +2732,100 @@ def create_embed(title: str, description: str, color: discord.Color, user_id: st
 
 
 
+ICON_POOL = ["💎", "🍭", "🎮", "🧸", "📱", "🪙", "🔑", "🎈", "🍕", "🐱"]
+
+@tree.command(name="선물고르기", description="선물 고르기 도박 게임 (1명만 당첨!)", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(베팅액="1인당 베팅 금액")
+async def 선물고르기(interaction: discord.Interaction, 베팅액: int):
+    if 베팅액 < 1000:
+        return await interaction.response.send_message("❌ 최소 1,000원 이상 베팅해야 합니다.", ephemeral=True)
+
+    participants = []
+
+    class JoinView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=5)
+
+        @discord.ui.button(label="🎁 참여하기", style=discord.ButtonStyle.success)
+        async def join(self, i: discord.Interaction, b: discord.ui.Button):
+            uid = str(i.user.id)
+            if uid in participants:
+                return await i.response.send_message("이미 참여하셨습니다.", ephemeral=True)
+            if get_balance(uid) < 베팅액:
+                return await i.response.send_message("잔액이 부족합니다.", ephemeral=True)
+            add_balance(uid, -베팅액)
+            participants.append(uid)
+            await i.response.send_message("✅ 참여 완료!", ephemeral=True)
+
+    await interaction.response.send_message(
+        f"🎁 **선물 고르기 도박 시작!**\n5초 안에 참여해주세요.\n1인당 베팅액: **{베팅액:,}원**",
+        view=JoinView()
+    )
+    await asyncio.sleep(5)
+
+    if len(participants) < 2:
+        return await interaction.followup.send("❌ 2명 이상 참여해야 게임이 진행됩니다.")
+
+    icons = random.sample(ICON_POOL, len(participants))
+    correct_icon = random.choice(icons)
+    choices = {}
+
+    for uid in participants:
+        class IconView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=2)
+                self.chosen = None
+                for icon in icons:
+                    if icon in choices.values():
+                        disabled = True
+                    else:
+                        disabled = False
+                    self.add_item(IconButton(icon, disabled, uid, self))
+
+        class IconButton(discord.ui.Button):
+            def __init__(self, label, disabled, user_id, parent):
+                super().__init__(label=label, style=discord.ButtonStyle.secondary, disabled=disabled)
+                self.user_id = user_id
+                self.parent = parent
+
+            async def callback(self, i: discord.Interaction):
+                if str(i.user.id) != self.user_id:
+                    return await i.response.send_message("지금은 당신의 차례가 아닙니다!", ephemeral=True)
+                if self.label in choices.values():
+                    return await i.response.send_message("이미 고른 아이콘입니다.", ephemeral=True)
+                self.parent.chosen = self.label
+                self.parent.stop()
+
+        view = IconView()
+        prompt = await interaction.followup.send(f"{get_mention(uid)} 님, 2초 안에 선물 아이콘을 고르세요!", view=view)
+        await view.wait()
+
+        # 선택 없음 → 자동 선택
+        if view.chosen:
+            chosen = view.chosen
+        else:
+            remain = [ic for ic in icons if ic not in choices.values()]
+            chosen = random.choice(remain)
+            await interaction.followup.send(f"⏱ {get_mention(uid)} 님이 자동 선택됨: {chosen}")
+
+        choices[uid] = chosen
+        await prompt.edit(view=None)
+
+    winner = next((uid for uid, ic in choices.items() if ic == correct_icon), None)
+    total = len(participants) * 베팅액
+    if winner: add_balance(winner, total)
+
+    result = [f"🎯 **당첨 아이콘: {correct_icon}**"]
+    for uid, ic in choices.items():
+        tag = "🎉 당첨!" if uid == winner else "❌ 실패"
+        result.append(f"{get_mention(uid)} → {ic} {tag}")
+    if winner:
+        result.append(f"\n🏆 {get_mention(winner)} 님이 **{total:,}원**을 획득했습니다!")
+    else:
+        result.append("\n😢 당첨자가 없어 상금이 소멸되었습니다.")
+
+    await interaction.followup.send("\n".join(result))
+
 
 
 
