@@ -3577,6 +3577,40 @@ def generate_change():
 
 
 
+@tree.command(name="오덕잔고설정", description="오덕로또 상금을 수동으로 설정합니다 (채널관리자 전용)", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(금액="설정할 오덕로또 상금 금액 (0 이상)")
+async def 오덕잔고설정(interaction: discord.Interaction, 금액: int):
+    # ✅ 채널관리자 권한 확인
+    role_names = [role.name for role in interaction.user.roles]
+    if "채널관리자" not in role_names:
+        return await interaction.response.send_message(
+            embed=create_embed("❌ 권한 없음", "이 명령어는 **'채널관리자' 역할**만 사용할 수 있습니다.", discord.Color.red()),
+            ephemeral=True
+        )
+
+    # ✅ 유효성 검사
+    if 금액 < 0:
+        return await interaction.response.send_message(
+            embed=create_embed("⚠️ 잘못된 금액", "금액은 **0 이상**이어야 합니다.", discord.Color.orange()),
+            ephemeral=True
+        )
+
+    # ✅ 오덕 로또 잔고 설정
+    global oduk_pool_cache
+    oduk_pool_cache = load_oduk_pool()
+    oduk_pool_cache["amount"] = 금액
+    save_oduk_pool(oduk_pool_cache)
+
+    await interaction.response.send_message(
+        embed=create_embed(
+            "✅ 오덕잔고 설정 완료",
+            f"오덕로또 상금이 **{금액:,}원**으로 설정되었습니다.",
+            discord.Color.blue()
+        ),
+        ephemeral=False
+    )
+
+
 
 
 
@@ -3613,10 +3647,14 @@ async def 잔액초기화(interaction: discord.Interaction):
     save_investment_history([])  # 수익 히스토리 초기화
     save_last_chart_time(datetime.utcnow())  # 주가 갱신 기준 초기화
 
+    # ✅ 4. 송금 기록 초기화
+    with open("transfer_log.json", "w", encoding="utf-8") as f:
+        json.dump([], f, ensure_ascii=False, indent=2)
+
     await interaction.response.send_message(
         embed=create_embed(
             "✅ 초기화 완료",
-            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
+            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록, **송금 내역**이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
             discord.Color.green()
         ),
         ephemeral=False
