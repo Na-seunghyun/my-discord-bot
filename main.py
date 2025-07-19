@@ -3644,8 +3644,11 @@ async def 잔액초기화(interaction: discord.Interaction):
 
     # ✅ 3. 투자 데이터 초기화 (종목은 유지)
     save_investments([])  # 보유 주식 초기화
-    save_investment_history([])  # 수익 히스토리 초기화
     save_last_chart_time(datetime.utcnow())  # 주가 갱신 기준 초기화
+
+    # ✅ 3-1. 투자 수익 히스토리 초기화 (투자왕 기록 포함)
+    with open("investment_history.json", "w", encoding="utf-8") as f:
+        json.dump([], f, indent=4)
 
     # ✅ 4. 송금 기록 초기화
     with open("transfer_log.json", "w", encoding="utf-8") as f:
@@ -3659,6 +3662,7 @@ async def 잔액초기화(interaction: discord.Interaction):
         ),
         ephemeral=False
     )
+
 
 
 
