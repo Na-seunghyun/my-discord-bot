@@ -4051,24 +4051,24 @@ async def auto_oduk_lotto(force: bool = False):
         color=discord.Color.gold() if not force else discord.Color.purple()
     )
 
-for guild in bot.guilds:
-    channel = discord.utils.get(guild.text_channels, name="오덕도박장")
-    if channel:
-        try:
-            tag = "@everyone 오늘의 오덕로또 결과입니다!" if not force else "@everyone 테스트용 수동추첨 결과입니다!"
-            
-            # ✅ 추첨 결과 메시지 전송
-            await channel.send(tag, embed=embed)
+    for guild in bot.guilds:
+        channel = discord.utils.get(guild.text_channels, name="오덕도박장")
+        if channel:
+            try:
+                tag = "@everyone 오늘의 오덕로또 결과입니다!" if not force else "@everyone 테스트용 수동추첨 결과입니다!"
+                
+                # ✅ 추첨 결과 메시지 전송
+                await channel.send(tag, embed=embed)
 
-            # ✅ 당첨자가 1명 이상 있을 때만 행운 메시지 + GIF 전송
-            if tier1 or tier2 or tier3:
-                fun_msg = "😎 저의 행운이 당신에게 닿았군요...\n오덕봇의 행운의 키스를! 👏👏"
-                luck_embed = discord.Embed()
-                luck_embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/midium.gif")
-                await channel.send(content=fun_msg, embed=luck_embed)
+                # ✅ 당첨자가 1명 이상 있을 때만 행운 메시지 + GIF 전송
+                if tier1 or tier2 or tier3:
+                    fun_msg = "😎 저의 행운이 당신에게 닿았군요...\n오덕봇의 행운의 키스를! 👏👏"
+                    luck_embed = discord.Embed()
+                    luck_embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/midium.gif")
+                    await channel.send(content=fun_msg, embed=luck_embed)
 
-        except Exception as e:
-            print(f"❌ 로또 결과 전송 실패: {e}")
+            except Exception as e:
+                print(f"❌ 로또 결과 전송 실패: {e}")
 
     print(f"✅ 오덕로또 추첨 완료됨! 정답: {answer} + 보너스({bonus})")
     print(f"🥇 1등: {len(tier1)}명 | 🥈 2등: {len(tier2)}명 | 🥉 3등: {len(tier3)}명")
