@@ -4283,7 +4283,17 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
         f"\n💰 현재 잔액: {get_balance(user_id):,}원"
     )
 
+    # ✅ 기존 참여 결과 텍스트 메시지 전송
     await interaction.response.send_message(content=desc)
+
+    # ✅ 행운 메시지 + GIF 이미지 추가 전송
+    embed = discord.Embed()
+    embed.set_image(url="https://raw.githubusercontent.com/Na-seunghyun/my-discord-bot/main/midium.gif")
+    await interaction.followup.send(
+        content="당신에게 행운이 닿기를 🍀",
+        embed=embed
+    )
+
 
 
 
