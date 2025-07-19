@@ -3898,9 +3898,18 @@ ODUK_LOTTO_ENTRIES_FILE = "oduk_lotto_entries.json"
 def load_oduk_lotto_entries():
     if not os.path.exists(ODUK_LOTTO_ENTRIES_FILE):
         with open(ODUK_LOTTO_ENTRIES_FILE, "w", encoding="utf-8") as f:
-            json.dump({}, f, ensure_ascii=False, indent=2)
+            json.dump([], f, ensure_ascii=False, indent=2)  # ✅ 리스트로 초기화
+
     with open(ODUK_LOTTO_ENTRIES_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        try:
+            data = json.load(f)
+            if isinstance(data, dict):  # 혹시 이전에 dict로 잘못 저장된 경우
+                print("⚠️ 잘못된 형식 감지 → 빈 리스트로 초기화됨")
+                return []
+            return data
+        except json.JSONDecodeError:
+            print("⚠️ JSON 파싱 실패 → 빈 리스트로 초기화됨")
+            return []
 
 def save_oduk_lotto_entries(data):
     with open(ODUK_LOTTO_ENTRIES_FILE, "w", encoding="utf-8") as f:
