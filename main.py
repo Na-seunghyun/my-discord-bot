@@ -2982,21 +2982,16 @@ async def 배팅금액_자동완성(
     target_id = str(target_member.id)
     target_bal = balances.get(target_id, {}).get("amount", 0)
 
-    # 두 사람 중 더 적은 잔액을 기준으로 추천
+    # 두 사람 중 더 적은 잔액을 기준으로 최대 가능 금액 설정
     max_bet = min(caller_bal, target_bal)
     if max_bet <= 0:
         return [app_commands.Choice(name="❌ 배팅 가능 금액 없음", value="0")]
 
-    # 추천 리스트 생성
-    suggestions = [max_bet]
-    if max_bet >= 1000:
-        suggestions += [int(max_bet * 0.5), 1000]
-
-    suggestions = sorted(set(suggestions), reverse=True)
-
     return [
-        app_commands.Choice(name=f"{v:,}원 (추천)", value=str(v))
-        for v in suggestions
+        app_commands.Choice(
+            name=f"{max_bet:,}원 (최대 가능 금액)",
+            value=str(max_bet)
+        )
     ]
 
 
