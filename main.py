@@ -2831,7 +2831,6 @@ def save_pair_stats(data):
 async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member, 배팅금액: int):
     호출자 = interaction.user
 
-    # ✅ 허용된 채널: 오덕도박장, 오덕코인
     allowed_channel_ids = [1394331814642057418, 1394519744463245543]
     if interaction.channel.id not in allowed_channel_ids:
         return await interaction.response.send_message(
@@ -2873,6 +2872,8 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
                 return await interaction.response.send_message("❌ 이 버튼은 도전 대상만 누를 수 있습니다.", ephemeral=True)
 
             balances = load_balances()
+
+            # ✅ 다시 잔액 확인 후 양측 선차감
             if balances.get(str(self.caller.id), {}).get("amount", 0) < self.amount or \
                balances.get(str(self.target.id), {}).get("amount", 0) < self.amount:
                 self.stop()
@@ -2883,26 +2884,27 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
                     pass
                 return
 
+            balances[str(self.caller.id)]["amount"] -= self.amount
+            balances[str(self.target.id)]["amount"] -= self.amount
+
+            # ✅ 승자 결정
             winner = random.choice([self.caller, self.target])
             loser = self.target if winner == self.caller else self.caller
 
+            # ✅ 세금 및 지급 처리
+            total_bet = self.amount * 2
+            tax = int(total_bet * 0.1)
+            net_gain = total_bet - tax
+            add_oduk_pool(tax)
 
-            # ✅ 세금 계산 및 오덕로또 적립
-            total_bet = self.amount * 2                  # 전체 배팅금: 10만 원
-            tax = int(total_bet * 0.1)                   # 전체의 10% → 1만 원
-            net_gain = total_bet - tax                   # 승자는 9만 원 수령 (5만 걸고 4만 이익)
-            add_oduk_pool(tax)                           # 오덕로또 적립은 1만 원
-
-            pool_amount = get_oduk_pool_amount()  # 세금 적립 이후 최신 값 재조회
-            
-            balances[str(winner.id)]["amount"] += self.amount
-            balances[str(loser.id)]["amount"] -= self.amount
-            balances[str(winner.id)]["amount"] += net_gain  # 세금 제외하고 지급
+            balances[str(winner.id)]["amount"] += net_gain
             save_balances(balances)
 
+            # ✅ 전적 기록
             add_battle_result(str(winner.id), 1, 0, self.amount)
             add_battle_result(str(loser.id), 0, 1, -self.amount)
 
+            # ✅ 개인간 전적 기록
             pair_stats = load_pair_stats()
             uid1, uid2 = sorted([str(self.caller.id), str(self.target.id)])
             key = f"{uid1}_{uid2}"
@@ -2925,11 +2927,19 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
             except:
                 pass
 
+            # ✅ 현재 잔액 조회
+            caller_amount = balances.get(str(self.caller.id), {}).get("amount", 0)
+            target_amount = balances.get(str(self.target.id), {}).get("amount", 0)
+
             await interaction.channel.send(
                 f"🎲 도박 배틀 결과: {self.caller.mention} vs {self.target.mention}\n"
-                f"🏆 승자: **{winner.mention}**님! **{net_gain:,}원** 획득! (세금 {tax:,}원 → 오덕로또 적립)\n\n"
-                f"📊 전체 전적 ({self.caller.display_name} vs {self.target.display_name}): {caller_wins}승 {target_wins}패 (승률 {winrate}%)\n"
-                f"💰 현재 오덕로또 상금: **{pool_amount:,}원**\n"
+                f"🏆 승자: **{winner.mention}**님! **{net_gain:,}원** 획득! "
+                f"(세금 {tax:,}원 → 오덕로또 적립)\n\n"
+                f"📊 전체 전적 ({self.caller.display_name} vs {self.target.display_name}): "
+                f"{caller_wins}승 {target_wins}패 (승률 {winrate}%)\n"
+                f"💰 현재 잔액:\n"
+                f"  {self.caller.display_name}: **{caller_amount:,}원**\n"
+                f"  {self.target.display_name}: **{target_amount:,}원**\n"
                 f"🎟️ `/오덕로또참여`로 오늘의 운도 시험해보세요!"
             )
 
@@ -2949,6 +2959,8 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
         view=view
     )
     view.message = await interaction.original_response()
+
+
 
 
 
