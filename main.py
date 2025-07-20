@@ -2830,6 +2830,14 @@ def save_pair_stats(data):
 @app_commands.describe(대상="도전할 유저", 배팅금액="서로 걸 금액")
 async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member, 배팅금액: int):
     호출자 = interaction.user
+
+    # ✅ 허용된 채널: 오덕도박장, 오덕코인
+    allowed_channel_ids = [1394331814642057418, 1394519744463245543]
+    if interaction.channel.id not in allowed_channel_ids:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
     if 호출자.id == 대상.id:
         return await interaction.response.send_message("❌ 자신과는 배틀할 수 없습니다.", ephemeral=True)
 
