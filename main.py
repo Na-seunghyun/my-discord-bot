@@ -525,24 +525,7 @@ async def on_member_join(member):
     if not channel:
         return
 
-    # ✅ 현재 초대 링크 목록 가져오기
-    try:
-        current_invites = await guild.invites()
-    except Exception as e:
-        print(f"❌ 현재 초대 링크 불러오기 실패: {e}")
-        return
-
-    # ✅ 최신 초대 상태를 실시간으로 캐시에 반영 (정확도 향상 핵심)
-    global invites_cache
-    invites_cache[str(guild.id)] = {
-        invite.code: {
-            "uses": invite.uses,
-            "inviter_id": invite.inviter.id if invite.inviter else None
-        }
-        for invite in current_invites
-    }
-
-    # ✅ 비교용으로 직전에 저장된 캐시 불러오기
+    # ✅ 이전 invite 정보 확보 먼저 (❗수정된 위치)
     old_invites = invites_cache.get(str(guild.id), {})
 
     # ✅ fallback: invites_cache.json 파일에서 불러오기 (초기 실행 대비)
@@ -556,6 +539,13 @@ async def on_member_join(member):
             print(f"❌ invites_cache.json 로딩 실패: {e}")
             old_invites = {}
 
+    # ✅ 현재 초대 링크 목록 가져오기
+    try:
+        current_invites = await guild.invites()
+    except Exception as e:
+        print(f"❌ 현재 초대 링크 불러오기 실패: {e}")
+        return
+
     # ✅ 누가 초대한 것인지 비교
     inviter = None
     for invite in current_invites:
@@ -565,6 +555,17 @@ async def on_member_join(member):
             if inviter_id:
                 inviter = guild.get_member(inviter_id)
             break
+
+    # ✅ 현재 초대 상태를 실시간으로 캐시에 반영 (❗덮어쓰기 시점 변경됨)
+    global invites_cache
+    invites_cache[str(guild.id)] = {
+        invite.code: {
+            "uses": invite.uses,
+            "inviter_id": invite.inviter.id if invite.inviter else None
+        }
+        for invite in current_invites
+    }
+    save_invite_cache()
 
     # ✅ 입장 시간 계산
     KST = timezone(timedelta(hours=9))
@@ -593,6 +594,7 @@ async def on_member_join(member):
     message = await channel.send(embed=embed)
     view = WelcomeButton(member=member, original_message=message)
     await message.edit(view=view)
+
 
 
 
@@ -4692,8 +4694,8 @@ async def 송금확인(interaction: discord.Interaction, 대상: discord.User):
 @bot.event
 async def on_ready():
     print(f"🤖 봇 로그인됨: {bot.user}")
-    monitor_discord_ping.start()  # ✅ 이 줄 추가
-    await asyncio.sleep(2)  # 약간 대기
+    monitor_discord_ping.start()
+    await asyncio.sleep(2)
 
     for guild in bot.guilds:
         print(f"접속 서버: {guild.name} (ID: {guild.id})")
@@ -4704,23 +4706,20 @@ async def on_ready():
     except Exception as e:
         print(f"❌ 슬래시 명령어 동기화 실패: {e}")
 
-    # ⏲️ 자정 루프 시작
     if not reset_daily_claims.is_running():
         reset_daily_claims.start()
 
-    # 초대 캐시 초기화 및 저장
-    global invites_cache
-    invites_cache = {}
-
+    # ✅ 오덕 캐시
     global oduk_pool_cache
     oduk_pool_cache = load_oduk_pool()
-
     if oduk_pool_cache is None:
         print("⚠️ 오덕 잔고 파일이 아직 없습니다. 처음 사용할 때 생성됩니다.")
-        oduk_pool_cache = {}  # 또는 기본값 딕셔너리
+        oduk_pool_cache = {}
     else:
         print(f"🔄 오덕 캐시 로딩됨: {oduk_pool_cache}")
-   
+
+    # ✅ 초대 캐시 불러오기 먼저
+    load_invite_cache()
 
     for guild in bot.guilds:
         try:
@@ -4748,6 +4747,7 @@ async def on_ready():
         print("⏱ 초대 캐시 자동 갱신 루프 시작됨")
     except RuntimeError:
         print("⚠️ auto_refresh_invites 루프는 이미 실행 중입니다.")
+
 
     # 자동 닉네임 검사 및 저장
     target_guild = discord.utils.get(bot.guilds, id=GUILD_ID)
