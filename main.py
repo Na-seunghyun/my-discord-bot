@@ -2876,6 +2876,7 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
             
             balances[str(winner.id)]["amount"] += self.amount
             balances[str(loser.id)]["amount"] -= self.amount
+            balances[str(winner.id)]["amount"] += net_gain  # 세금 제외하고 지급
             save_balances(balances)
 
             add_battle_result(str(winner.id), 1, 0, self.amount)
