@@ -3409,7 +3409,7 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
     random.shuffle(종목_전체)
 
     # ✅ 랜덤한 종목 수만큼 선택
-    선택종목수 = random.randint(1, min(30, len(종목_전체)))
+    선택종목수 = random.randint(5, min(30, len(종목_전체)))
     선택된종목 = 종목_전체[:선택종목수]
 
     investments = load_investments()
