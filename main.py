@@ -2961,6 +2961,54 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
     view.message = await interaction.original_response()
 
 
+@도박배틀.autocomplete("배팅금액")
+async def 배팅금액_자동완성(
+    interaction: discord.Interaction,
+    current: str
+):
+    from discord import app_commands
+
+    balances = load_balances()
+    caller_id = str(interaction.user.id)
+    caller_bal = balances.get(caller_id, {}).get("amount", 0)
+
+    # 안전하게 대상 유저 불러오기
+    target_member = getattr(interaction.namespace, "대상", None)
+    if target_member is None:
+        return [
+            app_commands.Choice(name="⚠️ 먼저 대상을 선택하세요.", value="0")
+        ]
+
+    target_id = str(target_member.id)
+    target_bal = balances.get(target_id, {}).get("amount", 0)
+
+    # 두 사람 중 더 적은 잔액을 기준으로 추천
+    max_bet = min(caller_bal, target_bal)
+    if max_bet <= 0:
+        return [app_commands.Choice(name="❌ 배팅 가능 금액 없음", value="0")]
+
+    # 추천 리스트 생성
+    suggestions = [max_bet]
+    if max_bet >= 1000:
+        suggestions += [int(max_bet * 0.5), 1000]
+
+    suggestions = sorted(set(suggestions), reverse=True)
+
+    return [
+        app_commands.Choice(name=f"{v:,}원 (추천)", value=str(v))
+        for v in suggestions
+    ]
+
+
+
+
+
+
+
+
+
+
+
 
 
 
