@@ -2671,6 +2671,34 @@ async def 복권(interaction: discord.Interaction, 베팅액: int):
         ephemeral=False
     )
 
+@복권.autocomplete("베팅액")
+async def 복권_배팅액_자동완성(interaction: discord.Interaction, current: str):
+    from discord import app_commands
+
+    balances = load_balances()
+    user_id = str(interaction.user.id)
+    balance = balances.get(user_id, {}).get("amount", 0)
+
+    if balance < 1000:
+        return [app_commands.Choice(name="❌ 최소 베팅금 부족", value="0")]
+
+    half = balance // 2
+    allin = balance
+
+    choices = [
+        app_commands.Choice(name=f"🔥 전액 배팅 ({allin:,}원)", value=str(allin)),
+        app_commands.Choice(name=f"💸 절반 배팅 ({half:,}원)", value=str(half)),
+    ]
+
+    return choices
+
+
+
+
+
+
+
+
 
 @tree.command(name="슬롯", description="애니메이션 슬롯머신 게임!", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
@@ -2741,6 +2769,30 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
     await message.edit(
         content=f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n{outcome}\n💵 현재 잔액: {get_balance(user_id):,}원"
     )
+
+
+@슬롯.autocomplete("베팅액")
+async def 슬롯_배팅액_자동완성(interaction: discord.Interaction, current: str):
+    from discord import app_commands
+
+    balances = load_balances()
+    user_id = str(interaction.user.id)
+    balance = balances.get(user_id, {}).get("amount", 0)
+
+    if balance < 1000:
+        return [app_commands.Choice(name="❌ 최소 베팅금 부족", value="0")]
+
+    half = balance // 2
+    allin = balance
+
+    choices = [
+        app_commands.Choice(name=f"🔥 전액 배팅 ({allin:,}원)", value=str(allin)),
+        app_commands.Choice(name=f"💸 절반 배팅 ({half:,}원)", value=str(half)),
+    ]
+
+    return choices
+
+
 
 
 @tree.command(name="도박순위", description="도박 잔액 순위 TOP 10", guild=discord.Object(id=GUILD_ID))
