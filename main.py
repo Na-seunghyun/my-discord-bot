@@ -339,7 +339,6 @@ async def on_member_update(before, after):
 
 
 
-
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -348,9 +347,6 @@ async def on_message(message):
     # ✅ 텍스트 채널인지 먼저 확인
     if not isinstance(message.channel, discord.TextChannel):
         return  # DM이나 기타 채널일 경우 무시
-
-    if str(message.channel.name) != WELCOME_CHANNEL_NAME:
-        return
 
     msg = message.content
     lowered_msg = msg.lower()
@@ -377,6 +373,7 @@ async def on_message(message):
         save_warnings()
 
     await bot.process_commands(message)
+
 
 
 # 경고 확인 슬래시 명령어
