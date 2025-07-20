@@ -630,7 +630,7 @@ async def on_member_remove(member):
 
 from discord.ext import tasks
 
-@tasks.loop(minutes=10)  # 주기적으로 초대 캐시 갱신
+@tasks.loop(minutes=1)  # 주기적으로 초대 캐시 갱신
 async def auto_refresh_invites():
     global invites_cache
     for guild in bot.guilds:
