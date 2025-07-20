@@ -520,12 +520,14 @@ def save_invite_cache():
 
 @bot.event
 async def on_member_join(member):
+    global invites_cache  # ✅ 맨 위에서 선언해줘야 안전
+
     guild = member.guild
     channel = discord.utils.get(guild.text_channels, name=WELCOME_CHANNEL_NAME)
     if not channel:
         return
 
-    # ✅ 이전 invite 정보 확보 먼저 (❗수정된 위치)
+    # ✅ 이전 invite 정보 확보 먼저
     old_invites = invites_cache.get(str(guild.id), {})
 
     # ✅ fallback: invites_cache.json 파일에서 불러오기 (초기 실행 대비)
@@ -556,8 +558,7 @@ async def on_member_join(member):
                 inviter = guild.get_member(inviter_id)
             break
 
-    # ✅ 현재 초대 상태를 실시간으로 캐시에 반영 (❗덮어쓰기 시점 변경됨)
-    global invites_cache
+    # ✅ 현재 초대 상태를 실시간으로 캐시에 반영
     invites_cache[str(guild.id)] = {
         invite.code: {
             "uses": invite.uses,
@@ -4693,6 +4694,10 @@ async def 송금확인(interaction: discord.Interaction, 대상: discord.User):
 
 @bot.event
 async def on_ready():
+    global oduk_pool_cache
+    global invites_cache  # ✅ 맨 위에 선언
+
+    
     print(f"🤖 봇 로그인됨: {bot.user}")
     monitor_discord_ping.start()
     await asyncio.sleep(2)
@@ -4710,7 +4715,7 @@ async def on_ready():
         reset_daily_claims.start()
 
     # ✅ 오덕 캐시
-    global oduk_pool_cache
+    
     oduk_pool_cache = load_oduk_pool()
     if oduk_pool_cache is None:
         print("⚠️ 오덕 잔고 파일이 아직 없습니다. 처음 사용할 때 생성됩니다.")
@@ -4719,6 +4724,7 @@ async def on_ready():
         print(f"🔄 오덕 캐시 로딩됨: {oduk_pool_cache}")
 
     # ✅ 초대 캐시 불러오기 먼저
+   
     load_invite_cache()
 
     for guild in bot.guilds:
