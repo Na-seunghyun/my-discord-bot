@@ -3408,56 +3408,84 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
     종목_전체 = list(stocks.keys())
     random.shuffle(종목_전체)
 
-    # ✅ 랜덤한 종목 수만큼 선택
-    선택종목수 = random.randint(5, min(30, len(종목_전체)))
-    선택된종목 = 종목_전체[:선택종목수]
-
-    investments = load_investments()
-    투자결과 = []
-    수수료총합 = 0
-    총사용액 = 0
-    남은금액 = 금액
-
-    for 종목 in 선택된종목:
+    # ✅ 1. 매수 가능한 종목 필터링 (실단가 ≤ 금액)
+    매수가능종목 = []
+    for 종목 in 종목_전체:
         단가 = stocks[종목]["price"]
         실단가 = int(단가 * 1.01)
-        최대수량 = 남은금액 // 실단가
+        if 실단가 <= 금액:
+            매수가능종목.append((종목, 실단가, 단가))
 
-        if 최대수량 < 1:
-            continue
+    if len(매수가능종목) < 1:
+        return await interaction.response.send_message(
+            embed=create_embed("🤷 자동투자 실패", "입력 금액으로는 매수 가능한 종목이 없습니다.", discord.Color.orange()), ephemeral=False)
 
-        총액 = 실단가 * 최대수량
-        실제구매가 = 단가 * 최대수량
-        수수료 = 총액 - 실제구매가
+    # ✅ 2. 최소 5개 이상 가능하면 5~30 랜덤, 부족하면 전부 사용
+    if len(매수가능종목) >= 5:
+        선택개수 = random.randint(5, min(30, len(매수가능종목)))
+        선택된종목들 = random.sample(매수가능종목, 선택개수)
+    else:
+        선택된종목들 = 매수가능종목
 
-        add_balance(user_id, -총액)
+    남은금액 = 금액
+    매수기록 = {}
+    수수료총합 = 0
+    총사용액 = 0
+
+    while True:
+        매수성공 = False
+        for 종목, 실단가, 원단가 in 선택된종목들:
+            if 남은금액 < 실단가:
+                continue
+
+            # 매수 처리
+            add_balance(user_id, -실단가)
+            남은금액 -= 실단가
+            수수료 = 실단가 - 원단가
+            수수료총합 += 수수료
+            총사용액 += 실단가
+            매수성공 = True
+
+            if 종목 in 매수기록:
+                매수기록[종목]["shares"] += 1
+                매수기록[종목]["total_price"] += 실단가
+                매수기록[종목]["fee"] += 수수료
+            else:
+                매수기록[종목] = {
+                    "shares": 1,
+                    "price_per_share": 원단가,
+                    "total_price": 실단가,
+                    "fee": 수수료
+                }
+
+        if not 매수성공 or 남은금액 < 1000:
+            break
+
+    if not 매수기록:
+        return await interaction.response.send_message(
+            embed=create_embed("🤷 자동투자 실패", "입력 금액으로는 매수 가능한 종목이 없습니다.", discord.Color.orange()), ephemeral=False)
+
+    # ✅ 저장 및 결과 출력
+    investments = load_investments()
+    투자결과 = []
+    for 종목, data in 매수기록.items():
         investments.append({
             "user_id": user_id,
             "stock": 종목,
-            "shares": 최대수량,
-            "price_per_share": 단가,
+            "shares": data["shares"],
+            "price_per_share": data["price_per_share"],
             "timestamp": datetime.now().isoformat()
         })
 
-        투자결과.append(f"📈 **{종목}** {최대수량}주 (총 {총액:,}원)")
-        수수료총합 += 수수료
-        총사용액 += 총액
-        남은금액 -= 총액
-
-        if 남은금액 < 1000:
-            break
+        투자결과.append(f"📈 **{종목}** {data['shares']}주 (총 {data['total_price']:,}원)")
 
     save_investments(investments)
     add_oduk_pool(수수료총합)
     oduk_amount = get_oduk_pool_amount()
 
-    if not 투자결과:
-        return await interaction.response.send_message(
-            embed=create_embed("🤷 자동투자 실패", "입력 금액으로는 매수 가능한 종목이 없습니다.", discord.Color.orange()), ephemeral=False)
-
     await interaction.response.send_message(
         embed=create_embed(
-            "🎯 랜덤 자동투자 완료",
+            "🎯 라운드로빈 자동투자 완료",
             (
                 f"총 입력금액: **{금액:,}원** 중 사용: **{총사용액:,}원**\n"
                 f"💸 수수료 적립: **{수수료총합:,}원** → 오덕잔고 적립 완료\n"
@@ -3468,6 +3496,7 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
             user_id
         )
     )
+
 
 
 # ✅ 자동완성 함수 (잔액 자동 표시)
