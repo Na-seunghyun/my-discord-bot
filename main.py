@@ -3387,7 +3387,6 @@ async def 수량_자동완성(interaction: discord.Interaction, current: int):
 @tree.command(name="자동투자", description="무작위 종목에 입력한 금액 내에서 자동 분산 투자", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(금액="투자할 총 금액 (최소 1,000원)")
 async def 자동투자(interaction: discord.Interaction, 금액: int):
-    # ✅ 허용된 채널: 오덕도박장, 오덕코인
     if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
         return await interaction.response.send_message(
             "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
@@ -3396,7 +3395,6 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
 
     user_id = str(interaction.user.id)
     balance = get_balance(user_id)
-
 
     if 금액 < 1000:
         return await interaction.response.send_message(
@@ -3410,47 +3408,44 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
     종목_전체 = list(stocks.keys())
     random.shuffle(종목_전체)
 
-    # ✅ 1~30개 랜덤 종목 선택
+    # ✅ 랜덤한 종목 수만큼 선택
     선택종목수 = random.randint(1, min(30, len(종목_전체)))
     선택된종목 = 종목_전체[:선택종목수]
 
-    # ✅ 랜덤 비율 생성 (전체 합 = 1.0)
-    비율들 = [random.random() for _ in range(선택종목수)]
-    총합 = sum(비율들)
-    비율들 = [v / 총합 for v in 비율들]
-
-    투자결과 = []
     investments = load_investments()
+    투자결과 = []
     수수료총합 = 0
     총사용액 = 0
+    남은금액 = 금액
 
-    for 종목, 비율 in zip(선택된종목, 비율들):
-        배정금액 = int(금액 * 비율)
-
+    for 종목 in 선택된종목:
         단가 = stocks[종목]["price"]
         실단가 = int(단가 * 1.01)
-        수량 = 배정금액 // 실단가
+        최대수량 = 남은금액 // 실단가
 
-        if 수량 < 1:
+        if 최대수량 < 1:
             continue
 
-        총액 = 실단가 * 수량
-        실제구매가 = 단가 * 수량
+        총액 = 실단가 * 최대수량
+        실제구매가 = 단가 * 최대수량
         수수료 = 총액 - 실제구매가
 
         add_balance(user_id, -총액)
-        수수료총합 += 수수료
-        총사용액 += 총액
-
         investments.append({
             "user_id": user_id,
             "stock": 종목,
-            "shares": 수량,
+            "shares": 최대수량,
             "price_per_share": 단가,
             "timestamp": datetime.now().isoformat()
         })
 
-        투자결과.append(f"📈 **{종목}** {수량}주 (총 {총액:,}원)")
+        투자결과.append(f"📈 **{종목}** {최대수량}주 (총 {총액:,}원)")
+        수수료총합 += 수수료
+        총사용액 += 총액
+        남은금액 -= 총액
+
+        if 남은금액 < 1000:
+            break
 
     save_investments(investments)
     add_oduk_pool(수수료총합)
