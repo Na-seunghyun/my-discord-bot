@@ -3767,8 +3767,19 @@ def create_new_stock(stocks: dict) -> str:
             return name
     return None
 
-@tasks.loop(minutes=30)
-async def process_investments():
+async def start_random_investment_loop():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        wait_minutes = random.randint(5, 30)
+        try:
+            await process_investments(wait_minutes)
+        except Exception as e:
+            print(f"❌ process_investments 에러: {e}")
+
+        print(f"⌛ 다음 정산은 {wait_minutes}분 후 예정")
+        await asyncio.sleep(wait_minutes * 60)
+        
+async def process_investments(wait_minutes: int = None):
     stocks = load_stocks()
     investments = load_investments()
     new_list = []
@@ -3916,6 +3927,13 @@ async def process_investments():
         oduk_amount = total_fees_collected
 
     report += f"\n💰 이번 정산 수수료 수익: {total_fees_collected:,}원 적립\n🏦 현재 오덕잔고: {oduk_amount:,}원\n"
+
+    if wait_minutes:
+        next_time = (now + timedelta(minutes=wait_minutes)).strftime('%H:%M')
+        report += f"🕓 다음 정산은 약 {wait_minutes}분 후, **{next_time}** 예정입니다.\n"
+    else:
+        report += "🕓 다음 정산은 **5~30분 이내 무작위 시점**에 다시 진행됩니다.\n"
+
 
     for chg in [200, 100, 50, -50, -100]:
         for stock, records in change_records[chg].items():
