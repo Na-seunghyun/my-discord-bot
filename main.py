@@ -3970,6 +3970,23 @@ async def process_investments(wait_minutes: int = None):
 
     save_last_chart_time(now)
 
+# ✅ 투자 시스템 초기화 및 루프 시작
+def initialize_investment_system():
+    ensure_stocks_filled()
+
+    if not os.path.exists(INVESTMENT_FILE):
+        with open(INVESTMENT_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f, indent=2)
+
+    # ✅ 정산 루프 비동기 실행
+    asyncio.create_task(start_random_investment_loop())
+    print("📈 투자 정산 루프 시작됨")
+
+
+
+
+
+
 def generate_change():
     r = random.random()
     if r < 0.01:
@@ -5057,9 +5074,9 @@ async def on_ready():
         with open(INVESTMENT_FILE, "w", encoding="utf-8") as f:
             json.dump([], f, indent=2)
 
-    if not process_investments.is_running():
-        process_investments.start()
-        print("📈 투자 정산 루프 시작됨")
+    # ✅ 정산 루프 비동기 실행
+    asyncio.create_task(start_random_investment_loop())
+    print("📈 투자 정산 루프 시작됨")
 
 
 
