@@ -345,6 +345,10 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # ✅ 텍스트 채널인지 먼저 확인
+    if not isinstance(message.channel, discord.TextChannel):
+        return  # DM이나 기타 채널일 경우 무시
+
     if str(message.channel.name) != WELCOME_CHANNEL_NAME:
         return
 
@@ -362,7 +366,7 @@ async def on_message(message):
             title="💬 욕설 필터링 안내",
             description=f"{message.author.mention} 님이 작성한 메시지에 욕설이 포함되어 필터링 되었습니다.\n\n"
                         f"**필터링된 메시지:**\n{censored}",
-            color=0xFFD700  # 노란색
+            color=0xFFD700
         )
         embed.set_footer(text="💡 오덕봇은 욕설은 자동으로 걸러주는 평화주의자입니다.")
 
@@ -373,6 +377,7 @@ async def on_message(message):
         save_warnings()
 
     await bot.process_commands(message)
+
 
 # 경고 확인 슬래시 명령어
 @tree.command(name="경고확인", description="누가 몇 번 경고받았는지 확인합니다", guild=discord.Object(id=GUILD_ID))
