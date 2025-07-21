@@ -5297,8 +5297,7 @@ async def detect_matching_pubg_channels():
                     if start_time:
                         if latest_start is None or start_time > latest_start:
                             latest_start = start_time
-                    else:
-                        log(f"⚠️ start_time 없음: {m.display_name} / {vc.name}")
+                 
 
                     found = True
                     break
