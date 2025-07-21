@@ -46,6 +46,7 @@ intents.guilds = True
 intents.voice_states = True
 intents.messages = True
 intents.message_content = True
+intents.presences = True  # 유저 활동 상태 감지 (PUBG 감지에 필수)
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
