@@ -5203,17 +5203,16 @@ async def 초대기록(interaction: discord.Interaction):
 
 
 
-
 import re
 import discord
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from discord.ext import tasks
 
 # ✅ 설정값
 ALERT_CHANNEL_NAME = "자유채팅방"
 ALERT_INTERVAL_SECONDS = 600
-COMPARE_TIMES = [15, 30]
-COMPARE_TOLERANCE = 10
+COMPARE_TIMES = [15, 30]  # 비교 기준 시점
+COMPARE_TOLERANCE = 30     # 비교 허용 오차
 DEBUG = True
 
 detected_channels = {}
@@ -5229,7 +5228,7 @@ def parse_details(details):
         return match.group(1).strip(), int(match.group(2)), int(match.group(3))
     return None, None, None
 
-def is_pubg_name(name: str | None) -> bool:
+def is_pubg_name(name):
     return name and ("pubg" in name.lower() or "battleground" in name.lower())
 
 def parse_game_mode(state):
@@ -5273,8 +5272,8 @@ async def detect_matching_pubg_channels():
         if not members:
             continue
 
-        found = False
-        latest_start = None
+        mode_counts = {}
+        start_times = []
         map_name, mode, current, total = None, None, None, None
 
         for m in members:
@@ -5288,21 +5287,31 @@ async def detect_matching_pubg_channels():
                 if details and "in lobby" in details.lower():
                     continue
 
-                map_name, current, total = parse_details(details)
-                mode = parse_game_mode(getattr(act, "state", ""))
+                state = getattr(act, "state", "")
+                this_mode = parse_game_mode(state)
+                this_map, this_current, this_total = parse_details(details)
                 start_time = getattr(act, "start", None)
 
-                if map_name and mode and total:
-                    
+                if this_map and this_mode and this_total:
+                    if this_mode not in ["watching", "spectating", "lobby"]:
+                        mode_counts[this_mode] = mode_counts.get(this_mode, 0) + 1
                     if start_time:
-                        if latest_start is None or start_time > latest_start:
-                            latest_start = start_time
-                 
+                        start_times.append(start_time)
 
-                    found = True
-                    break
+                    if not map_name:
+                        map_name = this_map
+                        mode = this_mode
+                        current = this_current
+                        total = this_total
 
-        if found and map_name and mode and total:
+        if not mode_counts:
+            continue
+
+        # 대표 상태 선정
+        mode = max(mode_counts.items(), key=lambda x: x[1])[0]
+        start_time = max(start_times) if start_times else None
+
+        if map_name and mode and current and total:
             detected_channels[vc.name] = {
                 "channel": vc.name,
                 "map": map_name,
@@ -5311,7 +5320,7 @@ async def detect_matching_pubg_channels():
                 "total": total,
                 "first_detected": detected_channels.get(vc.name, {}).get("first_detected", now),
                 "last_updated": now,
-                "game_start": latest_start
+                "game_start": start_time
             }
 
     # ✅ 오래된 채널 제거
@@ -5322,20 +5331,20 @@ async def detect_matching_pubg_channels():
     for ch in expired:
         del detected_channels[ch]
 
-    # ✅ 비교 타이밍 조건 만족 채널
+    # ✅ 비교 기준 조건 만족 채널
     eligible = {
         ch: data for ch, data in detected_channels.items()
         if any(abs((now - data["first_detected"]).total_seconds() - t) <= COMPARE_TOLERANCE for t in COMPARE_TIMES)
+        and data.get("game_start") is not None
     }
 
-    # ✅ 그룹핑 (Union-Find)
+    # ✅ 유사 채널 그룹핑
     uf = UnionFind()
-    eligible_items = list(eligible.items())
-
-    for i in range(len(eligible_items)):
-        ch1, d1 = eligible_items[i]
-        for j in range(i + 1, len(eligible_items)):
-            ch2, d2 = eligible_items[j]
+    items = list(eligible.items())
+    for i in range(len(items)):
+        ch1, d1 = items[i]
+        for j in range(i + 1, len(items)):
+            ch2, d2 = items[j]
 
             if d1["map"] != d2["map"] or d1["mode"] != d2["mode"]:
                 continue
@@ -5343,7 +5352,7 @@ async def detect_matching_pubg_channels():
                 continue
 
             s1, s2 = d1.get("game_start"), d2.get("game_start")
-            if s1 and s2 and abs((s1 - s2).total_seconds()) > 150:
+            if s1 and s2 and abs((s1 - s2).total_seconds()) > 60:
                 continue
 
             uf.union(ch1, ch2)
@@ -5356,8 +5365,9 @@ async def detect_matching_pubg_channels():
         if group_key in recent_alerts and (now - recent_alerts[group_key]).total_seconds() < ALERT_INTERVAL_SECONDS:
             continue
 
-        first = detected_channels[next(iter(group))]
-        start_display = first.get("game_start").strftime("%H:%M:%S") if first.get("game_start") else "N/A"
+        repr_data = detected_channels[next(iter(group))]
+        kst_time = repr_data["game_start"].astimezone(timezone(timedelta(hours=9))).strftime("%H:%M:%S") if repr_data["game_start"] else "N/A"
+
         text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
         if text_channel:
             channels_text = ", ".join(f"**{ch}**" for ch in sorted(group))
@@ -5365,18 +5375,17 @@ async def detect_matching_pubg_channels():
                 title="🎯 동일한 PUBG 경기 추정!",
                 description=(
                     f"{channels_text} 채널에서 동일한 PUBG 경기가 감지됐습니다!\n\n"
-                    f"🗺️ 맵: `{first['map']}` | 모드: `{first['mode']}`\n"
-                    f"👥 인원: {first['current']}/{first['total']} (정확히 일치)\n"
-                    f"🕒 시작 시각: {start_display}"
+                    f"🗺️ 맵: `{repr_data['map']}` | 모드: `{repr_data['mode']}`\n"
+                    f"👥 인원: {repr_data['current']}/{repr_data['total']} (정확히 일치)\n"
+                    f"🕒 시작 시각: {kst_time}"
                 ),
                 color=discord.Color.orange()
             )
             embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
             await text_channel.send(embed=embed)
+            log(f"🔔 알림 전송: {sorted(group)}")
 
         recent_alerts[group_key] = now
-        log(f"🔔 알림 전송: {sorted(group)}")
-
 
 
 
