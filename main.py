@@ -553,15 +553,24 @@ async def on_member_join(member):
         print(f"❌ 현재 초대 링크 불러오기 실패: {e}")
         return
 
-    # ✅ 누가 초대한 것인지 비교
+    # ✅ 누가 초대한 것인지 가장 사용량이 증가한 초대 코드로 추정
     inviter = None
+    best_match = None
+    max_diff = 0
+
     for invite in current_invites:
-        old = old_invites.get(invite.code)
-        if old and invite.uses > old["uses"]:
-            inviter_id = old.get("inviter_id")
-            if inviter_id:
-                inviter = guild.get_member(inviter_id)
-            break
+        code = invite.code
+        old_uses = old_invites.get(code, {}).get("uses", 0)
+        diff = invite.uses - old_uses
+        if diff > max_diff:
+            max_diff = diff
+            best_match = invite
+
+    # ✅ 가장 유력한 초대 코드가 1회만 증가한 경우에만 초대자 확정
+    if best_match and max_diff == 1:
+        inviter_id = best_match.inviter.id if best_match.inviter else old_invites.get(best_match.code, {}).get("inviter_id")
+        if inviter_id:
+            inviter = guild.get_member(inviter_id)
 
     # ✅ 현재 초대 상태를 실시간으로 캐시에 반영
     invites_cache[str(guild.id)] = {
