@@ -5214,7 +5214,7 @@ import discord
 
 # ✅ 설정값
 recent_alerts = {}
-ALERT_INTERVAL_SECONDS = 1000  # 중복 알림 방지: 10분
+ALERT_INTERVAL_SECONDS = 1200  # 중복 알림 방지: 20분
 PLAYER_COUNT_TOLERANCE = 3    # 현재 인원수 오차 허용
 TOTAL_COUNT_TOLERANCE = 3     # 전체 인원수 오차 허용
 TRACKED_CHANNELS = [f"일반{i}" for i in range(1, 17)] + [f"큰맵{i}" for i in range(1, 3)]
@@ -5354,7 +5354,7 @@ async def detect_matching_pubg_channels():
                 ),
                 color=discord.Color.orange()
             )
-            embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
+            embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 20분")
             await text_channel.send(embed=embed)
             print(f"[DEBUG] 🔔 알림 전송 완료: {group_key}")
 
