@@ -5202,17 +5202,36 @@ async def 초대기록(interaction: discord.Interaction):
 
 
 
+import re
 from collections import defaultdict
 from datetime import datetime
 from discord.ext import tasks
 import discord
 
+# ✅ 설정값
 recent_alerts = {}
-ALERT_INTERVAL_SECONDS = 600
-START_TIME_TOLERANCE = 120  # 시작 시간 오차 ±2분
+ALERT_INTERVAL_SECONDS = 600  # 중복 알림 방지: 10분
+START_TIME_TOLERANCE = 120    # 시작 시간 오차 허용: 2분
+PLAYER_COUNT_TOLERANCE = 3    # 현재 인원수 오차 허용: ±3명
 TRACKED_CHANNELS = [f"일반{i}" for i in range(1, 17)] + [f"큰맵{i}" for i in range(1, 3)]
 ALERT_CHANNEL_NAME = "자유채팅방"
 
+# ✅ 상태 파싱 함수
+def parse_map_and_mode(details):
+    match = re.match(r"(.+?)\s*–\s*(Solo|Duo|Squad)", details or "", re.IGNORECASE)
+    if match:
+        map_name = match.group(1).strip()
+        mode = match.group(2).strip().capitalize()
+        return map_name, mode
+    return None, None
+
+def parse_player_state(state):
+    match = re.match(r"(\d+)\s*\|\s*(\d+)", state or "")
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    return None, None
+
+# ✅ PUBG 경기 감지 루프
 @tasks.loop(seconds=60)
 async def detect_matching_pubg_channels():
     guild = bot.get_guild(GUILD_ID)
@@ -5222,7 +5241,6 @@ async def detect_matching_pubg_channels():
     now = datetime.utcnow()
     channel_data = []
 
-    # 🔍 수집: 각 채널의 PUBG 상태
     for vc in guild.voice_channels:
         if vc.name not in TRACKED_CHANNELS:
             continue
@@ -5230,76 +5248,64 @@ async def detect_matching_pubg_channels():
         if not members:
             continue
 
-        pubg_info = []
         for m in members:
             for act in m.activities:
                 if act.type == discord.ActivityType.playing and act.name == "PUBG: BATTLEGROUNDS":
-                    map_mode = act.details or "Unknown"
-                    state = act.state or "Unknown"
+                    map_name, mode = parse_map_and_mode(act.details)
+                    current_players, total_players = parse_player_state(act.state)
                     start_time = act.start
-                    pubg_info.append((map_mode, state, start_time))
-                    break
 
-        if pubg_info:
-            freq = defaultdict(int)
-            for mm, st, _ in pubg_info:
-                freq[(mm, st)] += 1
-            (map_mode, state), _ = max(freq.items(), key=lambda x: x[1])
-            valid_starts = [ts for _, _, ts in pubg_info if ts]
-            avg_start_dt = None
-            if valid_starts:
-                avg_start = sum(dt.timestamp() for dt in valid_starts) / len(valid_starts)
-                avg_start_dt = datetime.fromtimestamp(avg_start)
+                    if map_name and mode and total_players:
+                        channel_data.append({
+                            "channel": vc.name,
+                            "map": map_name,
+                            "mode": mode,
+                            "current": current_players,
+                            "total": total_players,
+                            "start_time": start_time
+                        })
+                    break  # 한 유저 기준만 반영
 
-            channel_data.append({
-                "name": vc.name,
-                "map_mode": map_mode,
-                "state": state,
-                "players": len(members),
-                "start_time": avg_start_dt,
-            })
-
-    # 📦 그룹핑: 동일 조건인 채널끼리 묶기
+    # ✅ 그룹핑: 동일 조건끼리 묶기
     groups = []
-
-    for c in channel_data:
+    for data in channel_data:
         matched = False
         for group in groups:
             g = group[0]
-            time_diff = abs((c["start_time"] - g["start_time"]).total_seconds()) if c["start_time"] and g["start_time"] else float("inf")
             if (
-                c["map_mode"] == g["map_mode"] and
-                c["state"] == g["state"] and
-                c["players"] == g["players"] and
-                time_diff <= START_TIME_TOLERANCE
+                data["map"] == g["map"] and
+                data["mode"] == g["mode"] and
+                data["total"] == g["total"] and
+                abs(data["current"] - g["current"]) <= PLAYER_COUNT_TOLERANCE and
+                data["start_time"] and g["start_time"] and
+                abs((data["start_time"] - g["start_time"]).total_seconds()) <= START_TIME_TOLERANCE
             ):
-                group.append(c)
+                group.append(data)
                 matched = True
                 break
         if not matched:
-            groups.append([c])
+            groups.append([data])
 
-    # 📢 알림: 그룹별로 2채널 이상인 경우만
+    # ✅ 알림 전송
     for group in groups:
         if len(group) < 2:
             continue
 
-        group_key = tuple(sorted(ch["name"] for ch in group))
+        group_key = tuple(sorted([ch["channel"] for ch in group]))
         last_sent = recent_alerts.get(group_key)
         if last_sent and (now - last_sent).total_seconds() <= ALERT_INTERVAL_SECONDS:
             continue
 
         text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
         if text_channel:
-            names = ", ".join(f"**{ch['name']}**" for ch in group)
+            channels = ", ".join(f"**{ch['channel']}**" for ch in group)
             elapsed_min = int((now - group[0]["start_time"]).total_seconds() // 60) if group[0]["start_time"] else "?"
             embed = discord.Embed(
                 title="🎯 동일한 PUBG 경기 추정!",
                 description=(
-                    f"{names} 채널에서 동일한 PUBG 경기가 감지됐습니다!\n\n"
-                    f"🗺️ 맵/모드: `{group[0]['map_mode']}`\n"
-                    f"🎮 상태: `{group[0]['state']}`\n"
-                    f"👥 참여 인원: `{group[0]['players']}명`\n"
+                    f"{channels} 채널에서 비슷한 PUBG 경기가 감지됐습니다!\n\n"
+                    f"🗺️ 맵: `{group[0]['map']}` | 모드: `{group[0]['mode']}`\n"
+                    f"👥 전체 인원 수: `{group[0]['total']}`명 | 현재 접속: `{group[0]['current']}±{PLAYER_COUNT_TOLERANCE}`명\n"
                     f"🕒 시작된 지 약 `{elapsed_min}분` 경과"
                 ),
                 color=discord.Color.orange()
@@ -5332,16 +5338,18 @@ async def detect_matching_pubg_channels():
 
 
 
-
 @bot.event
 async def on_ready():
     global oduk_pool_cache
-    global invites_cache  # ✅ 맨 위에 선언
+    global invites_cache
 
-    
     print(f"🤖 봇 로그인됨: {bot.user}")
-    monitor_discord_ping.start()
+
+    monitor_discord_ping.start()         # ✅ 기존 루프
+    detect_matching_pubg_channels.start()  # ✅ PUBG 감지 루프 추가
+
     await asyncio.sleep(2)
+
 
     for guild in bot.guilds:
         print(f"접속 서버: {guild.name} (ID: {guild.id})")
