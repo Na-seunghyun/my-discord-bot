@@ -5202,6 +5202,9 @@ async def 초대기록(interaction: discord.Interaction):
 
 
 
+
+
+
 import re
 from collections import defaultdict
 from datetime import datetime
@@ -5216,26 +5219,34 @@ PLAYER_COUNT_TOLERANCE = 3    # 현재 인원수 오차 허용: ±3명
 TRACKED_CHANNELS = [f"일반{i}" for i in range(1, 17)] + [f"큰맵{i}" for i in range(1, 3)]
 ALERT_CHANNEL_NAME = "자유채팅방"
 
-# ✅ 상태 파싱 함수
-def parse_map_and_mode(details):
-    match = re.match(r"(.+?)\s*–\s*(Solo|Duo|Squad)", details or "", re.IGNORECASE)
+# ✅ details 파싱: "Normal,Miramar,99/100"
+def parse_details(details):
+    match = re.match(r".*?,\s*(.+?),\s*(\d+)/(\d+)", details or "")
     if match:
         map_name = match.group(1).strip()
-        mode = match.group(2).strip().capitalize()
-        return map_name, mode
-    return None, None
+        current = int(match.group(2))
+        total = int(match.group(3))
+        return map_name, current, total
+    return None, None, None
 
-def parse_player_state(state):
-    match = re.match(r"(\d+)\s*\|\s*(\d+)", state or "")
-    if match:
-        return int(match.group(1)), int(match.group(2))
-    return None, None
+# ✅ state 파싱: "4 Squad(4 중 4)"
+def parse_game_mode(state):
+    if not state:
+        return None
+    if "Squad" in state:
+        return "Squad"
+    if "Duo" in state:
+        return "Duo"
+    if "Solo" in state:
+        return "Solo"
+    return None
 
-# ✅ PUBG 경기 감지 루프
+# ✅ PUBG 감지 루프
 @tasks.loop(seconds=60)
 async def detect_matching_pubg_channels():
     guild = bot.get_guild(GUILD_ID)
     if not guild:
+        print("[DEBUG] GUILD_ID로 서버를 찾지 못함")
         return
 
     now = datetime.utcnow()
@@ -5244,6 +5255,7 @@ async def detect_matching_pubg_channels():
     for vc in guild.voice_channels:
         if vc.name not in TRACKED_CHANNELS:
             continue
+
         members = [m for m in vc.members if not m.bot]
         if not members:
             continue
@@ -5251,11 +5263,17 @@ async def detect_matching_pubg_channels():
         for m in members:
             for act in m.activities:
                 if act.type == discord.ActivityType.playing and act.name == "PUBG: BATTLEGROUNDS":
-                    map_name, mode = parse_map_and_mode(act.details)
-                    current_players, total_players = parse_player_state(act.state)
+                    print(f"[DEBUG] 감지된 유저: {m.name}")
+                    print(f"  ↳ details: {act.details}")
+                    print(f"  ↳ state:   {act.state}")
+                    print(f"  ↳ start:   {act.start}")
+
+                    map_name, current_players, total_players = parse_details(act.details)
+                    mode = parse_game_mode(act.state)
                     start_time = act.start
 
                     if map_name and mode and total_players:
+                        print(f"[DEBUG] → 추출 성공: {map_name}, {mode}, {current_players}/{total_players}")
                         channel_data.append({
                             "channel": vc.name,
                             "map": map_name,
@@ -5264,9 +5282,11 @@ async def detect_matching_pubg_channels():
                             "total": total_players,
                             "start_time": start_time
                         })
-                    break  # 한 유저 기준만 반영
+                    else:
+                        print(f"[DEBUG] → 파싱 실패: details/state 불일치")
+                    break  # 유저당 하나의 act만 반영
 
-    # ✅ 그룹핑: 동일 조건끼리 묶기
+    # ✅ 그룹핑
     groups = []
     for data in channel_data:
         matched = False
@@ -5294,6 +5314,7 @@ async def detect_matching_pubg_channels():
         group_key = tuple(sorted([ch["channel"] for ch in group]))
         last_sent = recent_alerts.get(group_key)
         if last_sent and (now - last_sent).total_seconds() <= ALERT_INTERVAL_SECONDS:
+            print(f"[DEBUG] 중복 알림 방지: {group_key}")
             continue
 
         text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
@@ -5313,7 +5334,10 @@ async def detect_matching_pubg_channels():
             embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
             await text_channel.send(embed=embed)
 
+            print(f"[DEBUG] 알림 전송 완료: {group_key}")
+
         recent_alerts[group_key] = now
+
 
 
 
