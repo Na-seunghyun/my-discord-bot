@@ -5168,6 +5168,32 @@ async def 알바기록(interaction: discord.Interaction):
     )
 
 
+@tree.command(name="초대기록", description="현재 초대 코드 기록을 확인합니다.", guild=discord.Object(id=GUILD_ID))
+async def 초대기록(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+
+    guild_id = str(interaction.guild.id)
+    cache = invites_cache.get(guild_id)
+
+    if not cache:
+        return await interaction.followup.send("❌ 현재 이 서버에 저장된 초대 기록이 없습니다.", ephemeral=True)
+
+    lines = []
+    for code, data in cache.items():
+        uses = data.get("uses", 0)
+        inviter_id = data.get("inviter_id")
+        inviter = get_mention(inviter_id) if inviter_id else "알 수 없음"
+        lines.append(f"🔗 코드 `{code}`: {uses}회 사용됨 / 초대자: {inviter}")
+
+    msg = "\n".join(lines)
+    chunks = split_message_chunks(msg)
+
+    for part in chunks:
+        await interaction.followup.send(part, ephemeral=True)
+
+
+
+
 
 
 
