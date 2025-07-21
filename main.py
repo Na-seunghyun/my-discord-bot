@@ -4802,7 +4802,7 @@ from discord.ext import tasks
 from datetime import datetime
 
 # 📡 핑 모니터링 경고 기준 (ms 단위)
-PING_WARNING = 200
+PING_WARNING = 230
 PING_CRITICAL = 400
 
 # ⏱️ 각각의 알림 시간 (중복 방지용)
@@ -4816,7 +4816,7 @@ async def monitor_discord_ping():
     ping_ms = round(bot.latency * 1000)
     now = datetime.utcnow()
 
-    # 200ms 미만이면 정상 → 아무것도 안 함
+    # 230ms 미만이면 정상 → 아무것도 안 함
     if ping_ms < PING_WARNING:
         return
 
