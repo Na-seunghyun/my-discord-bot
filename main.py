@@ -5218,6 +5218,7 @@ START_TIME_TOLERANCE = 120    # 시작 시간 오차 허용: 2분
 PLAYER_COUNT_TOLERANCE = 3    # 현재 인원수 오차 허용: ±3명
 TRACKED_CHANNELS = [f"일반{i}" for i in range(1, 17)] + [f"큰맵{i}" for i in range(1, 3)]
 ALERT_CHANNEL_NAME = "자유채팅방"
+TOTAL_COUNT_TOLERANCE = 3  # 전체 인원 ±3명 허용
 
 # ✅ details 파싱: "Normal,Miramar,99/100"
 def parse_details(details):
@@ -5295,7 +5296,7 @@ async def detect_matching_pubg_channels():
             if (
                 data["map"] == g["map"] and
                 data["mode"] == g["mode"] and
-                data["total"] == g["total"] and
+                abs(data["total"] - g["total"]) <= TOTAL_COUNT_TOLERANCE and
                 abs(data["current"] - g["current"]) <= PLAYER_COUNT_TOLERANCE and
                 data["start_time"] and g["start_time"] and
                 abs((data["start_time"] - g["start_time"]).total_seconds()) <= START_TIME_TOLERANCE
