@@ -2475,12 +2475,23 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     # 성공
     if roll <= success_chance:
-        add_balance(user_id, 베팅액 * 2)
+        # ✅ 1% 확률로 4배 잭팟
+        is_jackpot = random.random() < 0.01
+        multiplier = 4 if is_jackpot else 2
+        reward = 베팅액 * multiplier
+        add_balance(user_id, reward)
         final_balance = get_balance(user_id)
-        embed = create_embed("🎉 도박 성공!",
+
+        jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
+
+        embed = create_embed(
+            "🎉 도박 성공!",
+            f"{jackpot_msg}"
             f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-            f"+{베팅액:,}원 획득!\n💰 잔액: {final_balance:,}원",
-            discord.Color.green(), user_id)
+            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원",
+            discord.Color.gold() if is_jackpot else discord.Color.green(),
+            user_id
+        )
 
     # 실패
     else:
@@ -2795,8 +2806,8 @@ async def 슬롯_배팅액_자동완성(interaction: discord.Interaction, curren
 
 
 
-@tree.command(name="도박순위", description="도박 잔액 순위 TOP 10", guild=discord.Object(id=GUILD_ID))
-async def 도박순위(interaction: discord.Interaction):
+@tree.command(name="도박왕", description="도박 잔액 순위 TOP 10", guild=discord.Object(id=GUILD_ID))
+async def 도박왕(interaction: discord.Interaction):
     await interaction.response.defer()
 
     data = load_balances()
