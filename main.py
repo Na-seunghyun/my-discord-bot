@@ -5207,16 +5207,17 @@ async def 초대기록(interaction: discord.Interaction):
 
 import re
 import discord
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from discord.ext import tasks
 
 # ✅ 설정값
 ALERT_CHANNEL_NAME = "자유채팅방"
 ALERT_INTERVAL_SECONDS = 600
 COMPARE_TIMES = [10, 20]
-MAX_START_DIFF_SECONDS = 150
-COMPARE_TIME_TOLERANCE = 2
+COMPARE_WINDOW_SECONDS = 20  # 타이밍 범위: ±10초
+MAX_START_DIFF_SECONDS = 150  # 게임 시작 시각 차이 허용
 
+# ✅ 감지 기록
 detected_channels = {}
 recent_alerts = {}
 
@@ -5240,11 +5241,14 @@ def parse_game_mode(state):
 @tasks.loop(seconds=3)
 async def detect_matching_pubg_channels():
     now = datetime.utcnow()
+    print(f"[DEBUG] ⏱ 감지 루프: {now.strftime('%H:%M:%S')}")
+
     guild = bot.get_guild(GUILD_ID)
     if not guild:
-        print("[DEBUG] GUILD_ID로 서버를 찾지 못함")
+        print("[DEBUG] ⚠️ GUILD_ID로 서버를 찾을 수 없음")
         return
 
+    valid_count = 0
     for vc in guild.voice_channels:
         members = [m for m in vc.members if not m.bot]
         if not members:
@@ -5279,20 +5283,25 @@ async def detect_matching_pubg_channels():
                         "last_updated": now,
                         "game_start": game_start_time
                     }
+                    valid_count += 1
                     break
 
-    # 오래된 채널 제거
+    print(f"[DEBUG] ✅ 감지된 채널 수: {valid_count}")
+
+    # ✅ 오래된 채널 제거
     for ch, data in list(detected_channels.items()):
         if (now - data["last_updated"]).total_seconds() > 90:
             del detected_channels[ch]
 
-    # 비교 타이밍 도달한 채널
+    # ✅ 비교 시점 조건 (±10초 허용)
     eligible = {
         ch: data for ch, data in detected_channels.items()
-        if any(abs((now - data["first_detected"]).total_seconds() - t) <= COMPARE_TIME_TOLERANCE for t in COMPARE_TIMES)
+        if any(
+            t - COMPARE_WINDOW_SECONDS / 2 <= (now - data["first_detected"]).total_seconds() <= t + COMPARE_WINDOW_SECONDS / 2
+            for t in COMPARE_TIMES
+        )
     }
 
-    # 그룹핑
     grouped = []
     visited = set()
 
@@ -5311,19 +5320,17 @@ async def detect_matching_pubg_channels():
                 d1["current"] == d2["current"] and
                 d1["total"] == d2["total"]
             ):
-                # ▶ 두 채널 모두 게임 시작 시간이 있는 경우에만 비교
+                # ▶ 게임 시작 시간 비교 (있는 경우에만)
                 if d1.get("game_start") and d2.get("game_start"):
                     diff = abs((d1["game_start"] - d2["game_start"]).total_seconds())
                     if diff > MAX_START_DIFF_SECONDS:
-                        continue  # 차이 크면 제외
-                # 하나라도 없으면 비교 허용
+                        continue
                 group.append(ch2)
                 visited.add(ch2)
 
         if len(group) >= 2:
             grouped.append(group)
 
-    # 알림 전송
     for group in grouped:
         group_key = tuple(sorted(group))
         if group_key in recent_alerts and (now - recent_alerts[group_key]).total_seconds() < ALERT_INTERVAL_SECONDS:
@@ -5348,7 +5355,7 @@ async def detect_matching_pubg_channels():
             )
             embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
             await text_channel.send(embed=embed)
-            print(f"[DEBUG] 🔔 알림 전송 완료: {group_key}")
+            print(f"[🔔] 알림 전송됨: {', '.join(group)}")
 
         recent_alerts[group_key] = now
 
