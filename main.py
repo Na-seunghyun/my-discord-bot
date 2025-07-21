@@ -2444,9 +2444,9 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     balance = get_balance(user_id)
 
     # 최소 베팅, 잔액 부족 체크
-    if 베팅액 < 500:
+    if 베팅액 < 100:
         return await interaction.response.send_message(
-            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **500원**입니다.", discord.Color.red()), ephemeral=True)
+            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **100원**입니다.", discord.Color.red()), ephemeral=True)
     if balance < 베팅액:
         return await interaction.response.send_message(
             embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()), ephemeral=True)
