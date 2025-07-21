@@ -5268,34 +5268,43 @@ async def detect_matching_pubg_channels():
         members = [m for m in vc.members if not m.bot]
         print(f"  → 감지 대상 유저 수 (봇 제외): {len(members)}")
 
-        for m in members:
-            print(f"    👤 유저: {m.display_name} ({m.id})")
-            print(f"    ↳ 활동 목록: {m.activities}")
-            for act in m.activities:
-                print(f"      🎮 act: name={act.name}, type={act.type}, details={act.details}, state={act.state}, start={act.start}")
-                if act.type == discord.ActivityType.playing:
-                    # PUBG 여부는 문자열 포함으로 완화
-                    if "pubg" in (act.name or "").lower():
-                        map_name, current_players, total_players = parse_details(act.details)
-                        mode = parse_game_mode(act.state)
-                        start_time = act.start
+for m in members:
+    print(f"    👤 유저: {m.display_name} ({m.id})")
+    print(f"    ↳ 활동 목록: {m.activities}")
+    for act in m.activities:
+        # 안전하게 각 속성 접근
+        name = getattr(act, "name", None)
+        act_type = getattr(act, "type", None)
+        details = getattr(act, "details", None)
+        state = getattr(act, "state", None)
+        start = getattr(act, "start", None)
 
-                        if map_name and mode and total_players:
-                            print(f"[DEBUG] ✅ 추출 성공: {map_name}, {mode}, {current_players}/{total_players}")
-                            channel_data.append({
-                                "channel": vc.name,
-                                "map": map_name,
-                                "mode": mode,
-                                "current": current_players,
-                                "total": total_players,
-                                "start_time": start_time
-                            })
-                        else:
-                            print(f"[DEBUG] ❌ 파싱 실패: details/state 불일치 또는 누락")
-                    else:
-                        print(f"[DEBUG] ⚠️ 다른 게임으로 판단됨: {act.name}")
+        print(f"      🎮 act: name={name}, type={act_type}, details={details}, state={state}, start={start}")
+
+        if act_type == discord.ActivityType.playing:
+            # PUBG 여부는 문자열 포함으로 완화
+            if name and "pubg" in name.lower():
+                map_name, current_players, total_players = parse_details(details)
+                mode = parse_game_mode(state)
+                start_time = start
+
+                if map_name and mode and total_players:
+                    print(f"[DEBUG] ✅ 추출 성공: {map_name}, {mode}, {current_players}/{total_players}")
+                    channel_data.append({
+                        "channel": vc.name,
+                        "map": map_name,
+                        "mode": mode,
+                        "current": current_players,
+                        "total": total_players,
+                        "start_time": start_time
+                    })
                 else:
-                    print(f"[DEBUG] ❌ playing 타입 아님: {act.type}")
+                    print(f"[DEBUG] ❌ 파싱 실패: details/state 불일치 또는 누락")
+            else:
+                print(f"[DEBUG] ⚠️ 다른 게임으로 판단됨: {name}")
+        else:
+            print(f"[DEBUG] ❌ playing 타입 아님: {act_type}")
+
 
     # ✅ 그룹핑
     groups = []
