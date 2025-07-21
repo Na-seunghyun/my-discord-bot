@@ -5097,7 +5097,7 @@ async def 타자알바(interaction: discord.Interaction):
             pool_amount = get_oduk_pool_amount()
 
             # ✅ 20% 확률로 고용노동부 신고 성공 → 알바비 절반 돌려받기
-            if random.random() < 0.2:
+            if random.random() < 0.4:
                 compensation = reward // 2
                 add_balance(user_id, compensation)
                 return await msg.reply(
