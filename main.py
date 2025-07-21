@@ -5034,19 +5034,22 @@ def add_balance(user_id, amount):
 # ✅ /타자알바 명령어
 @tree.command(name="타자알바", description="문장을 빠르게 입력해 돈을 벌어보세요!", guild=discord.Object(id=GUILD_ID))
 async def 타자알바(interaction: discord.Interaction):
-
     # ✅ 허용된 채널: 오덕도박장, 오덕코인
     if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
         return await interaction.response.send_message(
             "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
             ephemeral=True
         )
-        
+
     user_id = str(interaction.user.id)
     current_week = get_current_week_tag()
+    today = datetime.now(KST).date().isoformat()
+
     record = load_job_records().get(user_id, {})
-    if record.get("week") == current_week and record.get("count", 0) >= 5:
-        return await interaction.response.send_message("❌ 오늘의 알바는 **5회**까지만 가능합니다.", ephemeral=True)
+    if record.get("week") == current_week:
+        daily = record.get("daily", {})
+        if daily.get(today, 0) >= 5:
+            return await interaction.response.send_message("❌ 오늘의 알바는 **5회**까지만 가능합니다.", ephemeral=True)
 
     phrase = random.choice(TYPING_PHRASES)
     await interaction.response.send_message(
@@ -5072,13 +5075,24 @@ async def 타자알바(interaction: discord.Interaction):
             if not success:
                 return await msg.reply("❌ 알바 횟수 제한 초과로 보상이 지급되지 않았습니다.", mention_author=False)
 
+            # ✅ 남은 횟수 계산
+            updated = load_job_records().get(user_id, {})
+            today_used = updated.get("daily", {}).get(today, 0)
+            remaining = max(0, 5 - today_used)
+
             add_balance(user_id, reward)
-            await msg.reply(f"✅ **{elapsed:.1f}초** 만에 성공!\n💰 **{reward:,}원**을 획득했습니다.", mention_author=False)
+            await msg.reply(
+                f"✅ **{elapsed:.1f}초** 만에 성공!\n"
+                f"💰 **{reward:,}원**을 획득했습니다.\n"
+                f"📌 오늘 남은 알바 가능 횟수: **{remaining}회** (총 5회 중)",
+                mention_author=False
+            )
         else:
             await msg.reply("❌ 문장이 틀렸습니다. 알바 실패!", mention_author=False)
 
     except asyncio.TimeoutError:
         await interaction.followup.send("⌛️ 시간이 초과되었습니다. 알바 실패!", ephemeral=True)
+
 
 # ✅ /알바기록 명령어
 @tree.command(name="알바기록", description="이번 주의 알바 참여 기록을 확인합니다.", guild=discord.Object(id=GUILD_ID))
