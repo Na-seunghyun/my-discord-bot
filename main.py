@@ -5242,7 +5242,7 @@ def parse_game_mode(state):
     return None
 
 # ✅ PUBG 감지 루프
-@tasks.loop(seconds=60)
+@tasks.loop(seconds=20)
 async def detect_matching_pubg_channels():
     guild = bot.get_guild(GUILD_ID)
     if not guild:
