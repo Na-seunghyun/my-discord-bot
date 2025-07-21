@@ -5056,11 +5056,7 @@ async def 타자알바(interaction: discord.Interaction):
     current_week = get_current_week_tag()
     today = datetime.now(KST).date().isoformat()
 
-    record = load_job_records().get(user_id, {})
-    if record.get("week") == current_week:
-        daily = record.get("daily", {})
-        if daily.get(today, 0) >= 5:
-            return await interaction.response.send_message("❌ 오늘의 알바는 **5회**까지만 가능합니다.", ephemeral=True)
+
 
     phrase = random.choice(TYPING_PHRASES)
     await interaction.response.send_message(
