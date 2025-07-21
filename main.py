@@ -5031,6 +5031,7 @@ def add_balance(user_id, amount):
     current = get_balance(user_id)
     set_balance(user_id, current + amount)
 
+
 # ✅ /타자알바 명령어
 @tree.command(name="타자알바", description="문장을 빠르게 입력해 돈을 벌어보세요!", guild=discord.Object(id=GUILD_ID))
 async def 타자알바(interaction: discord.Interaction):
@@ -5082,12 +5083,23 @@ async def 타자알바(interaction: discord.Interaction):
 
             success = update_job_record(user_id, reward)
             if not success:
-                return await msg.reply("❌ 알바 횟수 제한 초과로 보상이 지급되지 않았습니다.", mention_author=False)
+                # ✅ 초과근무 → 오덕로또 상금풀로 전환
+                add_oduk_pool(reward)
+                pool_amount = get_oduk_pool_amount()
+
+                return await msg.reply(
+                    f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
+                    f"💰 알바비는 모두 **오덕로또 상금 풀**에 적립되었습니다.\n"
+                    f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
+                    f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!",
+                    mention_author=False
+                )
 
             add_balance(user_id, reward)
 
-            # ✅ 남은 횟수 계산
-            today_used = record.get("daily", {}).get(today, 0) + 1  # 바로 이번 성공 반영
+            # ✅ 최신 기록 다시 불러와서 잔여 횟수 계산
+            record = load_job_records().get(user_id, {})
+            today_used = record.get("daily", {}).get(today, 0)
             remaining = max(0, 5 - today_used)
 
             # ✅ 출력 메시지
@@ -5106,6 +5118,8 @@ async def 타자알바(interaction: discord.Interaction):
 
     except asyncio.TimeoutError:
         await interaction.followup.send("⌛️ 시간이 초과되었습니다. 알바 실패!", ephemeral=True)
+
+
 
 
 
