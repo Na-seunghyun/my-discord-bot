@@ -5087,8 +5087,7 @@ async def 타자알바(interaction: discord.Interaction):
             add_balance(user_id, reward)
 
             # ✅ 남은 횟수 계산
-            updated = load_job_records().get(user_id, {})
-            today_used = updated.get("daily", {}).get(today, 0)
+            today_used = record.get("daily", {}).get(today, 0) + 1  # 바로 이번 성공 반영
             remaining = max(0, 5 - today_used)
 
             # ✅ 출력 메시지
