@@ -5034,6 +5034,14 @@ def add_balance(user_id, amount):
 # ✅ /타자알바 명령어
 @tree.command(name="타자알바", description="문장을 빠르게 입력해 돈을 벌어보세요!", guild=discord.Object(id=GUILD_ID))
 async def 타자알바(interaction: discord.Interaction):
+
+    # ✅ 허용된 채널: 오덕도박장, 오덕코인
+    if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+        
     user_id = str(interaction.user.id)
     current_week = get_current_week_tag()
     record = load_job_records().get(user_id, {})
