@@ -5066,58 +5066,58 @@ async def 타자알바(interaction: discord.Interaction):
         msg = await bot.wait_for("message", timeout=20.0, check=check)
         end_time = datetime.now(KST)
 
-        if msg.content.strip() == phrase:
-            elapsed = (end_time - start_time).total_seconds()
-            base_reward = 12000
-
-            # ✅ 감가 완화 (초당 600원)
-            penalty = int(elapsed * 600)
-            reward = max(1000, base_reward - penalty)
-
-            # ✅ 2% 확률로 잭팟 (3배 보상)
-            if random.random() < 0.02:
-                reward *= 3
-                is_jackpot = True
-            else:
-                is_jackpot = False
-
-            success = update_job_record(user_id, reward)
-            if not success:
-                # ✅ 초과근무 → 오덕로또 상금풀로 전환
-                add_oduk_pool(reward)
-                pool_amount = get_oduk_pool_amount()
-
-                return await msg.reply(
-                    f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
-                    f"💰 알바비는 모두 **오덕로또 상금 풀**에 적립되었습니다.\n"
-                    f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
-                    f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!",
-                    mention_author=False
-                )
-
-            add_balance(user_id, reward)
-
-            # ✅ 최신 기록 다시 불러와서 잔여 횟수 계산
-            record = load_job_records().get(user_id, {})
-            today_used = record.get("daily", {}).get(today, 0)
-            remaining = max(0, 5 - today_used)
-
-            # ✅ 출력 메시지
-            message = (
-                f"✅ **{elapsed:.1f}초** 만에 성공!\n"
-                f"💰 **{reward:,}원**을 획득했습니다."
-            )
-            if is_jackpot:
-                message += "\n🎉 **성실 알바생 임명! 사장님의 은혜로 알바비를 3배 지급합니다.** 🎉"
-            message += f"\n📌 오늘 남은 알바 가능 횟수: **{remaining}회** (총 5회 중)"
-
-            await msg.reply(message, mention_author=False)
-
-        else:
+        # ✅ 문장 정확도 체크 먼저
+        if msg.content.strip() != phrase:
             await msg.reply("❌ 문장이 틀렸습니다. 알바 실패!", mention_author=False)
+            return
+
+        # ✅ 성공 처리
+        elapsed = (end_time - start_time).total_seconds()
+        base_reward = 12000
+        penalty = int(elapsed * 600)
+        reward = max(1000, base_reward - penalty)
+
+        # ✅ 2% 잭팟
+        if random.random() < 0.02:
+            reward *= 3
+            is_jackpot = True
+        else:
+            is_jackpot = False
+
+        success = update_job_record(user_id, reward)
+        if not success:
+            # ✅ 초과근무 → 오덕로또 상금 풀 적립
+            add_oduk_pool(reward)
+            pool_amount = get_oduk_pool_amount()
+            return await msg.reply(
+                f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
+                f"💰 알바비는 모두 **오덕로또 상금 풀**에 적립되었습니다.\n"
+                f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
+                f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!",
+                mention_author=False
+            )
+
+        add_balance(user_id, reward)
+
+        # ✅ 최신 기록 불러와서 잔여횟수 계산
+        record = load_job_records().get(user_id, {})
+        today_used = record.get("daily", {}).get(today, 0)
+        remaining = max(0, 5 - today_used)
+
+        # ✅ 성공 메시지 출력
+        message = (
+            f"✅ **{elapsed:.1f}초** 만에 성공!\n"
+            f"💰 **{reward:,}원**을 획득했습니다."
+        )
+        if is_jackpot:
+            message += "\n🎉 **성실 알바생 임명! 사장님의 은혜로 알바비를 3배 지급합니다.** 🎉"
+        message += f"\n📌 오늘 남은 알바 가능 횟수: **{remaining}회** (총 5회 중)"
+
+        await msg.reply(message, mention_author=False)
 
     except asyncio.TimeoutError:
         await interaction.followup.send("⌛️ 시간이 초과되었습니다. 알바 실패!", ephemeral=True)
+
 
 
 
