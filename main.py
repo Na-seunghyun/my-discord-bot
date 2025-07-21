@@ -5297,13 +5297,9 @@ async def detect_matching_pubg_channels():
                     if start_time:
                         if latest_start is None or start_time > latest_start:
                             latest_start = start_time
-                        log(f"▶️ {m.display_name} / {vc.name} ▶ start: {start_time.isoformat()}")
                     else:
-                        log(f"⏳ {m.display_name} / {vc.name} ▶ start_time 없음")
+                        log(f"⚠️ start_time 없음: {m.display_name} / {vc.name}")
 
-                    # ✅ 감지 성공 로그 삽입!
-                    log(f"[DETECTED] 🎮 {vc.name} | {map_name} | {mode} | {current}/{total} | start: {latest_start.isoformat() if latest_start else 'N/A'}")
-                    
                     found = True
                     break
 
