@@ -5212,11 +5212,16 @@ from discord.ext import tasks
 # ✅ 설정값
 ALERT_CHANNEL_NAME = "자유채팅방"
 ALERT_INTERVAL_SECONDS = 600
-COMPARE_TIMES = [10, 20]  # 감지 후 비교 타이밍 (초 단위)
-COMPARE_TOLERANCE = 10    # 비교 타이밍 허용 오차
+COMPARE_TIMES = [15, 30]
+COMPARE_TOLERANCE = 10
+DEBUG = True
 
 detected_channels = {}
 recent_alerts = {}
+
+def log(msg):
+    if DEBUG:
+        print(f"[DEBUG] {msg}")
 
 def parse_details(details):
     match = re.match(r".*?,\s*(.+?),\s*(\d+)/(\d+)", details or "")
@@ -5234,6 +5239,27 @@ def parse_game_mode(state):
         if mode in state:
             return mode
     return None
+
+class UnionFind:
+    def __init__(self):
+        self.parent = {}
+
+    def find(self, x):
+        if x not in self.parent:
+            self.parent[x] = x
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+
+    def union(self, x, y):
+        self.parent[self.find(x)] = self.find(y)
+
+    def groups(self):
+        result = {}
+        for item in self.parent:
+            root = self.find(item)
+            result.setdefault(root, set()).add(item)
+        return list(result.values())
 
 @tasks.loop(seconds=3)
 async def detect_matching_pubg_channels():
@@ -5257,6 +5283,7 @@ async def detect_matching_pubg_channels():
                     continue
                 if not is_pubg_name(getattr(act, "name", "")):
                     continue
+
                 details = getattr(act, "details", "")
                 if details and "in lobby" in details.lower():
                     continue
@@ -5266,8 +5293,17 @@ async def detect_matching_pubg_channels():
                 start_time = getattr(act, "start", None)
 
                 if map_name and mode and total:
-                    if start_time and (latest_start is None or start_time > latest_start):
-                        latest_start = start_time
+                    
+                    if start_time:
+                        if latest_start is None or start_time > latest_start:
+                            latest_start = start_time
+                        log(f"▶️ {m.display_name} / {vc.name} ▶ start: {start_time.isoformat()}")
+                    else:
+                        log(f"⏳ {m.display_name} / {vc.name} ▶ start_time 없음")
+
+                    # ✅ 감지 성공 로그 삽입!
+                    log(f"[DETECTED] 🎮 {vc.name} | {map_name} | {mode} | {current}/{total} | start: {latest_start.isoformat() if latest_start else 'N/A'}")
+                    
                     found = True
                     break
 
@@ -5283,63 +5319,68 @@ async def detect_matching_pubg_channels():
                 "game_start": latest_start
             }
 
-    # 오래된 데이터 제거
-    expired = [ch for ch, d in detected_channels.items() if (now - d["last_updated"]).total_seconds() > 90]
+    # ✅ 오래된 채널 제거
+    expired = [
+        ch for ch, data in detected_channels.items()
+        if (now - data["last_updated"]).total_seconds() > 90
+    ]
     for ch in expired:
         del detected_channels[ch]
 
-    # 비교 조건 일치 항목 추림
+    # ✅ 비교 타이밍 조건 만족 채널
     eligible = {
-        ch: d for ch, d in detected_channels.items()
-        if any(abs((now - d["first_detected"]).total_seconds() - t) <= COMPARE_TOLERANCE for t in COMPARE_TIMES)
+        ch: data for ch, data in detected_channels.items()
+        if any(abs((now - data["first_detected"]).total_seconds() - t) <= COMPARE_TOLERANCE for t in COMPARE_TIMES)
     }
 
-    checked = set()
-    for ch1, d1 in eligible.items():
-        for ch2, d2 in eligible.items():
-            if ch1 == ch2 or (ch2, ch1) in checked:
+    # ✅ 그룹핑 (Union-Find)
+    uf = UnionFind()
+    eligible_items = list(eligible.items())
+
+    for i in range(len(eligible_items)):
+        ch1, d1 = eligible_items[i]
+        for j in range(i + 1, len(eligible_items)):
+            ch2, d2 = eligible_items[j]
+
+            if d1["map"] != d2["map"] or d1["mode"] != d2["mode"]:
                 continue
-            checked.add((ch1, ch2))
+            if d1["current"] != d2["current"] or d1["total"] != d2["total"]:
+                continue
 
-            if (
-                d1["map"] == d2["map"] and
-                d1["mode"] == d2["mode"] and
-                d1["current"] == d2["current"] and
-                d1["total"] == d2["total"]
-            ):
-                s1, s2 = d1.get("game_start"), d2.get("game_start")
-                if s1 and s2 and abs((s1 - s2).total_seconds()) > 150:
-                    continue
+            s1, s2 = d1.get("game_start"), d2.get("game_start")
+            if s1 and s2 and abs((s1 - s2).total_seconds()) > 150:
+                continue
 
-                group_key = tuple(sorted([ch1, ch2]))
-                if group_key in recent_alerts:
-                    if (now - recent_alerts[group_key]).total_seconds() < ALERT_INTERVAL_SECONDS:
-                        continue
+            uf.union(ch1, ch2)
 
-                text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
-                if text_channel:
-                    start_display = s1.strftime("%H:%M:%S") if s1 else "N/A"
-                    channels_text = ", ".join(f"**{ch}**" for ch in group_key)
-                    embed = discord.Embed(
-                        title="🎯 동일한 PUBG 경기 추정!",
-                        description=(
-                            f"{channels_text} 채널에서 동일한 PUBG 경기가 감지됐습니다!\n\n"
-                            f"🗺️ 맵: `{d1['map']}` | 모드: `{d1['mode']}`\n"
-                            f"👥 인원: {d1['current']}/{d1['total']} (정확히 일치)\n"
-                            f"🕒 시작 시각: {start_display}"
-                        ),
-                        color=discord.Color.orange()
-                    )
-                    embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
-                    await text_channel.send(embed=embed)
+    for group in uf.groups():
+        if len(group) < 2:
+            continue
 
-                recent_alerts[group_key] = now
+        group_key = frozenset(group)
+        if group_key in recent_alerts and (now - recent_alerts[group_key]).total_seconds() < ALERT_INTERVAL_SECONDS:
+            continue
 
+        first = detected_channels[next(iter(group))]
+        start_display = first.get("game_start").strftime("%H:%M:%S") if first.get("game_start") else "N/A"
+        text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
+        if text_channel:
+            channels_text = ", ".join(f"**{ch}**" for ch in sorted(group))
+            embed = discord.Embed(
+                title="🎯 동일한 PUBG 경기 추정!",
+                description=(
+                    f"{channels_text} 채널에서 동일한 PUBG 경기가 감지됐습니다!\n\n"
+                    f"🗺️ 맵: `{first['map']}` | 모드: `{first['mode']}`\n"
+                    f"👥 인원: {first['current']}/{first['total']} (정확히 일치)\n"
+                    f"🕒 시작 시각: {start_display}"
+                ),
+                color=discord.Color.orange()
+            )
+            embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
+            await text_channel.send(embed=embed)
 
-
-
-
-
+        recent_alerts[group_key] = now
+        log(f"🔔 알림 전송: {sorted(group)}")
 
 
 
