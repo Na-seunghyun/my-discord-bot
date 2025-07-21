@@ -4942,6 +4942,164 @@ async def 송금확인(interaction: discord.Interaction, 대상: discord.User):
             await interaction.followup.send(chunk)          # ✅ 공개
 
 
+ALBA_RECORD_FILE = "job_record.json"
+
+
+TYPING_PHRASES = [
+    "디스코드는 전세계 게이머를 위한 최고의 음성채팅 서비스입니다.",
+    "성공은 작은 노력이 반복될 때 이루어집니다.",
+    "우리는 모두 자신의 삶의 주인공입니다.",
+    "파이썬은 간결하고 읽기 쉬운 문법으로 많은 사랑을 받고 있습니다.",
+    "아침에 일어나서 차 한잔의 여유를 즐기는 것이 삶의 행복입니다.",
+    "프로그래밍은 논리와 창의력을 동시에 요구하는 멋진 작업입니다.",
+    "햇살 좋은 날에는 산책을 나가 마음의 여유를 가져보세요.",
+    "책 한 권이 인생을 바꿀 수도 있습니다.",
+    "노력은 배신하지 않는다는 말은 진리입니다.",
+    "건강은 가장 소중한 자산입니다.",
+    "꾸준함은 천재를 이깁니다.",
+    "자신을 믿는 것이 성공의 첫걸음입니다.",
+    "모든 일에는 때가 있습니다.",
+    "실패는 성공의 어머니입니다.",
+    "행복은 멀리 있지 않고 마음속에 있습니다.",
+    "친절한 말 한마디가 큰 위로가 됩니다.",
+    "꿈을 이루기 위해서는 행동이 필요합니다.",
+    "오늘의 선택이 내일의 나를 만듭니다.",
+    "시간은 누구에게나 공평하게 주어집니다.",
+    "정직은 최고의 전략입니다.",
+    "아무리 바빠도 가족을 챙기는 마음이 중요합니다.",
+    "하루에 한 번은 자신을 칭찬해 주세요.",
+    "삶은 짧고 예술은 길다.",
+    "언제나 배우는 자세를 유지해야 합니다.",
+    "감정은 통제할 수 있어야 합니다.",
+    "자연은 위대한 스승입니다.",
+    "기회는 준비된 자에게 찾아옵니다.",
+    "지금 이 순간을 즐기세요.",
+    "완벽보다 성장이 중요합니다.",
+    "가끔은 아무것도 하지 않는 것도 필요합니다."
+]
+# ✅ 현재 주차 태그 (KST 기준)
+def get_current_week_tag():
+    now = datetime.now(KST)
+    year, week, _ = now.isocalendar()
+    return f"{year}-W{week}"
+
+# ✅ 기록 로딩/저장
+def load_job_records():
+    if not os.path.exists(ALBA_RECORD_FILE):
+        return {}
+    with open(ALBA_RECORD_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_job_records(data):
+    with open(ALBA_RECORD_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+# ✅ 기록 업데이트 함수 (주차 확인 포함)
+def update_job_record(user_id: str, reward: int):
+    now = datetime.now(KST)
+    current_week = get_current_week_tag()
+    data = load_job_records()
+
+    record = data.get(user_id, {
+        "week": current_week,
+        "count": 0,
+        "total_earned": 0,
+        "last_time": ""
+    })
+
+    # ✅ 주차가 바뀌면 초기화
+    if record.get("week") != current_week:
+        record = {
+            "week": current_week,
+            "count": 0,
+            "total_earned": 0,
+            "last_time": ""
+        }
+
+    if record["count"] >= 5:
+        return False  # 하루 제한
+
+    record["count"] += 1
+    record["total_earned"] += reward
+    record["last_time"] = now.isoformat()
+    data[user_id] = record
+    save_job_records(data)
+    return True
+
+# ✅ 잔액 함수는 네 기존 코드 사용
+def add_balance(user_id, amount):
+    current = get_balance(user_id)
+    set_balance(user_id, current + amount)
+
+# ✅ /타자알바 명령어
+@tree.command(name="타자알바", description="문장을 빠르게 입력해 돈을 벌어보세요!", guild=discord.Object(id=GUILD_ID))
+async def 타자알바(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    current_week = get_current_week_tag()
+    record = load_job_records().get(user_id, {})
+    if record.get("week") == current_week and record.get("count", 0) >= 5:
+        return await interaction.response.send_message("❌ 오늘의 알바는 **5회**까지만 가능합니다.", ephemeral=True)
+
+    phrase = random.choice(TYPING_PHRASES)
+    await interaction.response.send_message(
+        f"📋 다음 문장을 **정확히** 입력해주세요. (20초 제한)\n\n```{phrase}```",
+        ephemeral=True
+    )
+
+    def check(m: discord.Message):
+        return m.author.id == interaction.user.id and m.channel == interaction.channel
+
+    try:
+        start_time = datetime.now(KST)
+        msg = await bot.wait_for("message", timeout=20.0, check=check)
+        end_time = datetime.now(KST)
+
+        if msg.content.strip() == phrase:
+            elapsed = (end_time - start_time).total_seconds()
+            base_reward = 12000
+            penalty = int(elapsed * 1000)
+            reward = max(1000, base_reward - penalty)
+
+            success = update_job_record(user_id, reward)
+            if not success:
+                return await msg.reply("❌ 알바 횟수 제한 초과로 보상이 지급되지 않았습니다.", mention_author=False)
+
+            add_balance(user_id, reward)
+            await msg.reply(f"✅ **{elapsed:.1f}초** 만에 성공!\n💰 **{reward:,}원**을 획득했습니다.", mention_author=False)
+        else:
+            await msg.reply("❌ 문장이 틀렸습니다. 알바 실패!", mention_author=False)
+
+    except asyncio.TimeoutError:
+        await interaction.followup.send("⌛️ 시간이 초과되었습니다. 알바 실패!", ephemeral=True)
+
+# ✅ /알바기록 명령어
+@tree.command(name="알바기록", description="이번 주의 알바 참여 기록을 확인합니다.", guild=discord.Object(id=GUILD_ID))
+async def 알바기록(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    current_week = get_current_week_tag()
+    data = load_job_records()
+    record = data.get(user_id)
+
+    if not record or record.get("week") != current_week:
+        return await interaction.response.send_message("🙅 이번 주 알바 기록이 없습니다.", ephemeral=True)
+
+    last_time = datetime.fromisoformat(record["last_time"]).astimezone(KST)
+    time_str = last_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    await interaction.response.send_message(
+        f"📝 **{interaction.user.display_name}님의 이번 주 알바 기록**\n"
+        f"- 총 알바 횟수: {record['count']}회\n"
+        f"- 누적 수익: 💰 {record['total_earned']:,}원\n"
+        f"- 마지막 알바: {time_str} (KST)",
+        ephemeral=True
+    )
+
+
+
+
+
+
+
 
 
 
