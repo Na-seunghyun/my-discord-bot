@@ -5215,13 +5215,12 @@ import discord
 # ✅ 설정값
 recent_alerts = {}
 ALERT_INTERVAL_SECONDS = 600  # 중복 알림 방지: 10분
-START_TIME_TOLERANCE = 120    # 시작 시간 오차 허용: 2분
 PLAYER_COUNT_TOLERANCE = 3    # 현재 인원수 오차 허용
 TOTAL_COUNT_TOLERANCE = 3     # 전체 인원수 오차 허용
 TRACKED_CHANNELS = [f"일반{i}" for i in range(1, 17)] + [f"큰맵{i}" for i in range(1, 3)]
 ALERT_CHANNEL_NAME = "자유채팅방"
 
-# ✅ details 파싱: "Normal,Miramar,99/100"
+# ✅ details 파싱
 def parse_details(details):
     match = re.match(r".*?,\s*(.+?),\s*(\d+)/(\d+)", details or "")
     if match:
@@ -5231,7 +5230,7 @@ def parse_details(details):
         return map_name, current, total
     return None, None, None
 
-# 🔧 보조 함수들
+# 🔧 보조 함수
 def is_pubg_name(name: str | None) -> bool:
     if not name:
         return False
@@ -5241,12 +5240,11 @@ def is_pubg_name(name: str | None) -> bool:
 def parse_game_mode(state):
     if not state:
         return None
-    s = state.lower()
-    if "squad" in s:
+    if "Squad" in state:
         return "Squad"
-    if "duo" in s:
+    if "Duo" in state:
         return "Duo"
-    if "solo" in s:
+    if "Solo" in state:
         return "Solo"
     return None
 
@@ -5266,7 +5264,7 @@ async def detect_matching_pubg_channels():
     for vc in guild.voice_channels:
         members = [m for m in vc.members if not m.bot]
         if not members:
-            continue  # 유저 없으면 로그 출력 안 함
+            continue
 
         print(f"[DEBUG] 채널 체크: {vc.name} | 유저 수: {len(members)}")
 
@@ -5277,43 +5275,36 @@ async def detect_matching_pubg_channels():
             matched_this_user = False
 
             for act in m.activities:
-                # 안전하게 속성 접근
                 name   = getattr(act, "name", None)
                 a_type = getattr(act, "type", None)
                 details = getattr(act, "details", None)
                 state  = getattr(act, "state", None)
-                start  = getattr(act, "start", None)
 
-                print(f"      🎮 act: name={name}, type={a_type}, details={details}, state={state}, start={start}")
+                print(f"      🎮 act: name={name}, type={a_type}, details={details}, state={state}")
 
-                if a_type != discord.ActivityType.playing:
-                    continue
-
-                if not is_pubg_name(name):
+                if a_type != discord.ActivityType.playing or not is_pubg_name(name):
                     continue
 
                 if details and "in lobby" in details.lower():
                     print(f"      ↳ 로비 상태: {details} → 스킵")
                     continue
 
-                map_name, current_players, total_players = parse_details(details)
+                map_name, current, total = parse_details(details)
                 mode = parse_game_mode(state)
-                start_time = start
 
-                if map_name and mode and total_players:
-                    print(f"[DEBUG] ✅ 추출 성공: {map_name}, {mode}, {current_players}/{total_players}")
+                if map_name and mode and total:
+                    print(f"[DEBUG] ✅ 추출 성공: {map_name}, {mode}, {current}/{total}")
                     channel_data.append({
                         "channel": vc.name,
                         "map": map_name,
                         "mode": mode,
-                        "current": current_players,
-                        "total": total_players,
-                        "start_time": start_time
+                        "current": current,
+                        "total": total
                     })
                     matched_this_user = True
-                    break  # 유저당 하나만 채집
+                    break
                 else:
-                    print(f"[DEBUG] ❌ 파싱 실패 (map={map_name}, mode={mode}, total={total_players})")
+                    print(f"[DEBUG] ❌ 파싱 실패 (map={map_name}, mode={mode}, total={total})")
 
             if not matched_this_user:
                 print(f"    ↳ 이 유저는 PUBG 매치 정보 없음.")
@@ -5328,9 +5319,7 @@ async def detect_matching_pubg_channels():
                 data["map"] == g["map"] and
                 data["mode"] == g["mode"] and
                 abs(data["total"] - g["total"]) <= TOTAL_COUNT_TOLERANCE and
-                abs(data["current"] - g["current"]) <= PLAYER_COUNT_TOLERANCE and
-                data["start_time"] and g["start_time"] and
-                abs((data["start_time"] - g["start_time"]).total_seconds()) <= START_TIME_TOLERANCE
+                abs(data["current"] - g["current"]) <= PLAYER_COUNT_TOLERANCE
             ):
                 group.append(data)
                 matched = True
@@ -5352,14 +5341,12 @@ async def detect_matching_pubg_channels():
         text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
         if text_channel:
             channels = ", ".join(f"**{ch['channel']}**" for ch in group)
-            elapsed_min = int((now - group[0]["start_time"]).total_seconds() // 60) if group[0]["start_time"] else "?"
             embed = discord.Embed(
                 title="🎯 동일한 PUBG 경기 추정!",
                 description=(
                     f"{channels} 채널에서 비슷한 PUBG 경기가 감지됐습니다!\n\n"
                     f"🗺️ 맵: `{group[0]['map']}` | 모드: `{group[0]['mode']}`\n"
-                    f"👥 전체 인원 수: `{group[0]['total']}`명 | 현재 접속: `{group[0]['current']}±{PLAYER_COUNT_TOLERANCE}`명\n"
-                    f"🕒 시작된 지 약 `{elapsed_min}분` 경과"
+                    f"👥 전체 인원 수: `{group[0]['total']}`명 | 현재 접속: `{group[0]['current']}±{PLAYER_COUNT_TOLERANCE}`명"
                 ),
                 color=discord.Color.orange()
             )
@@ -5368,8 +5355,6 @@ async def detect_matching_pubg_channels():
             print(f"[DEBUG] 🔔 알림 전송 완료: {group_key}")
 
         recent_alerts[group_key] = now
-
-
 
 
 
