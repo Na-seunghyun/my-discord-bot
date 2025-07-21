@@ -543,6 +543,9 @@ async def on_member_join(member):
             print(f"❌ invites_cache.json 로딩 실패: {e}")
             old_invites = {}
 
+    # ✅ 초대 링크 반영을 기다리기 위해 약간의 대기 추가
+    await asyncio.sleep(2)
+
     # ✅ 현재 초대 링크 목록 가져오기
     try:
         current_invites = await guild.invites()
