@@ -5231,15 +5231,22 @@ def parse_details(details):
         return map_name, current, total
     return None, None, None
 
-# ✅ state 파싱: "4 Squad(4 중 4)"
+# 🔧 보조 함수들
+def is_pubg_name(name: str | None) -> bool:
+    if not name:
+        return False
+    n = name.lower()
+    return "pubg" in n or "battleground" in n
+
 def parse_game_mode(state):
     if not state:
         return None
-    if "Squad" in state:
+    s = state.lower()
+    if "squad" in s:
         return "Squad"
-    if "Duo" in state:
+    if "duo" in s:
         return "Duo"
-    if "Solo" in state:
+    if "solo" in s:
         return "Solo"
     return None
 
@@ -5257,55 +5264,59 @@ async def detect_matching_pubg_channels():
     print(f"[DEBUG] 🔍 감지 루프 실행됨: {now.isoformat()}")
 
     for vc in guild.voice_channels:
-        print(f"[DEBUG] 채널 체크: {vc.name}")
-        if vc.name not in TRACKED_CHANNELS:
-            print(f"  → 감지 제외됨 (이름 불일치)")
-            continue
-
-        print(f"  → 감지 대상 채널")
-        print(f"  → 총 멤버 수: {len(vc.members)}")
-
         members = [m for m in vc.members if not m.bot]
-        print(f"  → 감지 대상 유저 수 (봇 제외): {len(members)}")
+        if not members:
+            continue  # 유저 없으면 로그 출력 안 함
+
+        print(f"[DEBUG] 채널 체크: {vc.name} | 유저 수: {len(members)}")
 
         for m in members:
             print(f"    👤 유저: {m.display_name} ({m.id})")
             print(f"    ↳ 활동 목록: {m.activities}")
+
+            matched_this_user = False
+
             for act in m.activities:
-                # 안전하게 각 속성 접근
-                name = getattr(act, "name", None)
-                act_type = getattr(act, "type", None)
+                # 안전하게 속성 접근
+                name   = getattr(act, "name", None)
+                a_type = getattr(act, "type", None)
                 details = getattr(act, "details", None)
-                state = getattr(act, "state", None)
-                start = getattr(act, "start", None)
+                state  = getattr(act, "state", None)
+                start  = getattr(act, "start", None)
 
-                print(f"      🎮 act: name={name}, type={act_type}, details={details}, state={state}, start={start}")
+                print(f"      🎮 act: name={name}, type={a_type}, details={details}, state={state}, start={start}")
 
-                if act_type == discord.ActivityType.playing:
-                    # PUBG 여부는 문자열 포함으로 완화
-                    if name and "pubg" in name.lower():
-                        map_name, current_players, total_players = parse_details(details)
-                        mode = parse_game_mode(state)
-                        start_time = start
+                if a_type != discord.ActivityType.playing:
+                    continue
 
-                        if map_name and mode and total_players:
-                            print(f"[DEBUG] ✅ 추출 성공: {map_name}, {mode}, {current_players}/{total_players}")
-                            channel_data.append({
-                                "channel": vc.name,
-                                "map": map_name,
-                                "mode": mode,
-                                "current": current_players,
-                                "total": total_players,
-                                "start_time": start_time
-                            })
-                        else:
-                            print(f"[DEBUG] ❌ 파싱 실패: details/state 불일치 또는 누락")
-                    else:
-                        print(f"[DEBUG] ⚠️ 다른 게임으로 판단됨: {name}")
+                if not is_pubg_name(name):
+                    continue
+
+                if details and "in lobby" in details.lower():
+                    print(f"      ↳ 로비 상태: {details} → 스킵")
+                    continue
+
+                map_name, current_players, total_players = parse_details(details)
+                mode = parse_game_mode(state)
+                start_time = start
+
+                if map_name and mode and total_players:
+                    print(f"[DEBUG] ✅ 추출 성공: {map_name}, {mode}, {current_players}/{total_players}")
+                    channel_data.append({
+                        "channel": vc.name,
+                        "map": map_name,
+                        "mode": mode,
+                        "current": current_players,
+                        "total": total_players,
+                        "start_time": start_time
+                    })
+                    matched_this_user = True
+                    break  # 유저당 하나만 채집
                 else:
-                    print(f"[DEBUG] ❌ playing 타입 아님: {act_type}")
+                    print(f"[DEBUG] ❌ 파싱 실패 (map={map_name}, mode={mode}, total={total_players})")
 
-
+            if not matched_this_user:
+                print(f"    ↳ 이 유저는 PUBG 매치 정보 없음.")
 
     # ✅ 그룹핑
     groups = []
@@ -5354,11 +5365,9 @@ async def detect_matching_pubg_channels():
             )
             embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
             await text_channel.send(embed=embed)
-
             print(f"[DEBUG] 🔔 알림 전송 완료: {group_key}")
 
         recent_alerts[group_key] = now
-
 
 
 
