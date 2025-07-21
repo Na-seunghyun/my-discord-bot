@@ -5315,6 +5315,9 @@ async def detect_matching_pubg_channels():
         matched = False
         for group in groups:
             g = group[0]
+            # ✅ 같은 음성 채널은 비교하지 않음
+            if data["channel"] == g["channel"]:
+                continue
             if (
                 data["map"] == g["map"] and
                 data["mode"] == g["mode"] and
@@ -5326,6 +5329,7 @@ async def detect_matching_pubg_channels():
                 break
         if not matched:
             groups.append([data])
+
 
     # ✅ 알림 전송
     for group in groups:
