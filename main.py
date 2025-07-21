@@ -5262,9 +5262,19 @@ async def detect_matching_pubg_channels():
                     continue
                 if not is_pubg_name(getattr(act, "name", "")):
                     continue
+
                 details = getattr(act, "details", "")
                 if details and "in lobby" in details.lower():
                     continue
+
+                # ✅ start_time 디버그 확인
+                start_time = getattr(act, "start", None)
+                if start_time:
+                    print(f"[DEBUG] ▶️ {m.display_name} 활동 시작: {start_time.isoformat()}")
+                else:
+                    print(f"[DEBUG] ⏳ {m.display_name} ▶️ start_time 없음")
+
+
 
                 parsed = parse_details(details)
                 map_name, current, total = parsed if parsed else (None, None, None)
