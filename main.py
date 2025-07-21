@@ -5266,34 +5266,25 @@ async def detect_matching_pubg_channels():
         if not members:
             continue
 
-        print(f"[DEBUG] 채널 체크: {vc.name} | 유저 수: {len(members)}")
-
         for m in members:
-            print(f"    👤 유저: {m.display_name} ({m.id})")
-            print(f"    ↳ 활동 목록: {m.activities}")
-
             matched_this_user = False
 
             for act in m.activities:
-                name   = getattr(act, "name", None)
+                name = getattr(act, "name", None)
                 a_type = getattr(act, "type", None)
                 details = getattr(act, "details", None)
-                state  = getattr(act, "state", None)
-
-                print(f"      🎮 act: name={name}, type={a_type}, details={details}, state={state}")
+                state = getattr(act, "state", None)
 
                 if a_type != discord.ActivityType.playing or not is_pubg_name(name):
                     continue
 
                 if details and "in lobby" in details.lower():
-                    print(f"      ↳ 로비 상태: {details} → 스킵")
                     continue
 
                 map_name, current, total = parse_details(details)
                 mode = parse_game_mode(state)
 
                 if map_name and mode and total:
-                    print(f"[DEBUG] ✅ 추출 성공: {map_name}, {mode}, {current}/{total}")
                     channel_data.append({
                         "channel": vc.name,
                         "map": map_name,
@@ -5307,7 +5298,8 @@ async def detect_matching_pubg_channels():
                     print(f"[DEBUG] ❌ 파싱 실패 (map={map_name}, mode={mode}, total={total})")
 
             if not matched_this_user:
-                print(f"    ↳ 이 유저는 PUBG 매치 정보 없음.")
+                print(f"[DEBUG] ❌ {m.display_name}({m.id}) - PUBG 매치 정보 없음.")
+
 
     # ✅ 그룹핑
     groups = []
