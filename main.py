@@ -5068,30 +5068,46 @@ async def 타자알바(interaction: discord.Interaction):
         if msg.content.strip() == phrase:
             elapsed = (end_time - start_time).total_seconds()
             base_reward = 12000
-            penalty = int(elapsed * 1000)
+
+            # ✅ 감가 완화 (초당 600원)
+            penalty = int(elapsed * 600)
             reward = max(1000, base_reward - penalty)
+
+            # ✅ 2% 확률로 잭팟 (3배 보상)
+            if random.random() < 0.02:
+                reward *= 3
+                is_jackpot = True
+            else:
+                is_jackpot = False
 
             success = update_job_record(user_id, reward)
             if not success:
                 return await msg.reply("❌ 알바 횟수 제한 초과로 보상이 지급되지 않았습니다.", mention_author=False)
+
+            add_balance(user_id, reward)
 
             # ✅ 남은 횟수 계산
             updated = load_job_records().get(user_id, {})
             today_used = updated.get("daily", {}).get(today, 0)
             remaining = max(0, 5 - today_used)
 
-            add_balance(user_id, reward)
-            await msg.reply(
+            # ✅ 출력 메시지
+            message = (
                 f"✅ **{elapsed:.1f}초** 만에 성공!\n"
-                f"💰 **{reward:,}원**을 획득했습니다.\n"
-                f"📌 오늘 남은 알바 가능 횟수: **{remaining}회** (총 5회 중)",
-                mention_author=False
+                f"💰 **{reward:,}원**을 획득했습니다."
             )
+            if is_jackpot:
+                message += "\n🎉 **성실 알바생 임명! 사장님의 은혜로 알바비를 3배 지급합니다.** 🎉"
+            message += f"\n📌 오늘 남은 알바 가능 횟수: **{remaining}회** (총 5회 중)"
+
+            await msg.reply(message, mention_author=False)
+
         else:
             await msg.reply("❌ 문장이 틀렸습니다. 알바 실패!", mention_author=False)
 
     except asyncio.TimeoutError:
         await interaction.followup.send("⌛️ 시간이 초과되었습니다. 알바 실패!", ephemeral=True)
+
 
 
 # ✅ /알바기록 명령어
