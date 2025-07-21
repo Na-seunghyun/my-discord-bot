@@ -3438,25 +3438,33 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
             if 남은금액 < 실단가:
                 continue
 
-            # 매수 처리
-            add_balance(user_id, -실단가)
-            남은금액 -= 실단가
-            수수료 = 실단가 - 원단가
-            수수료총합 += 수수료
-            총사용액 += 실단가
-            매수성공 = True
+            # ✅ 1~5주 랜덤 수량 결정
+            shares_to_buy = random.randint(1, 5)
+            가능한수량 = 남은금액 // 실단가
+            매수수량 = min(shares_to_buy, 가능한수량)
 
-            if 종목 in 매수기록:
-                매수기록[종목]["shares"] += 1
-                매수기록[종목]["total_price"] += 실단가
-                매수기록[종목]["fee"] += 수수료
-            else:
-                매수기록[종목] = {
-                    "shares": 1,
-                    "price_per_share": 원단가,
-                    "total_price": 실단가,
-                    "fee": 수수료
-                }
+            if 매수수량 <= 0:
+                continue
+
+            for _ in range(매수수량):
+                add_balance(user_id, -실단가)
+                남은금액 -= 실단가
+                수수료 = 실단가 - 원단가
+                수수료총합 += 수수료
+                총사용액 += 실단가
+                매수성공 = True
+
+                if 종목 in 매수기록:
+                    매수기록[종목]["shares"] += 1
+                    매수기록[종목]["total_price"] += 실단가
+                    매수기록[종목]["fee"] += 수수료
+                else:
+                    매수기록[종목] = {
+                        "shares": 1,
+                        "price_per_share": 원단가,
+                        "total_price": 실단가,
+                        "fee": 수수료
+                    }
 
         if not 매수성공 or 남은금액 < 1000:
             break
