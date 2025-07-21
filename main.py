@@ -5095,6 +5095,18 @@ async def 타자알바(interaction: discord.Interaction):
             # ✅ 초과근무 → 오덕로또 상금 풀 적립
             add_oduk_pool(reward)
             pool_amount = get_oduk_pool_amount()
+
+            # ✅ 20% 확률로 고용노동부 신고 성공 → 알바비 절반 돌려받기
+            if random.random() < 0.2:
+                compensation = reward // 2
+                add_balance(user_id, compensation)
+                return await msg.reply(
+                    f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로채려 했습니다...\n"
+                    f"⚖️ 하지만 고용노동부에 **신고에 성공하여**, 알바비 절반인 **{compensation:,}원**을 되찾았습니다!\n"
+                    f"💼 노동자의 정당한 권리는 반드시 지켜져야 합니다!",
+                    mention_author=False
+                )
+
             return await msg.reply(
                 f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
                 f"💰 알바비는 모두 **오덕로또 상금 풀**에 적립되었습니다.\n"
@@ -5102,6 +5114,7 @@ async def 타자알바(interaction: discord.Interaction):
                 f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!",
                 mention_author=False
             )
+
 
         add_balance(user_id, reward)
 
