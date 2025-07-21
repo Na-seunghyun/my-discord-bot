@@ -5216,10 +5216,10 @@ import discord
 recent_alerts = {}
 ALERT_INTERVAL_SECONDS = 600  # 중복 알림 방지: 10분
 START_TIME_TOLERANCE = 120    # 시작 시간 오차 허용: 2분
-PLAYER_COUNT_TOLERANCE = 3    # 현재 인원수 오차 허용: ±3명
+PLAYER_COUNT_TOLERANCE = 3    # 현재 인원수 오차 허용
+TOTAL_COUNT_TOLERANCE = 3     # 전체 인원수 오차 허용
 TRACKED_CHANNELS = [f"일반{i}" for i in range(1, 17)] + [f"큰맵{i}" for i in range(1, 3)]
 ALERT_CHANNEL_NAME = "자유채팅방"
-TOTAL_COUNT_TOLERANCE = 3  # 전체 인원 ±3명 허용
 
 # ✅ details 파싱: "Normal,Miramar,99/100"
 def parse_details(details):
@@ -5254,39 +5254,48 @@ async def detect_matching_pubg_channels():
     now = datetime.utcnow()
     channel_data = []
 
+    print(f"[DEBUG] 🔍 감지 루프 실행됨: {now.isoformat()}")
+
     for vc in guild.voice_channels:
+        print(f"[DEBUG] 채널 체크: {vc.name}")
         if vc.name not in TRACKED_CHANNELS:
+            print(f"  → 감지 제외됨 (이름 불일치)")
             continue
+
+        print(f"  → 감지 대상 채널")
+        print(f"  → 총 멤버 수: {len(vc.members)}")
 
         members = [m for m in vc.members if not m.bot]
-        if not members:
-            continue
+        print(f"  → 감지 대상 유저 수 (봇 제외): {len(members)}")
 
         for m in members:
+            print(f"    👤 유저: {m.display_name} ({m.id})")
+            print(f"    ↳ 활동 목록: {m.activities}")
             for act in m.activities:
-                if act.type == discord.ActivityType.playing and act.name == "PUBG: BATTLEGROUNDS":
-                    print(f"[DEBUG] 감지된 유저: {m.name}")
-                    print(f"  ↳ details: {act.details}")
-                    print(f"  ↳ state:   {act.state}")
-                    print(f"  ↳ start:   {act.start}")
+                print(f"      🎮 act: name={act.name}, type={act.type}, details={act.details}, state={act.state}, start={act.start}")
+                if act.type == discord.ActivityType.playing:
+                    # PUBG 여부는 문자열 포함으로 완화
+                    if "pubg" in (act.name or "").lower():
+                        map_name, current_players, total_players = parse_details(act.details)
+                        mode = parse_game_mode(act.state)
+                        start_time = act.start
 
-                    map_name, current_players, total_players = parse_details(act.details)
-                    mode = parse_game_mode(act.state)
-                    start_time = act.start
-
-                    if map_name and mode and total_players:
-                        print(f"[DEBUG] → 추출 성공: {map_name}, {mode}, {current_players}/{total_players}")
-                        channel_data.append({
-                            "channel": vc.name,
-                            "map": map_name,
-                            "mode": mode,
-                            "current": current_players,
-                            "total": total_players,
-                            "start_time": start_time
-                        })
+                        if map_name and mode and total_players:
+                            print(f"[DEBUG] ✅ 추출 성공: {map_name}, {mode}, {current_players}/{total_players}")
+                            channel_data.append({
+                                "channel": vc.name,
+                                "map": map_name,
+                                "mode": mode,
+                                "current": current_players,
+                                "total": total_players,
+                                "start_time": start_time
+                            })
+                        else:
+                            print(f"[DEBUG] ❌ 파싱 실패: details/state 불일치 또는 누락")
                     else:
-                        print(f"[DEBUG] → 파싱 실패: details/state 불일치")
-                    break  # 유저당 하나의 act만 반영
+                        print(f"[DEBUG] ⚠️ 다른 게임으로 판단됨: {act.name}")
+                else:
+                    print(f"[DEBUG] ❌ playing 타입 아님: {act.type}")
 
     # ✅ 그룹핑
     groups = []
@@ -5336,9 +5345,10 @@ async def detect_matching_pubg_channels():
             embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
             await text_channel.send(embed=embed)
 
-            print(f"[DEBUG] 알림 전송 완료: {group_key}")
+            print(f"[DEBUG] 🔔 알림 전송 완료: {group_key}")
 
         recent_alerts[group_key] = now
+
 
 
 
