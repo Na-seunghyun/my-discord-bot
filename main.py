@@ -4998,13 +4998,15 @@ def save_job_records(data):
 def update_job_record(user_id: str, reward: int):
     now = datetime.now(KST)
     current_week = get_current_week_tag()
+    today = now.date().isoformat()
     data = load_job_records()
 
     record = data.get(user_id, {
         "week": current_week,
         "count": 0,
         "total_earned": 0,
-        "last_time": ""
+        "last_time": "",
+        "daily": {}  # ✅ 추가
     })
 
     # ✅ 주차가 바뀌면 초기화
@@ -5013,18 +5015,26 @@ def update_job_record(user_id: str, reward: int):
             "week": current_week,
             "count": 0,
             "total_earned": 0,
-            "last_time": ""
+            "last_time": "",
+            "daily": {}
         }
 
-    if record["count"] >= 5:
-        return False  # 하루 제한
+    # ✅ 일일 횟수 제한 체크
+    daily = record.get("daily", {})
+    today_count = daily.get(today, 0)
+    if today_count >= 5:
+        return False
 
+    # ✅ 기록 업데이트
     record["count"] += 1
     record["total_earned"] += reward
     record["last_time"] = now.isoformat()
+    daily[today] = today_count + 1
+    record["daily"] = daily
     data[user_id] = record
     save_job_records(data)
     return True
+
 
 # ✅ 잔액 함수는 네 기존 코드 사용
 def add_balance(user_id, amount):
