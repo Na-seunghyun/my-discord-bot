@@ -5546,7 +5546,7 @@ async def detect_matching_pubg_users():
                     continue
                 details = getattr(act, "details", "")
                 state = getattr(act, "state", "")
-                if details.lower().strip().startswith("in lobby"):
+                if details and details.lower().strip().startswith("in lobby"):
                     continue
 
                 game_mode = parse_game_mode(state)
