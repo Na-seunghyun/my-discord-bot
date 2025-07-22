@@ -2532,7 +2532,7 @@ async def 베팅액_자동완성(interaction: discord.Interaction, current: str)
     user_id = str(interaction.user.id)
     balance = balances.get(user_id, {}).get("amount", 0)
 
-    if balance < 500:
+    if balance < 100:
         return [app_commands.Choice(name="❌ 최소 베팅금 부족", value="0")]
 
     half = balance // 2
