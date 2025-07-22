@@ -5564,9 +5564,10 @@ async def detect_matching_pubg_users():
                     continue
                 if not is_pubg_name(getattr(act, "name", "")):
                     continue
+
                 details = getattr(act, "details", "")
                 state = getattr(act, "state", "")
-                if details and details.lower().strip().startswith("in lobby"):
+                if not details or details.lower().strip().startswith("in lobby") or "watch" in state.lower():
                     continue
 
                 game_mode = parse_game_mode(state)
@@ -5585,36 +5586,36 @@ async def detect_matching_pubg_users():
                     }
 
     # ✅ 유저 간 비교 (같은 경기 판단)
-    uf = UnionFind()
+    groups = []
+    visited = set()
     users = list(user_data.items())
 
     for i in range(len(users)):
         uid1, d1 = users[i]
+        if uid1 in visited:
+            continue
+        group = [d1]
+        visited.add(uid1)
         for j in range(i + 1, len(users)):
             uid2, d2 = users[j]
+            if uid2 in visited:
+                continue
+            if d1["map"] == d2["map"] and d1["mode"] == d2["mode"] and d1["current"] == d2["current"] and d1["total"] == d2["total"]:
+                if abs((d1["start"] - d2["start"]).total_seconds()) <= COMPARE_TOLERANCE_SECONDS:
+                    group.append(d2)
+                    visited.add(uid2)
+        if len(group) >= 2:
+            groups.append(group)
 
-            # ✅ 같은 채널 내 유저는 제외
-            if d1["channel"] == d2["channel"]:
-                continue
+    for members in groups:
+        # ✅ group_key: 음성채널들의 조합
+        group_key = frozenset(d["channel"] for d in members)
 
-            if d1["map"] != d2["map"]:
-                continue
-            if d1["mode"] != d2["mode"]:
-                continue
-            if d1["current"] != d2["current"] or d1["total"] != d2["total"]:
-                continue
-            if abs((d1["start"] - d2["start"]).total_seconds()) > COMPARE_TOLERANCE_SECONDS:
-                continue
-
-            uf.union(uid1, uid2)
-
-    for group in uf.groups():
-        if len(group) < 2:
+        # ✅ 동일 음성채널 내만 있는 경우 제외
+        if len(group_key) <= 1:
             continue
 
-        members = [user_data[uid] for uid in group]
-        group_key = frozenset((d["user"].id, d["channel"]) for d in members)
-
+        # ✅ 중복 알림 방지
         if group_key in recent_alerts and (now - recent_alerts[group_key]).total_seconds() < ALERT_INTERVAL_SECONDS:
             continue
 
@@ -5626,15 +5627,12 @@ async def detect_matching_pubg_users():
         times = [d["start"] for d in members]
         max_diff = max((abs((s - t).total_seconds()) for s in times for t in times))
 
-        # ✅ 채널별로 유저 정리
+        # ✅ 채널별 유저 정리
         by_channel = {}
         for d in members:
             by_channel.setdefault(d["channel"], []).append(d["user"].display_name)
 
-        desc_lines = []
-        for ch_name, names in by_channel.items():
-            desc_lines.append(f"- **{ch_name}**: {', '.join(names)}")
-
+        desc_lines = [f"**{ch}**: {', '.join(names)}" for ch, names in by_channel.items()]
         desc = "\n".join(desc_lines)
 
         text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
@@ -5652,12 +5650,10 @@ async def detect_matching_pubg_users():
             embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
             await text_channel.send(embed=embed)
 
-            # ✅ 로그
             user_tags = [f"{d['user'].display_name}@{d['channel']}" for d in members]
             log(f"🔔 알림 전송: {user_tags}")
 
         recent_alerts[group_key] = now
-
 
 
 
