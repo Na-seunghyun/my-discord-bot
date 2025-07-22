@@ -5488,7 +5488,6 @@ async def 은행잔고(interaction: discord.Interaction, 대상: discord.Member 
 
 
 
-
 import re
 import discord
 from datetime import datetime, timedelta, timezone
@@ -5531,7 +5530,7 @@ class UnionFind:
     def find(self, x):
         if x not in self.parent:
             self.parent[x] = x
-        if self.parent[x] != x:
+        if self.parent[x] != self.find(self.parent[x]):
             self.parent[x] = self.find(self.parent[x])
         return self.parent[x]
 
@@ -5592,6 +5591,11 @@ async def detect_matching_pubg_users():
         uid1, d1 = users[i]
         for j in range(i + 1, len(users)):
             uid2, d2 = users[j]
+
+            # ✅ 같은 채널 내 유저는 제외
+            if d1["channel"] == d2["channel"]:
+                continue
+
             if d1["map"] != d2["map"]:
                 continue
             if d1["mode"] != d2["mode"]:
@@ -5600,6 +5604,7 @@ async def detect_matching_pubg_users():
                 continue
             if abs((d1["start"] - d2["start"]).total_seconds()) > COMPARE_TOLERANCE_SECONDS:
                 continue
+
             uf.union(uid1, uid2)
 
     for group in uf.groups():
@@ -5607,8 +5612,6 @@ async def detect_matching_pubg_users():
             continue
 
         members = [user_data[uid] for uid in group]
-
-        # ✅ 개선된 알림 그룹키 (유저 ID + 채널 기준)
         group_key = frozenset((d["user"].id, d["channel"]) for d in members)
 
         if group_key in recent_alerts and (now - recent_alerts[group_key]).total_seconds() < ALERT_INTERVAL_SECONDS:
@@ -5648,11 +5651,12 @@ async def detect_matching_pubg_users():
             embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
             await text_channel.send(embed=embed)
 
-            # ✅ 안전한 로그 출력 (f-string 중첩 방지)
+            # ✅ 로그
             user_tags = [f"{d['user'].display_name}@{d['channel']}" for d in members]
             log(f"🔔 알림 전송: {user_tags}")
 
         recent_alerts[group_key] = now
+
 
 
 
