@@ -5264,7 +5264,6 @@ def add_bank_deposit(user_id, amount):
     bank[uid]["deposits"].append(deposit)
     save_bank_data(bank)
 
-# ✅ 출금 처리 및 이자 계산 + 전액 사용된 예치금 제거
 def process_bank_withdraw(user_id, amount):
     bank = load_bank_data()
     uid = str(user_id)
@@ -5273,7 +5272,7 @@ def process_bank_withdraw(user_id, amount):
     interest_total = 0
     now = datetime.utcnow()
 
-    new_deposits = []
+    updated_deposits = []
     for d in deposits:
         available = d["amount"] - d.get("used", 0)
         if available <= 0:
@@ -5288,21 +5287,23 @@ def process_bank_withdraw(user_id, amount):
             interest = int(take * 0.02)
             interest_total += interest
 
+        # 남은 금액이 있다면 유지, 아니면 삭제
         if d["used"] < d["amount"]:
-            new_deposits.append(d)
+            updated_deposits.append(d)
 
         if remaining <= 0:
             break
 
-    # 남은 예치금 저장
-    bank[uid]["deposits"] = new_deposits
+    # 🔄 잔여 예금만 저장
+    bank[uid]["deposits"] = updated_deposits
     save_bank_data(bank)
 
-    # 이자 상한, 세금 계산
+    # 세금 및 최대 이자 제한
     interest_total = min(interest_total, 500_000)
-    tax = int(interest_total * 0.10)
+    tax = int(interest_total * 0.1)
     net_interest = interest_total - tax
     return net_interest, tax
+
 
 # ✅ 가장 빠른 이자 수령 가능 시각 반환 (KST 기준)
 def get_next_interest_time(user_id):
