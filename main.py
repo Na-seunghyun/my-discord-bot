@@ -5530,7 +5530,7 @@ class UnionFind:
     def find(self, x):
         if x not in self.parent:
             self.parent[x] = x
-        if self.parent[x] != self.find(self.parent[x]):
+        if self.parent[x] != x:
             self.parent[x] = self.find(self.parent[x])
         return self.parent[x]
 
@@ -5543,6 +5543,7 @@ class UnionFind:
             root = self.find(item)
             result.setdefault(root, set()).add(item)
         return list(result.values())
+
 
 @tasks.loop(seconds=3)
 async def detect_matching_pubg_users():
