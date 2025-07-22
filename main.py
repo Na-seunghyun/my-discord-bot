@@ -5471,6 +5471,156 @@ async def 은행잔고(interaction: discord.Interaction, 대상: discord.Member 
 
 
 
+from discord import app_commands, Interaction, ButtonStyle, ui
+import discord
+import random
+
+# ✅ 시군구 포함된 지역 200개
+ALL_REGIONS = [
+    "서울 강남구", "서울 서초구", "서울 송파구", "서울 종로구", "서울 마포구", "서울 동작구", "서울 강서구", "서울 성동구", "서울 노원구", "서울 중랑구",
+    "부산 해운대구", "부산 수영구", "부산 동래구", "부산 사하구", "부산 금정구", "부산 남구", "부산 연제구", "부산 북구", "부산 중구", "부산 서구",
+    "대구 수성구", "대구 달서구", "대구 중구", "대구 동구", "대구 북구", "대구 서구", "대구 남구", "대구 달성군",
+    "인천 연수구", "인천 부평구", "인천 계양구", "인천 남동구", "인천 미추홀구", "인천 서구", "인천 중구", "인천 동구",
+    "광주 북구", "광주 남구", "광주 동구", "광주 서구", "광주 광산구",
+    "대전 유성구", "대전 서구", "대전 중구", "대전 동구", "대전 대덕구",
+    "울산 남구", "울산 북구", "울산 동구", "울산 중구", "울산 울주군",
+    "세종 조치원읍", "세종 한솔동", "세종 도담동", "세종 아름동", "세종 고운동",
+    "경기 수원시", "경기 성남시", "경기 고양시", "경기 용인시", "경기 부천시", "경기 안양시", "경기 평택시", "경기 시흥시", "경기 김포시", "경기 광주시",
+    "경기 군포시", "경기 의정부시", "경기 하남시", "경기 파주시", "경기 남양주시", "경기 오산시", "경기 이천시", "경기 안성시", "경기 여주시", "경기 양주시",
+    "강원 춘천시", "강원 원주시", "강원 강릉시", "강원 동해시", "강원 속초시", "강원 삼척시", "강원 태백시", "강원 홍천군", "강원 횡성군", "강원 평창군",
+    "충북 청주시", "충북 충주시", "충북 제천시", "충북 음성군", "충북 진천군", "충북 괴산군", "충북 보은군", "충북 옥천군", "충북 단양군", "충북 영동군",
+    "충남 천안시", "충남 아산시", "충남 공주시", "충남 보령시", "충남 서산시", "충남 논산시", "충남 계룡시", "충남 당진시", "충남 서천군", "충남 금산군",
+    "전북 전주시", "전북 익산시", "전북 군산시", "전북 정읍시", "전북 남원시", "전북 김제시", "전북 완주군", "전북 부안군", "전북 고창군", "전북 진안군",
+    "전남 목포시", "전남 여수시", "전남 순천시", "전남 나주시", "전남 광양시", "전남 담양군", "전남 곡성군", "전남 구례군", "전남 보성군", "전남 고흥군",
+    "경북 포항시", "경북 경주시", "경북 김천시", "경북 안동시", "경북 구미시", "경북 영주시", "경북 영천시", "경북 상주시", "경북 문경시", "경북 경산시",
+    "경남 창원시", "경남 진주시", "경남 통영시", "경남 사천시", "경남 김해시", "경남 밀양시", "경남 거제시", "경남 양산시", "경남 의령군", "경남 함안군",
+    "제주 제주시", "제주 서귀포시", "제주 애월읍", "제주 조천읍", "제주 구좌읍", "제주 성산읍", "제주 표선면", "제주 한림읍", "제주 한경면", "제주 대정읍"
+]
+
+class RealEstateView(ui.View):
+    def __init__(self, user: discord.User, 투자금: int):
+        super().__init__(timeout=30)
+        self.user = user
+        self.invest_amount = 투자금
+        self.disabled_regions = set()
+
+        sampled_regions = random.sample(ALL_REGIONS, 25)
+        for region in sampled_regions:
+            button = ui.Button(label=region, style=ButtonStyle.primary, custom_id=f"region_{region}")
+            button.callback = self.make_callback(region)
+            self.add_item(button)
+
+    def make_callback(self, region: str):
+        async def callback(interaction: Interaction):
+            if interaction.user.id != self.user.id:
+                return await interaction.response.send_message("❌ 본인만 사용할 수 있습니다.", ephemeral=True)
+
+            if region in self.disabled_regions:
+                return await interaction.response.send_message("이미 선택한 지역입니다.", ephemeral=True)
+
+            balance = get_balance(self.user.id)
+            if balance < self.invest_amount:
+                return await interaction.response.send_message(
+                    f"❌ 잔액이 부족합니다.\n현재 잔액: **{balance:,}원**",
+                    ephemeral=True
+                )
+
+            # ✅ 수익률 계산
+            profit_rate = random.randint(-50, 50)
+            profit_amount = int(self.invest_amount * (profit_rate / 100))
+            tax = int(profit_amount * 0.1) if profit_amount > 0 else 0
+            net_gain = profit_amount - tax
+            receive = self.invest_amount + net_gain
+
+            # ✅ 잔액 반영
+            add_balance(self.user.id, receive - self.invest_amount)
+
+            # ✅ 세금 적립
+            if tax > 0:
+                add_oduk_pool(tax)
+
+            # ✅ 메시지 구성
+            if profit_amount >= 0:
+                result_title = "📈 투자 성공!"
+                result_color = discord.Color.green()
+                profit_text = f"💰 **+{profit_amount:,}원 수익!**"
+                tax_text = f"🧾 세금 10%: {tax:,}원 → 오덕로또 적립"
+                extra_text = ""
+                footer_text = "오덕 부동산 투자 시스템"
+            else:
+                result_title = "📉 투자 실패..."
+                result_color = discord.Color.red()
+                profit_text = f"💸 **{profit_amount:,}원 손실...**"
+                tax_text = "🧾 세금 없음 (손실)"
+                pool = get_oduk_pool_amount()
+                extra_text = (
+                    f"\n\n🍜 손실 금액은 오덕 로또 상금 풀에 적립되었습니다!\n"
+                    f"💰 현재 오덕 로또 잔고: **{pool:,}원**\n"
+                    f"🎟️ `/오덕로또참여`로 복구의 기회를 잡아보세요!"
+                )
+                footer_text = "오덕 부동산 투자 시스템 • 실패자에게도 희망을..."
+
+            embed = discord.Embed(
+                title=result_title,
+                description=(
+                    f"📍 투자 지역: **{region}**\n"
+                    f"💵 투자금: {self.invest_amount:,}원\n"
+                    f"📊 수익률: {profit_rate:+}%\n"
+                    f"{profit_text}\n"
+                    f"{tax_text}\n"
+                    f"💼 회수 금액: **{receive:,}원**"
+                    f"{extra_text}"
+                ),
+                color=result_color
+            )
+            embed.set_footer(text=footer_text)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+            self.disabled_regions.add(region)
+        return callback
+
+
+@tree.command(name="부동산투자", description="전국 부동산 투자! 버튼을 눌러 수익을 확인해보세요.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(투자금="투자할 금액 (2만원 이상)")
+async def 부동산투자(interaction: Interaction, 투자금: int):
+    if 투자금 < 20000:
+        return await interaction.response.send_message("❌ 최소 투자금은 **20,000원**입니다.", ephemeral=True)
+
+    await interaction.response.send_message(
+        f"📍 투자할 지역을 선택하세요!\n💵 투자금: **{투자금:,}원** (즉시 반영)",
+        view=RealEstateView(interaction.user, 투자금),
+        ephemeral=True
+    )
+
+
+@부동산투자.autocomplete("투자금")
+async def 투자금_자동완성(interaction: Interaction, current: str):
+    balances = load_balances()
+    user_id = str(interaction.user.id)
+    balance = balances.get(user_id, {}).get("amount", 0)
+
+    if balance < 20000:
+        choices = [app_commands.Choice(name="❌ 최소 투자금 부족 (2만원 이상)", value="20000")]
+    else:
+        half = (balance // 2) // 1000 * 1000
+        allin = balance
+        base = [20000, 50000, 100000]
+
+        choices = [
+            app_commands.Choice(name=f"🔥 전액 투자 ({allin:,}원)", value=str(allin)),
+            app_commands.Choice(name=f"💸 절반 투자 ({half:,}원)", value=str(half)),
+        ]
+
+        for val in base:
+            if val < allin:
+                choices.append(app_commands.Choice(name=f"✨ 추천 {val:,}원", value=str(val)))
+
+    try:
+        await interaction.response.send_autocomplete(choices[:5])
+    except discord.NotFound:
+        print("⚠️ 자동완성 실패: 인터랙션이 만료되었거나 응답이 취소되었습니다.")
+
+
 
 
 
@@ -5549,7 +5699,7 @@ class UnionFind:
         return list(result.values())
 
 
-@tasks.loop(seconds=3)
+@tasks.loop(seconds=5)
 async def detect_matching_pubg_users():
     now = datetime.utcnow()
     guild = bot.get_guild(GUILD_ID)
