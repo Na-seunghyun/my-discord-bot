@@ -5627,9 +5627,13 @@ async def detect_matching_pubg_users():
             )
             embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
             await text_channel.send(embed=embed)
-            log(f"🔔 알림 전송: {[f'{d['user'].display_name']}@{d['channel']}' for d in members]}")
+
+            # ✅ 안전한 로그 출력 (f-string 중첩 방지)
+            user_tags = [f"{d['user'].display_name}@{d['channel']}" for d in members]
+            log(f"🔔 알림 전송: {user_tags}")
 
         recent_alerts[group_key] = now
+
 
 
 
