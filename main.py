@@ -5616,9 +5616,9 @@ async def 투자금_자동완성(interaction: Interaction, current: str):
                 choices.append(app_commands.Choice(name=f"✨ 추천 {val:,}원", value=str(val)))
 
     try:
-        await interaction.response.send_autocomplete(choices[:5])
+        await interaction.response.autocomplete(choices[:5])
     except discord.NotFound:
-        print("⚠️ 자동완성 실패: 인터랙션이 만료되었거나 응답이 취소되었습니다.")
+        print("⚠️ 자동완성 실패: 응답이 취소되었거나 만료되었습니다.")
 
 
 
