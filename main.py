@@ -5469,8 +5469,6 @@ async def 은행잔고(interaction: discord.Interaction, 대상: discord.Member 
 
 
 
-
-
 import re
 import discord
 from datetime import datetime, timedelta, timezone
@@ -5479,12 +5477,11 @@ from discord.ext import tasks
 # ✅ 설정값
 ALERT_CHANNEL_NAME = "자유채팅방"
 ALERT_INTERVAL_SECONDS = 600
-COMPARE_TIMES = [15, 30]  # 비교 기준 시점
-COMPARE_TOLERANCE = 30     # 비교 허용 오차
+COMPARE_TOLERANCE_SECONDS = 60
 DEBUG = True
 
-detected_channels = {}
 recent_alerts = {}
+KST = timezone(timedelta(hours=9))
 
 def log(msg):
     if DEBUG:
@@ -5503,7 +5500,7 @@ def parse_game_mode(state):
     if not state:
         return None
     for mode in ["Squad", "Duo", "Solo"]:
-        if mode in state:
+        if mode.lower() in state.lower():
             return mode
     return None
 
@@ -5529,129 +5526,108 @@ class UnionFind:
         return list(result.values())
 
 @tasks.loop(seconds=3)
-async def detect_matching_pubg_channels():
+async def detect_matching_pubg_users():
     now = datetime.utcnow()
     guild = bot.get_guild(GUILD_ID)
     if not guild:
         return
 
+    user_data = {}
+
+    # ✅ 모든 유저 활동 상태 확인
     for vc in guild.voice_channels:
-        members = [m for m in vc.members if not m.bot]
-        if not members:
-            continue
-
-        mode_counts = {}
-        start_times = []
-        map_name, mode, current, total = None, None, None, None
-
-        for m in members:
-            for act in m.activities:
-                if getattr(act, "type", None) != discord.ActivityType.playing:
+        for member in vc.members:
+            if member.bot:
+                continue
+            for act in member.activities:
+                if act.type != discord.ActivityType.playing:
                     continue
                 if not is_pubg_name(getattr(act, "name", "")):
                     continue
-
                 details = getattr(act, "details", "")
-                if details and "in lobby" in details.lower():
+                state = getattr(act, "state", "")
+                if details.lower().strip().startswith("in lobby"):
                     continue
 
-                state = getattr(act, "state", "")
-                this_mode = parse_game_mode(state)
-                this_map, this_current, this_total = parse_details(details)
-                start_time = getattr(act, "start", None)
+                game_mode = parse_game_mode(state)
+                map_name, current, total = parse_details(details)
+                start = getattr(act, "start", None)
 
-                if this_map and this_mode and this_total:
-                    if this_mode not in ["watching", "spectating", "lobby"]:
-                        mode_counts[this_mode] = mode_counts.get(this_mode, 0) + 1
-                    if start_time:
-                        start_times.append(start_time)
+                if map_name and game_mode and current and total and start:
+                    user_data[member.id] = {
+                        "user": member,
+                        "channel": vc.name,
+                        "map": map_name,
+                        "mode": game_mode,
+                        "current": current,
+                        "total": total,
+                        "start": start,
+                    }
 
-                    if not map_name:
-                        map_name = this_map
-                        mode = this_mode
-                        current = this_current
-                        total = this_total
-
-        if not mode_counts:
-            continue
-
-        # 대표 상태 선정
-        mode = max(mode_counts.items(), key=lambda x: x[1])[0]
-        start_time = max(start_times) if start_times else None
-
-        if map_name and mode and current and total:
-            detected_channels[vc.name] = {
-                "channel": vc.name,
-                "map": map_name,
-                "mode": mode,
-                "current": current,
-                "total": total,
-                "first_detected": detected_channels.get(vc.name, {}).get("first_detected", now),
-                "last_updated": now,
-                "game_start": start_time
-            }
-
-    # ✅ 오래된 채널 제거
-    expired = [
-        ch for ch, data in detected_channels.items()
-        if (now - data["last_updated"]).total_seconds() > 90
-    ]
-    for ch in expired:
-        del detected_channels[ch]
-
-    # ✅ 비교 기준 조건 만족 채널
-    eligible = {
-        ch: data for ch, data in detected_channels.items()
-        if any(abs((now - data["first_detected"]).total_seconds() - t) <= COMPARE_TOLERANCE for t in COMPARE_TIMES)
-        and data.get("game_start") is not None
-    }
-
-    # ✅ 유사 채널 그룹핑
+    # ✅ 유저 간 비교 (같은 경기 판단)
     uf = UnionFind()
-    items = list(eligible.items())
-    for i in range(len(items)):
-        ch1, d1 = items[i]
-        for j in range(i + 1, len(items)):
-            ch2, d2 = items[j]
+    users = list(user_data.items())
 
-            if d1["map"] != d2["map"] or d1["mode"] != d2["mode"]:
+    for i in range(len(users)):
+        uid1, d1 = users[i]
+        for j in range(i + 1, len(users)):
+            uid2, d2 = users[j]
+            if d1["map"] != d2["map"]:
+                continue
+            if d1["mode"] != d2["mode"]:
                 continue
             if d1["current"] != d2["current"] or d1["total"] != d2["total"]:
                 continue
-
-            s1, s2 = d1.get("game_start"), d2.get("game_start")
-            if s1 and s2 and abs((s1 - s2).total_seconds()) > 60:
+            if abs((d1["start"] - d2["start"]).total_seconds()) > COMPARE_TOLERANCE_SECONDS:
                 continue
-
-            uf.union(ch1, ch2)
+            uf.union(uid1, uid2)
 
     for group in uf.groups():
         if len(group) < 2:
             continue
 
-        group_key = frozenset(group)
+        members = [user_data[uid] for uid in group]
+
+        # ✅ 개선된 알림 그룹키 (유저 ID + 채널 기준)
+        group_key = frozenset((d["user"].id, d["channel"]) for d in members)
+
         if group_key in recent_alerts and (now - recent_alerts[group_key]).total_seconds() < ALERT_INTERVAL_SECONDS:
             continue
 
-        repr_data = detected_channels[next(iter(group))]
-        kst_time = repr_data["game_start"].astimezone(timezone(timedelta(hours=9))).strftime("%H:%M:%S") if repr_data["game_start"] else "N/A"
+        repr_user = members[0]
+        map_name = repr_user["map"]
+        mode = repr_user["mode"]
+        current = repr_user["current"]
+        total = repr_user["total"]
+        times = [d["start"] for d in members]
+        max_diff = max((abs((s - t).total_seconds()) for s in times for t in times))
+
+        # ✅ 채널별로 유저 정리
+        by_channel = {}
+        for d in members:
+            by_channel.setdefault(d["channel"], []).append(d["user"].display_name)
+
+        desc_lines = []
+        for ch_name, names in by_channel.items():
+            desc_lines.append(f"- **{ch_name}**: {', '.join(names)}")
+
+        desc = "\n".join(desc_lines)
 
         text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
         if text_channel:
-            channels_text = ", ".join(f"**{ch}**" for ch in sorted(group))
             embed = discord.Embed(
                 title="🎯 동일한 PUBG 경기 추정!",
                 description=(
-                    f"{channels_text} 채널에서 동일한 PUBG 경기가 감지됐습니다!\n\n"
-                    f"🗺️ 맵: `{repr_data['map']}` | 모드: `{repr_data['mode']}`\n"
-                    f"👥 인원: {repr_data['current']}/{repr_data['total']} (정확히 일치)\n"
-                    f"🕒 시작 시각: {kst_time}"
+                    f"{desc}\n\n"
+                    f"🗺️ 맵: `{map_name}` | 모드: `{mode}`\n"
+                    f"👥 인원: {current}/{total}\n"
+                    f"🕒 시작 시각 오차: 약 {int(max_diff)}초"
                 ),
                 color=discord.Color.orange()
             )
             embed.set_footer(text="오덕봇 감지 시스템 • 중복 알림 방지 10분")
             await text_channel.send(embed=embed)
-            log(f"🔔 알림 전송: {sorted(group)}")
+            log(f"🔔 알림 전송: {[f'{d['user'].display_name']}@{d['channel']}' for d in members]}")
 
         recent_alerts[group_key] = now
 
