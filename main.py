@@ -5534,6 +5534,7 @@ class RealEstateView(ui.View):
 
             # ✅ 잔액 반영
             add_balance(self.user.id, receive - self.invest_amount)
+            final_balance = get_balance(self.user.id)  # 잔액 업데이트 후 조회
 
             # ✅ 세금 적립
             if tax > 0:
@@ -5568,16 +5569,18 @@ class RealEstateView(ui.View):
                     f"📊 수익률: {profit_rate:+}%\n"
                     f"{profit_text}\n"
                     f"{tax_text}\n"
-                    f"💼 회수 금액: **{receive:,}원**"
+                    f"💼 회수 금액: **{receive:,}원**\n"
+                    f"💰 최종 잔액: **{final_balance:,}원**"
                     f"{extra_text}"
                 ),
                 color=result_color
             )
             embed.set_footer(text=footer_text)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=False)
 
             self.disabled_regions.add(region)
         return callback
+
 
 
 @tree.command(name="부동산투자", description="전국 부동산 투자! 버튼을 눌러 수익을 확인해보세요.", guild=discord.Object(id=GUILD_ID))
