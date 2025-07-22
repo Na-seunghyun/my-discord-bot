@@ -5385,13 +5385,26 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
+    # ✅ 출금 처리 및 이자 계산
     net_interest, tax = process_bank_withdraw(user_id, 금액)
+    original_interest = net_interest + tax  # 세전 이자
+
     add_balance(user_id, 금액 + net_interest)
 
     if tax > 0:
         add_oduk_pool(tax)
 
     pool_amt = get_oduk_pool_amount()
+
+    # ✅ 이자 한도 초과 안내 (500,000원 이상 → 컷팅됨)
+    if original_interest > 500_000:
+        await interaction.channel.send(
+            f"⚠️ **이자 지급 한도 초과 안내**\n"
+            f"원래 계산된 이자는 **{original_interest:,}원**이었지만,\n"
+            f"시스템 상 하루 최대 이자 지급 한도는 **500,000원**입니다.\n"
+            f"따라서 실제 지급된 이자는 세금 차감 후 **{net_interest:,}원**입니다.",
+            ephemeral=True
+        )
 
     await interaction.response.send_message(embed=create_embed(
         "🏧 출금 완료",
@@ -5406,6 +5419,7 @@ async def 출금(interaction: discord.Interaction, 금액: int):
         discord.Color.green(),
         user_id
     ))
+
 
 # ✅ 출금 자동완성
 @출금.autocomplete("금액")
