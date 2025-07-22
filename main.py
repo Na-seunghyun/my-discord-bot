@@ -5501,7 +5501,8 @@ ALERT_CHANNEL_NAME = "자유채팅방"
 ALERT_INTERVAL_SECONDS = 600
 COMPARE_TOLERANCE_SECONDS = 60
 DEBUG = True
-
+CHICKEN_ALERT_COOLDOWN = 600
+chicken_alerts = {}
 recent_alerts = {}
 KST = timezone(timedelta(hours=9))
 
@@ -5657,6 +5658,52 @@ async def detect_matching_pubg_users():
             log(f"🔔 알림 전송: {user_tags}")
 
         recent_alerts[group_key] = now
+
+    # ✅ 치킨 감지 (그룹 중 누군가가 winner 또는 chicken 상태일 경우)
+    for members in groups:
+        group_key = frozenset(d["channel"] for d in members)
+
+        # ✅ 중복 알림 방지
+        if group_key in chicken_alerts and (now - chicken_alerts[group_key]).total_seconds() < CHICKEN_ALERT_COOLDOWN:
+            continue
+
+        found_winner = False
+        for d in members:
+            user = d["user"]
+            for act in user.activities:
+                if act.type == discord.ActivityType.playing:
+                    state = getattr(act, "state", "") or ""
+                    if "winner" in state.lower() or "chicken" in state.lower():
+                        found_winner = True
+                        break
+            if found_winner:
+                break
+
+        if not found_winner:
+            continue  # 치킨 아님
+
+        # ✅ 채널별 유저 정리
+        by_channel = {}
+        for d in members:
+            by_channel.setdefault(d["channel"], []).append(d["user"].display_name)
+        desc_lines = [f"**{ch}**: {', '.join(names)}" for ch, names in by_channel.items()]
+        desc = "\n".join(desc_lines)
+
+        text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
+        if text_channel:
+            embed = discord.Embed(
+                title="🍗 치킨 획득!",
+                description=f"**{', '.join(group_key)}** 채널의 플레이어들이 치킨을 먹었습니다!\n\n"
+                            f"{desc}\n"
+                            f"🎉 모두 축하해주세요!",
+                color=discord.Color.gold()
+            )
+            embed.set_footer(text="오덕봇 • 중복 알림 방지 10분")
+            await text_channel.send(embed=embed)
+
+            log(f"🍗 치킨 알림 전송: {[d['user'].display_name for d in members]}")
+
+        chicken_alerts[group_key] = now
 
 
 
