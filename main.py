@@ -5203,6 +5203,278 @@ async def 초대기록(interaction: discord.Interaction):
 
 
 
+
+import os
+import json
+from datetime import datetime, timedelta, timezone
+
+# ✅ 설정
+BANK_FILE = "bank.json"
+KST = timezone(timedelta(hours=9))
+
+# ✅ 은행 데이터 로드
+def load_bank_data():
+    if not os.path.exists(BANK_FILE):
+        return {}
+    try:
+        with open(BANK_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        print("⚠️ bank.json이 손상되었습니다. 빈 구조로 복구합니다.")
+        return {}
+
+# ✅ 은행 데이터 저장
+def save_bank_data(data):
+    with open(BANK_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+# ✅ 전체 은행 잔고 계산 (사용되지 않은 총합)
+def get_total_bank_balance(user_id):
+    bank = load_bank_data()
+    user_data = bank.get(str(user_id), {"deposits": []})
+    return sum(d["amount"] - d.get("used", 0) for d in user_data.get("deposits", []))
+
+# ✅ 예금 추가
+def add_bank_deposit(user_id, amount):
+    bank = load_bank_data()
+    uid = str(user_id)
+    deposit = {
+        "amount": amount,
+        "timestamp": datetime.utcnow().isoformat(),
+        "used": 0
+    }
+    if uid not in bank:
+        bank[uid] = {"deposits": []}
+    bank[uid]["deposits"].append(deposit)
+    save_bank_data(bank)
+
+# ✅ 출금 처리 및 이자 계산 + 전액 사용된 예치금 제거
+def process_bank_withdraw(user_id, amount):
+    bank = load_bank_data()
+    uid = str(user_id)
+    deposits = bank.get(uid, {}).get("deposits", [])
+    remaining = amount
+    interest_total = 0
+    now = datetime.utcnow()
+
+    new_deposits = []
+    for d in deposits:
+        available = d["amount"] - d.get("used", 0)
+        if available <= 0:
+            continue
+
+        take = min(available, remaining)
+        d["used"] = d.get("used", 0) + take
+        remaining -= take
+
+        deposit_time = datetime.fromisoformat(d["timestamp"])
+        if now - deposit_time >= timedelta(hours=3):
+            interest = int(take * 0.02)
+            interest_total += interest
+
+        if d["used"] < d["amount"]:
+            new_deposits.append(d)
+
+        if remaining <= 0:
+            break
+
+    # 남은 예치금 저장
+    bank[uid]["deposits"] = new_deposits
+    save_bank_data(bank)
+
+    # 이자 상한, 세금 계산
+    interest_total = min(interest_total, 500_000)
+    tax = int(interest_total * 0.10)
+    net_interest = interest_total - tax
+    return net_interest, tax
+
+# ✅ 가장 빠른 이자 수령 가능 시각 반환 (KST 기준)
+def get_next_interest_time(user_id):
+    bank = load_bank_data()
+    uid = str(user_id)
+    deposits = bank.get(uid, {}).get("deposits", [])
+    next_times = []
+    for d in deposits:
+        available = d["amount"] - d.get("used", 0)
+        if available > 0:
+            ts = datetime.fromisoformat(d["timestamp"]).replace(tzinfo=timezone.utc).astimezone(KST)
+            next_times.append(ts + timedelta(hours=3))
+    if not next_times:
+        return None
+    return min(next_times)
+
+
+@tree.command(name="예금", description="지갑에서 은행으로 돈을 예금합니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(금액="예금할 금액")
+async def 예금(interaction: discord.Interaction, 금액: int):
+    user_id = str(interaction.user.id)
+    wallet = get_balance(user_id)
+    
+    if 금액 <= 0 or 금액 > wallet:
+        return await interaction.response.send_message(
+            f"❌ 예금 금액이 잘못되었거나 잔액이 부족합니다.\n💰 현재 지갑 잔액: **{wallet:,}원**",
+            ephemeral=True
+        )
+    
+    # 금액 이동
+    add_balance(user_id, -금액)
+    add_bank_deposit(user_id, 금액)
+
+    # 현재 상태 출력
+    bank_balance = get_total_bank_balance(user_id)
+    next_time = get_next_interest_time(user_id)
+    next_time_str = next_time.strftime("%Y-%m-%d %H:%M:%S") if next_time else "없음"
+
+    await interaction.response.send_message(embed=create_embed(
+        "🏦 예금 완료",
+        (
+            f"💸 지갑 → 은행: **{금액:,}원** 예금됨\n"
+            f"💰 현재 지갑 잔액: **{get_balance(user_id):,}원**\n"
+            f"🏛️ 현재 은행 잔고: **{bank_balance:,}원**\n"
+            f"⏰ 가장 빠른 이자 수령 가능 시각 (KST): {next_time_str}"
+        ),
+        discord.Color.blue(),
+        user_id
+    ))
+
+@예금.autocomplete("금액")
+async def 예금_자동완성(interaction: discord.Interaction, current: str):
+    from discord import app_commands
+
+    user_id = str(interaction.user.id)
+    balance = get_balance(user_id)
+
+    if balance <= 0:
+        return [app_commands.Choice(name="❌ 예금 가능한 금액 없음", value="0")]
+
+    choices = []
+
+    # 전액
+    choices.append(app_commands.Choice(
+        name=f"💰 전액 예금 ({balance:,}원)", value=str(balance)
+    ))
+
+    # 절반
+    half = balance // 2
+    if half > 0:
+        choices.append(app_commands.Choice(
+            name=f"🌓 절반 예금 ({half:,}원)", value=str(half)
+        ))
+
+    return choices
+
+
+@tree.command(name="출금", description="은행에서 지갑으로 돈을 출금합니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(금액="출금할 금액")
+async def 출금(interaction: discord.Interaction, 금액: int):
+    user_id = str(interaction.user.id)
+    bank_balance = get_total_bank_balance(user_id)
+
+    if 금액 <= 0 or 금액 > bank_balance:
+        return await interaction.response.send_message(
+            f"❌ 출금 금액이 잘못되었거나 은행 잔고가 부족합니다.\n🏛️ 현재 은행 잔고: **{bank_balance:,}원**",
+            ephemeral=True
+        )
+
+    # ✅ 출금 처리 및 이자 계산
+    net_interest, tax = process_bank_withdraw(user_id, 금액)
+    add_balance(user_id, 금액 + net_interest)
+
+    if tax > 0:
+        add_oduk_pool(tax)
+
+    pool_amt = get_oduk_pool_amount()
+
+    await interaction.response.send_message(embed=create_embed(
+        "🏧 출금 완료",
+        (
+            f"🏛️ 은행 → 지갑: **{금액:,}원** 출금됨\n"
+            f"💵 순이자 지급: **{net_interest:,}원** (세금 {tax:,}원 → 오덕로또 적립)\n"
+            f"💰 현재 지갑 잔액: **{get_balance(user_id):,}원**\n"
+            f"🏦 남은 은행 잔고: **{get_total_bank_balance(user_id):,}원**\n\n"
+            f"🎯 현재 오덕로또 상금: **{pool_amt:,}원**\n"
+            f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
+        ),
+        discord.Color.green(),
+        user_id
+    ))
+
+@출금.autocomplete("금액")
+async def 출금_자동완성(interaction: discord.Interaction, current: str):
+    from discord import app_commands
+
+    user_id = str(interaction.user.id)
+    bank_balance = get_total_bank_balance(user_id)
+
+    if bank_balance <= 0:
+        return [app_commands.Choice(name="❌ 출금 가능한 잔고 없음", value="0")]
+
+    choices = []
+
+    # 전액
+    choices.append(app_commands.Choice(
+        name=f"💰 전액 출금 ({bank_balance:,}원)", value=str(bank_balance)
+    ))
+
+    # 절반
+    half = bank_balance // 2
+    if half > 0:
+        choices.append(app_commands.Choice(
+            name=f"🌓 절반 출금 ({half:,}원)", value=str(half)
+        ))
+
+    return choices
+
+
+@tree.command(name="은행잔고", description="지정한 유저의 은행 잔고를 확인합니다 (본인은 이자 시간도 표시)", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(대상="은행 잔고를 확인할 유저 (선택)")
+async def 은행잔고(interaction: discord.Interaction, 대상: discord.Member = None):
+    대상 = 대상 or interaction.user
+    user_id = str(대상.id)
+    is_self = 대상.id == interaction.user.id
+
+    bank_balance = get_total_bank_balance(user_id)
+    next_time = get_next_interest_time(user_id) if is_self else None
+    next_time_str = next_time.strftime("%Y-%m-%d %H:%M:%S") if next_time else None
+
+    설명 = f"🏛️ {대상.display_name}님의 은행 잔고는 **{bank_balance:,}원**입니다."
+
+    if is_self and next_time:
+        설명 += f"\n⏰ 가장 빠른 이자 수령 가능 시각 (KST): {next_time_str}"
+    elif is_self:
+        설명 += "\n⏰ 아직 이자 수령 가능한 예금이 없습니다."
+
+    await interaction.response.send_message(embed=create_embed(
+        "🏦 은행 잔고 확인",
+        설명,
+        discord.Color.teal(),
+        user_id
+    ))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import re
 import discord
 from datetime import datetime, timedelta, timezone
