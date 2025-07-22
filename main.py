@@ -5656,14 +5656,21 @@ async def on_ready():
 
     print(f"🤖 봇 로그인됨: {bot.user}")
 
-    monitor_discord_ping.start()         # ✅ 기존 루프
-    detect_matching_pubg_channels.start()  # ✅ PUBG 감지 루프 추가
+    # ✅ 기존 루프 유지
+    if not monitor_discord_ping.is_running():
+        monitor_discord_ping.start()
+        print("📶 Discord 핑 모니터링 루프 시작됨")
+
+    # ✅ PUBG 감지 루프 실행 (이름 수정 및 중복 방지)
+    if not detect_matching_pubg_users.is_running():
+        detect_matching_pubg_users.start()
+        print("📡 PUBG 감지 루프 시작됨")
 
     await asyncio.sleep(2)
 
-
     for guild in bot.guilds:
         print(f"접속 서버: {guild.name} (ID: {guild.id})")
+
 
     try:
         synced = await tree.sync(guild=discord.Object(id=GUILD_ID))
