@@ -5219,11 +5219,13 @@ async def 초대기록(interaction: discord.Interaction):
 
 
 
+
+
+
+
 import os
 import json
 from datetime import datetime, timedelta, timezone
-import discord
-from discord import app_commands
 
 # ✅ 설정
 BANK_FILE = "bank.json"
@@ -5245,7 +5247,7 @@ def save_bank_data(data):
     with open(BANK_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
-# ✅ 전체 은행 잔고 계산
+# ✅ 전체 은행 잔고 계산 (사용되지 않은 총합)
 def get_total_bank_balance(user_id):
     bank = load_bank_data()
     user_data = bank.get(str(user_id), {"deposits": []})
@@ -5275,6 +5277,7 @@ def process_bank_withdraw(user_id, amount):
     now = datetime.utcnow()
 
     updated_deposits = []
+
     for d in deposits:
         available = d["amount"] - d.get("used", 0)
         if available <= 0:
@@ -5293,21 +5296,21 @@ def process_bank_withdraw(user_id, amount):
         updated_deposits.append(d)
 
         if remaining <= 0:
-            break
+            continue  # 🔄 기존 break → continue로 수정
 
-    # 남은 예금 항목만 저장 (used < amount)
+    # 사용되지 않은 예금만 유지
     bank[uid]["deposits"] = [
         d for d in updated_deposits if (d["amount"] - d.get("used", 0)) > 0
     ]
     save_bank_data(bank)
 
-    # 이자 세금 처리
+    # 이자 한도 및 세금
     interest_total = min(interest_total, 500_000)
     tax = int(interest_total * 0.1)
     net_interest = interest_total - tax
     return net_interest, tax
 
-# ✅ 다음 이자 수령 가능 시각 반환
+# ✅ 가장 빠른 이자 수령 가능 시각 반환 (KST 기준)
 def get_next_interest_time(user_id):
     bank = load_bank_data()
     uid = str(user_id)
@@ -5321,6 +5324,7 @@ def get_next_interest_time(user_id):
     if not next_times:
         return None
     return min(next_times)
+
 
 # ✅ /예금 커맨드
 @tree.command(name="예금", description="지갑에서 은행으로 돈을 예금합니다.", guild=discord.Object(id=GUILD_ID))
