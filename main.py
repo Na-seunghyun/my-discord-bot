@@ -3411,8 +3411,10 @@ async def 수량_자동완성(interaction: discord.Interaction, current: int):
 @tree.command(name="자동투자", description="무작위 종목에 입력한 금액 내에서 자동 분산 투자", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(금액="투자할 총 금액 (최소 1,000원)")
 async def 자동투자(interaction: discord.Interaction, 금액: int):
+    await interaction.response.defer(thinking=True)  # ✅ 3초 초과 방지용
+
     if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
-        return await interaction.response.send_message(
+        return await interaction.followup.send(
             "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
             ephemeral=True
         )
@@ -3421,13 +3423,17 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
     balance = get_balance(user_id)
 
     if 금액 < 1000:
-        return await interaction.response.send_message(
-            embed=create_embed("❌ 금액 오류", "최소 **1,000원** 이상만 가능합니다.", discord.Color.red()), ephemeral=True)
+        return await interaction.followup.send(
+            embed=create_embed("❌ 금액 오류", "최소 **1,000원** 이상만 가능합니다.", discord.Color.red()),
+            ephemeral=True
+        )
 
     if balance < 금액:
-        return await interaction.response.send_message(
-            embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()), ephemeral=True)
-
+        return await interaction.followup.send(
+            embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()),
+            ephemeral=True
+        )
+        
     stocks = load_stocks()
     종목_전체 = list(stocks.keys())
     random.shuffle(종목_전체)
@@ -3515,7 +3521,7 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
     add_oduk_pool(수수료총합)
     oduk_amount = get_oduk_pool_amount()
 
-    await interaction.response.send_message(
+    await interaction.followup.send(  # ✅ 여기서 후속 응답 처리
         embed=create_embed(
             "🎯 라운드로빈 자동투자 완료",
             (
