@@ -2533,17 +2533,20 @@ async def 베팅액_자동완성(interaction: discord.Interaction, current: str)
     balance = balances.get(user_id, {}).get("amount", 0)
 
     if balance < 100:
-        return [app_commands.Choice(name="❌ 최소 베팅금 부족", value="0")]
+        choices = [app_commands.Choice(name="❌ 최소 베팅금 부족", value="0")]
+    else:
+        half = balance // 2
+        allin = balance
+        choices = [
+            app_commands.Choice(name=f"🔥 전액 배팅 ({allin:,}원)", value=str(allin)),
+            app_commands.Choice(name=f"💸 절반 배팅 ({half:,}원)", value=str(half)),
+        ]
 
-    half = balance // 2
-    allin = balance
+    try:
+        await interaction.response.autocomplete(choices)
+    except discord.NotFound:
+        print("⚠️ 자동완성 응답 실패: 인터랙션이 만료되었거나 취소되었습니다.")
 
-    choices = [
-        app_commands.Choice(name=f"🔥 전액 배팅 ({allin:,}원)", value=str(allin)),
-        app_commands.Choice(name=f"💸 절반 배팅 ({half:,}원)", value=str(half)),
-    ]
-
-    return choices
 
 
 
