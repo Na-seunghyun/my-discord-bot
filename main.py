@@ -5517,7 +5517,7 @@ def make_callback(self, region: str):
             profit_rate = 300  # 🚀 로켓급등
             rocket_up = True
         else:
-            profit_rate = random.randint(-50, 50)
+            profit_rate = random.randint(-50, 80)
             rocket_up = False
 
         profit_amount = int(self.invest_amount * (profit_rate / 100))
