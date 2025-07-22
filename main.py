@@ -4214,6 +4214,7 @@ async def auto_oduk_lotto(force: bool = False):
         lines = []
         notified_users = set()
         leftover = 0
+        total_paid = 0  # ✅ 지급된 전체 금액 합산용
 
         guild = bot.guilds[0]
 
@@ -4225,6 +4226,8 @@ async def auto_oduk_lotto(force: bool = False):
         if tier_super:
             share = amount // len(tier_super)
             leftover = amount % len(tier_super)
+            total_paid = share * len(tier_super)
+
             for uid in tier_super:
                 add_balance(uid, share)
                 try:
@@ -4237,12 +4240,13 @@ async def auto_oduk_lotto(force: bool = False):
                 except:
                     pass
                 notified_users.add(uid)
+
             mentions = ", ".join([get_mention(uid) for uid in tier_super])
             lines.append(f"👑 **전체 정답자 {len(tier_super)}명! 상금 전액 몰수!**\n  {mentions}")
             result_str += "\n".join(lines)
             result_str += f"\n\n💰 남은 이월 상금: {leftover:,}원"
+
         else:
-            # 기존 분배 방식 (1등~3등)
             tier2_pool = int(amount * 0.2)
             tier1_pool = int(amount * 0.8)
 
@@ -4261,7 +4265,10 @@ async def auto_oduk_lotto(force: bool = False):
                     except:
                         pass
                     notified_users.add(uid)
+
                 leftover += tier1_pool % len(tier1)
+                total_paid += share * len(tier1)
+
                 mentions = ", ".join([get_mention(uid) for uid in tier1])
                 lines.append(f"🏆 **1등** {len(tier1)}명 (4개 일치) → **1인당 {share:,}원**\n  {mentions}")
             else:
@@ -4283,7 +4290,10 @@ async def auto_oduk_lotto(force: bool = False):
                     except:
                         pass
                     notified_users.add(uid)
+
                 leftover += tier2_pool % len(tier2)
+                total_paid += share * len(tier2)
+
                 mentions = ", ".join([get_mention(uid) for uid in tier2])
                 lines.append(f"🥈 2등 {len(tier2)}명 (3개 + 보너스) → 1인당 {share:,}원\n  {mentions}")
             else:
@@ -4293,10 +4303,11 @@ async def auto_oduk_lotto(force: bool = False):
             # ✅ 3등
             if tier3:
                 from collections import Counter
-
                 count_by_uid = Counter(tier3)
+
                 for uid, count in count_by_uid.items():
                     add_balance(uid, 5000 * count)
+                    total_paid += 5000 * count
 
                 def format_mentions(counter):
                     mentions = []
@@ -4316,6 +4327,10 @@ async def auto_oduk_lotto(force: bool = False):
 
             result_str += "\n".join(lines)
             result_str += f"\n\n💰 이월된 상금: {leftover:,}원"
+
+        # ✅ 오덕잔고에서 지급된 총금액 차감
+        oduk_pool_cache["amount"] -= total_paid
+        oduk_pool_cache["amount"] = max(0, oduk_pool_cache["amount"])  # 음수 방지
 
     if not force:
         oduk_pool_cache["last_lotto_date"] = now.date().isoformat()
@@ -4349,6 +4364,7 @@ async def auto_oduk_lotto(force: bool = False):
     print(f"✅ 오덕로또 추첨 완료됨! 정답: {answer} + 보너스({bonus})")
     print(f"👑 슈퍼당첨: {len(tier_super)}명 | 🥇 1등: {len(tier1)} | 🥈 2등: {len(tier2)} | 🥉 3등: {len(tier3)}")
     print(f"💰 이월된 상금: {leftover:,}원" + (" (수동)" if force else ""))
+
 
 
 
