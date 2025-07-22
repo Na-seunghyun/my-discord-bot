@@ -5497,86 +5497,99 @@ ALL_REGIONS = [
     "제주 제주시", "제주 서귀포시", "제주 애월읍", "제주 조천읍", "제주 구좌읍", "제주 성산읍", "제주 표선면", "제주 한림읍", "제주 한경면", "제주 대정읍"
 ]
 
-def make_callback(self, region: str):
-    async def callback(interaction: Interaction):
-        if interaction.user.id != self.user.id:
-            return await interaction.response.send_message("❌ 본인만 사용할 수 있습니다.", ephemeral=True)
+class RealEstateView(ui.View):
+    def __init__(self, user: discord.User, 투자금: int):
+        super().__init__(timeout=30)
+        self.user = user
+        self.invest_amount = 투자금
+        self.disabled_regions = set()
 
-        if region in self.disabled_regions:
-            return await interaction.response.send_message("이미 선택한 지역입니다.", ephemeral=True)
+        sampled_regions = random.sample(ALL_REGIONS, 25)
+        for region in sampled_regions:
+            button = ui.Button(label=region, style=ButtonStyle.primary, custom_id=f"region_{region}")
+            button.callback = self.make_callback(region)
+            self.add_item(button)
 
-        balance = get_balance(self.user.id)
-        if balance < self.invest_amount:
-            return await interaction.response.send_message(
-                f"❌ 잔액이 부족합니다.\n현재 잔액: **{balance:,}원**",
-                ephemeral=True
+    def make_callback(self, region: str):
+        async def callback(interaction: Interaction):
+            if interaction.user.id != self.user.id:
+                return await interaction.response.send_message("❌ 본인만 사용할 수 있습니다.", ephemeral=True)
+
+            if region in self.disabled_regions:
+                return await interaction.response.send_message("이미 선택한 지역입니다.", ephemeral=True)
+
+            balance = get_balance(self.user.id)
+            if balance < self.invest_amount:
+                return await interaction.response.send_message(
+                    f"❌ 잔액이 부족합니다.\n현재 잔액: **{balance:,}원**",
+                    ephemeral=True
+                )
+
+            # ✅ 수익률 계산
+            if random.random() < 0.02:
+                profit_rate = 300  # 🚀 로켓급등
+                rocket_up = True
+            else:
+                profit_rate = random.randint(-50, 80)
+                rocket_up = False
+
+            profit_amount = int(self.invest_amount * (profit_rate / 100))
+            tax = int(profit_amount * 0.1) if profit_amount > 0 else 0
+            net_gain = profit_amount - tax
+            receive = self.invest_amount + net_gain
+
+            # ✅ 잔액 반영
+            add_balance(self.user.id, receive - self.invest_amount)
+            final_balance = get_balance(self.user.id)
+
+            # ✅ 세금 적립
+            if tax > 0:
+                add_oduk_pool(tax)
+
+            # ✅ 메시지 구성
+            if profit_amount >= 0:
+                result_title = "🚀 대박 투자 성공!" if rocket_up else "📈 투자 성공!"
+                result_color = discord.Color.gold() if rocket_up else discord.Color.green()
+                profit_text = f"💰 **+{profit_amount:,}원 수익!**"
+                tax_text = f"🧾 세금 10%: {tax:,}원 → 오덕로또 적립"
+                special_text = "🔥 **[로켓급등]** 2% 확률의 기적적인 +300% 수익률 적중!\n\n" if rocket_up else ""
+                extra_text = ""
+                footer_text = "오덕 부동산 투자 시스템"
+            else:
+                result_title = "📉 투자 실패..."
+                result_color = discord.Color.red()
+                profit_text = f"💸 **{profit_amount:,}원 손실...**"
+                tax_text = "🧾 세금 없음 (손실)"
+                pool = get_oduk_pool_amount()
+                special_text = ""
+                extra_text = (
+                    f"\n\n🍜 손실 금액은 오덕 로또 상금 풀에 적립되었습니다!\n"
+                    f"💰 현재 오덕 로또 잔고: **{pool:,}원**\n"
+                    f"🎟️ `/오덕로또참여`로 복구의 기회를 잡아보세요!"
+                )
+                footer_text = "오덕 부동산 투자 시스템 • 실패자에게도 희망을..."
+
+            embed = discord.Embed(
+                title=result_title,
+                description=(
+                    f"👤 투자자: {interaction.user.mention}\n"
+                    f"{special_text}"
+                    f"📍 투자 지역: **{region}**\n"
+                    f"💵 투자금: {self.invest_amount:,}원\n"
+                    f"📊 수익률: {profit_rate:+}%\n"
+                    f"{profit_text}\n"
+                    f"{tax_text}\n"
+                    f"💼 회수 금액: **{receive:,}원**\n"
+                    f"💰 최종 잔액: **{final_balance:,}원**"
+                    f"{extra_text}"
+                ),
+                color=result_color
             )
+            embed.set_footer(text=footer_text)
+            await interaction.response.send_message(embed=embed, ephemeral=False)
 
-        # ✅ 수익률 계산
-        if random.random() < 0.02:
-            profit_rate = 300  # 🚀 로켓급등
-            rocket_up = True
-        else:
-            profit_rate = random.randint(-50, 80)
-            rocket_up = False
-
-        profit_amount = int(self.invest_amount * (profit_rate / 100))
-        tax = int(profit_amount * 0.1) if profit_amount > 0 else 0
-        net_gain = profit_amount - tax
-        receive = self.invest_amount + net_gain
-
-        # ✅ 잔액 반영
-        add_balance(self.user.id, receive - self.invest_amount)
-        final_balance = get_balance(self.user.id)
-
-        # ✅ 세금 적립
-        if tax > 0:
-            add_oduk_pool(tax)
-
-        # ✅ 메시지 구성
-        if profit_amount >= 0:
-            result_title = "🚀 대박 투자 성공!" if rocket_up else "📈 투자 성공!"
-            result_color = discord.Color.gold() if rocket_up else discord.Color.green()
-            profit_text = f"💰 **+{profit_amount:,}원 수익!**"
-            tax_text = f"🧾 세금 10%: {tax:,}원 → 오덕로또 적립"
-            special_text = "🔥 **[로켓급등]** 2% 확률의 기적적인 +300% 수익률 적중!\n\n" if rocket_up else ""
-            extra_text = ""
-            footer_text = "오덕 부동산 투자 시스템"
-        else:
-            result_title = "📉 투자 실패..."
-            result_color = discord.Color.red()
-            profit_text = f"💸 **{profit_amount:,}원 손실...**"
-            tax_text = "🧾 세금 없음 (손실)"
-            pool = get_oduk_pool_amount()
-            special_text = ""
-            extra_text = (
-                f"\n\n🍜 손실 금액은 오덕 로또 상금 풀에 적립되었습니다!\n"
-                f"💰 현재 오덕 로또 잔고: **{pool:,}원**\n"
-                f"🎟️ `/오덕로또참여`로 복구의 기회를 잡아보세요!"
-            )
-            footer_text = "오덕 부동산 투자 시스템 • 실패자에게도 희망을..."
-
-        embed = discord.Embed(
-            title=result_title,
-            description=(
-                f"👤 투자자: {interaction.user.mention}\n"  # ✅ 사용자 표시
-                f"{special_text}"
-                f"📍 투자 지역: **{region}**\n"
-                f"💵 투자금: {self.invest_amount:,}원\n"
-                f"📊 수익률: {profit_rate:+}%\n"
-                f"{profit_text}\n"
-                f"{tax_text}\n"
-                f"💼 회수 금액: **{receive:,}원**\n"
-                f"💰 최종 잔액: **{final_balance:,}원**"
-                f"{extra_text}"
-            ),
-            color=result_color
-        )
-        embed.set_footer(text=footer_text)
-        await interaction.response.send_message(embed=embed, ephemeral=False)
-
-        self.disabled_regions.add(region)
-    return callback
+            self.disabled_regions.add(region)
+        return callback
 
 
 
@@ -5721,7 +5734,7 @@ async def detect_matching_pubg_users():
 
                 details = getattr(act, "details", "")
                 state = getattr(act, "state", "")
-                if not details or details.lower().strip().startswith("in lobby") or "watch" in state.lower():
+                if not details or details.lower().strip().startswith("in lobby") or "watch" in (state or "").lower():
                     continue
 
                 game_mode = parse_game_mode(state)
