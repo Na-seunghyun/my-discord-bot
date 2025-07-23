@@ -5509,9 +5509,13 @@ async def apply_bank_depreciation(bot):
 
     for user_id, user_data in bank.items():
         total_balance = sum(d["amount"] - d.get("used", 0) for d in user_data.get("deposits", []))
+
         if total_balance > 100_000_000:
-            target_after_cut = max(100_000_000, total_balance // 2)
-            to_cut = total_balance - target_after_cut
+            # ✅ 초과분의 절반만 감가, 최소 1억 보장
+            excess = total_balance - 100_000_000
+            to_cut = excess // 2
+            target_after_cut = total_balance - to_cut
+
             remaining_cut = to_cut
             updated_deposits = []
 
@@ -5540,19 +5544,15 @@ async def apply_bank_depreciation(bot):
     if updated:
         save_bank_data(bank)
 
-        # ✅ 감가 메시지 전송
+        # ✅ 알림 채널로 메시지 전송
         channel = discord.utils.get(bot.get_all_channels(), name="오덕도박장")
         if channel:
-            lines = [f"🏦 **은행 잔고 감가 정산 완료!**"]
-            for uid, cut in affected_users[:5]:
-                member = await fetch_user_safe(uid)
-                name = member.display_name if member else f"ID:{uid}"
-                lines.append(f"• {name} → **{cut:,}원** 차감")
-
-            if len(affected_users) > 5:
-                lines.append(f"외 {len(affected_users) - 5}명 더...")
-
-            lines.append(f"\n📉 하루 2회 자산 감가 정산이 자동 수행됩니다.")
+            lines = [f"🏦 **은행 감가 정산 결과**"]
+            for uid, cut in affected_users:
+                user = await fetch_user_safe(uid)
+                name = user.display_name if user else f"ID:{uid}"
+                lines.append(f"- {name}님: **{cut:,}원** 차감됨")
+            lines.append(f"\n📉 총 차감액: **{total_cut:,}원**")
             await channel.send("\n".join(lines))
 
 @tasks.loop(hours=12)
