@@ -6185,46 +6185,62 @@ async def detect_matching_pubg_users():
 
   
 
-    # ✅ 버퍼 만료된 채널 처리 (5초 경과)
-    expired_channels = []
-    for ch_key, data in pending_chicken_channels.items():
-        if (now - data["start_time"]).total_seconds() >= 5:
+# ✅ 치킨 감지 버퍼 만료된 채널 처리
+expired_channels = []
+for ch_key, data in pending_chicken_channels.items():
+    elapsed = (now - data["start_time"]).total_seconds()
+    detected_users = data["users"]
+
+    # 🛡️ 일정 시간 이상 버퍼 유지 시 강제 제거
+    if elapsed >= 30:
+        log(f"⚠️ 치킨 버퍼 강제 제거 (30초 초과): {ch_key}")
+        expired_channels.append(ch_key)
+        continue
+
+    # ⏰ 감지 시작 후 5초 경과 여부 확인
+    if elapsed >= 5:
+        # 🛑 감지된 유저가 아무도 없다면 실패 처리
+        if not detected_users:
+            log(f"❌ 치킨 감지 실패 (유저 없음): {ch_key}")
             expired_channels.append(ch_key)
+            continue
 
-            detected_users = data["users"]
+        # 🧱 알림 쿨타임 중이면 알림 생략
+        if ch_key in chicken_alerts and (now - chicken_alerts[ch_key]).total_seconds() < CHICKEN_ALERT_COOLDOWN:
+            log(f"⏹️ 동일 채널({ch_key}) 치킨 감지 쿨타임 중 - 생략")
+            expired_channels.append(ch_key)
+            continue
 
-            # ✅ 동일 채널 중복 방지 (유저 해시 무시)
-            last_time = chicken_alerts.get(ch_key)
-            if last_time and (now - last_time).total_seconds() < CHICKEN_ALERT_COOLDOWN:
-                log(f"⏹️ 동일 채널({ch_key}) 치킨 감지 쿨타임 중 - 생략")
-                continue
+        # 🧍 전체 멤버 / 비감지 유저 구분
+        all_members = [m for vc in guild.voice_channels if vc.name == ch_key for m in vc.members if not m.bot]
+        undetected_users = [u for u in all_members if u.id not in detected_users]
 
-            all_members = [m for vc in guild.voice_channels if vc.name == ch_key for m in vc.members if not m.bot]
-            undetected_users = [u for u in all_members if u.id not in detected_users]
+        # 📢 텍스트 채널로 알림 전송
+        text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
+        if text_channel:
+            desc = (
+                f"**{ch_key}** 채널의 유저들이 치킨을 먹었습니다!\n\n"
+                f"👑 **감지된 유저**:\n> {', '.join(u.mention for u in detected_users.values())}\n\n"
+            )
+            if undetected_users:
+                desc += f"🔇 **감지되지 않은 유저** (활동 상태 비공유):\n> {', '.join(u.display_name for u in undetected_users)}"
 
-            text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
-            if text_channel:
-                desc = (
-                    f"**{ch_key}** 채널의 유저들이 치킨을 먹었습니다!\n\n"
-                    f"👑 **감지된 유저**:\n> {', '.join(u.mention for u in detected_users.values())}\n\n"
-                )
-                if undetected_users:
-                    desc += f"🔇 **감지되지 않은 유저** (활동 상태 비공유):\n> {', '.join(u.display_name for u in undetected_users)}"
+            embed = discord.Embed(
+                title="🍗 치킨 획득 감지!",
+                description=desc,
+                color=discord.Color.gold()
+            )
+            embed.set_footer(text="오덕봇 감지 시스템 • 치킨 축하 메시지")
+            await text_channel.send(embed=embed)
+            log(f"🍗 치킨 알림 전송 (버퍼 종료): {[u.display_name for u in detected_users.values()]}")
 
-                embed = discord.Embed(
-                    title="🍗 치킨 획득 감지!",
-                    description=desc,
-                    color=discord.Color.gold()
-                )
-                embed.set_footer(text="오덕봇 감지 시스템 • 치킨 축하 메시지")
-                await text_channel.send(embed=embed)
-                log(f"🍗 치킨 알림 전송 (버퍼 종료): {[u.display_name for u in detected_users.values()]}")
+        # ✅ 알림 발송 기록 저장
+        chicken_alerts[ch_key] = now
+        expired_channels.append(ch_key)
 
-            # ✅ 채널 기준으로 마지막 알림 시간만 기록
-            chicken_alerts[ch_key] = now
-
-    for ch_key in expired_channels:
-        pending_chicken_channels.pop(ch_key, None)
+# ✅ 버퍼 제거
+for ch_key in expired_channels:
+    pending_chicken_channels.pop(ch_key, None)
 
 
 
