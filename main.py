@@ -6183,59 +6183,61 @@ async def detect_matching_pubg_users():
             else:
                 pending_chicken_channels[ch_key]["users"].update(found_users)
 
-def get_user_hash(user_dict: dict[int, discord.Member]) -> str:
-    uid_list = sorted(user_dict.keys())
-    uid_str = ",".join(str(uid) for uid in uid_list)
-    return hashlib.sha256(uid_str.encode()).hexdigest()
+    # ✅ 치킨 버퍼 만료 감지 및 메시지 발송
+    def get_user_hash(user_dict: dict[int, discord.Member]) -> str:
+        uid_list = sorted(user_dict.keys())
+        uid_str = ",".join(str(uid) for uid in uid_list)
+        return hashlib.sha256(uid_str.encode()).hexdigest()
 
-# ✅ 버퍼 만료된 채널 처리 (5초 경과)
-expired_channels = []
-for ch_key, data in pending_chicken_channels.items():
-    if (now - data["start_time"]).total_seconds() >= 5:
-        expired_channels.append(ch_key)
+    expired_channels = []
+    for ch_key, data in pending_chicken_channels.items():
+        if (now - data["start_time"]).total_seconds() >= 5:
+            expired_channels.append(ch_key)
 
-        detected_users = data["users"]
-        user_hash = get_user_hash(detected_users)
+            detected_users = data["users"]
+            user_hash = get_user_hash(detected_users)
 
-        # ✅ 중복 방지 검사
-        last_alert = chicken_alerts.get(ch_key)
-        if last_alert:
-            last_time = last_alert.get("timestamp")
-            last_hash = last_alert.get("hash")
-            if last_hash == user_hash and (now - last_time).total_seconds() < CHICKEN_ALERT_COOLDOWN:
-                log(f"⏹️ 중복 치킨 감지 생략: {ch_key} - {[u.display_name for u in detected_users.values()]}")
-                continue
+            last_alert = chicken_alerts.get(ch_key)
+            if last_alert:
+                last_time = last_alert.get("timestamp")
+                last_hash = last_alert.get("hash")
+                if last_hash == user_hash and (now - last_time).total_seconds() < CHICKEN_ALERT_COOLDOWN:
+                    log(...)
+                    continue
 
-        all_members = [m for vc in guild.voice_channels if vc.name == ch_key for m in vc.members if not m.bot]
-        undetected_users = [u for u in all_members if u.id not in detected_users]
+            all_members = [m for vc in guild.voice_channels if vc.name == ch_key for m in vc.members if not m.bot]
+            undetected_users = [u for u in all_members if u.id not in detected_users]
 
-        text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
-        if text_channel:
-            desc = (
-                f"**{ch_key}** 채널의 유저들이 치킨을 먹었습니다!\n\n"
-                f"👑 **감지된 유저**:\n> {', '.join(u.mention for u in detected_users.values())}\n\n"
-            )
+            text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
+            if text_channel:
+                desc = (
+                    f"**{ch_key}** 채널의 유저들이 치킨을 먹었습니다!\n\n"
+                    f"👑 **감지된 유저**:\n> {', '.join(u.mention for u in detected_users.values())}\n\n"
+                )
+                if undetected_users:
+                    desc += f"🔇 **감지되지 않은 유저**:\n> {', '.join(u.display_name for u in undetected_users)}"
 
-            if undetected_users:
-                desc += f"🔇 **감지되지 않은 유저** (활동 상태 비공유):\n> {', '.join(u.display_name for u in undetected_users)}"
+                embed = discord.Embed(
+                    title="🍗 치킨 획득 감지!",
+                    description=desc,
+                    color=discord.Color.gold()
+                )
+                embed.set_footer(text="오덕봇 감지 시스템 • 치킨 축하 메시지")
+                await text_channel.send(embed=embed)
 
-            embed = discord.Embed(
-                title="🍗 치킨 획득 감지!",
-                description=desc,
-                color=discord.Color.gold()
-            )
-            embed.set_footer(text="오덕봇 감지 시스템 • 치킨 축하 메시지")
-            await text_channel.send(embed=embed)
-            log(f"🍗 치킨 알림 전송 (버퍼 종료): {[u.display_name for u in detected_users.values()]}")
+            chicken_alerts[ch_key] = {
+                "timestamp": now,
+                "hash": user_hash
+            }
 
-        # ✅ 알림 기록 저장
-        chicken_alerts[ch_key] = {
-            "timestamp": now,
-            "hash": user_hash
-        }
+    for ch_key in expired_channels:
+        pending_chicken_channels.pop(ch_key, None)
 
-for ch_key in expired_channels:
-    pending_chicken_channels.pop(ch_key, None)
+
+
+
+
+
 
 
 @tree.command(name="감가테스트", description="(채널 관리자 전용) 자산 유지비 감가를 수동 실행합니다.", guild=discord.Object(id=GUILD_ID))
