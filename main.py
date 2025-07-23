@@ -285,8 +285,7 @@ WELCOME_CHANNEL_NAME = "자유채팅방"  # 자유롭게 바꿔도 됨
 
 
 
-
-# 욕설 리스트 정규식 패턴 로드 함수
+# ✅ 욕설 리스트 정규식 패턴 로드 함수
 def load_badwords_regex(file_path=BADWORDS_FILE):
     regex_patterns = []
     if not os.path.exists(file_path):
@@ -302,20 +301,9 @@ def load_badwords_regex(file_path=BADWORDS_FILE):
             regex_patterns.append(re.compile(pattern, re.IGNORECASE))
     return regex_patterns
 
-def remove_urls(text: str):
-    return re.sub(r"https?://[^\s]+", "", text)
-
-def filter_message(message: str):
-    cleaned = remove_urls(message)
-    for pattern in BADWORD_PATTERNS:
-        if pattern.search(cleaned):
-            return True
-    return False
-
-
 BADWORD_PATTERNS = load_badwords_regex()
 
-# 경고 데이터 불러오기
+# ✅ 경고 데이터 불러오기
 if os.path.exists(WARNINGS_FILE):
     with open(WARNINGS_FILE, "r", encoding="utf-8") as f:
         warnings = json.load(f)
@@ -326,9 +314,33 @@ def save_warnings():
     with open(WARNINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(warnings, f, indent=4)
 
-# 욕설 부분만 ***로 가리는 함수
+# ✅ 링크 제거 (텍스트에서)
+def remove_urls(text: str):
+    return re.sub(r"https?://[^\s]+", "", text)
+
+# ✅ 전체 메시지에서 텍스트/링크 추출
+def extract_full_text(message) -> str:
+    text = message.content or ""
+    for embed in message.embeds:
+        if hasattr(embed, "url"):
+            text += f" {embed.url}"
+    for attach in message.attachments:
+        if hasattr(attach, "url"):
+            text += f" {attach.url}"
+    return text
+
+# ✅ 욕설 감지 함수
+def filter_message(message_text: str):
+    cleaned = remove_urls(message_text)
+    for pattern in BADWORD_PATTERNS:
+        if pattern.search(cleaned):
+            return True
+    return False
+
+# ✅ 욕설 마스킹 함수
 def censor_badwords_regex(text, badword_patterns):
-    censored_text = text
+    cleaned = remove_urls(text)
+    censored_text = cleaned
     for pattern in badword_patterns:
         censored_text = pattern.sub("***", censored_text)
     return censored_text
@@ -348,13 +360,21 @@ async def on_member_update(before, after):
 
 
 
-
-
-
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
+
+    text = extract_full_text(message)  # 🔄 content + embed + attachment URL 포함
+
+    if filter_message(text):
+        await message.delete()
+        await message.channel.send("⚠️ 욕설이 감지되었습니다.", delete_after=5)
+
+
+
+
+    
 
     # ✅ 텍스트 채널인지 먼저 확인
     if not isinstance(message.channel, discord.TextChannel):
