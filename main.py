@@ -286,10 +286,14 @@ MAINTENANCE_TIERS = [
     (1_0000_0000, 0.10),   # 1억 이상 → 10%
 ]
 
-# ✅ 자산 유지비 정산 함수
-def apply_maintenance_costs():
+# 예시로 채널 ID 설정 (실제 사용 중인 ID로 교체하세요)
+DOKDO_CHANNEL_ID = 1394331814642057418  # 오덕도박장
+
+
+async def apply_maintenance_costs():
     balances = load_balances()
     now = datetime.now(KST).isoformat()
+    changed_users = []
 
     for user_id, info in balances.items():
         amount = info.get("amount", 0)
@@ -304,22 +308,41 @@ def apply_maintenance_costs():
             deduction = amount - 100_000_000  # 최소 1억 보장
             new_amount = 100_000_000
 
-        # 실제 차감이 있는 경우만 기록
         if deduction > 0:
             balances[user_id]["amount"] = new_amount
             balances[user_id]["last_updated"] = now
+            changed_users.append((user_id, amount, new_amount))
             print(f"💸 유지비 차감: {user_id} → {deduction:,}원")
 
     save_balances(balances)
+
+    # ✅ 오덕도박장 채널에 안내 메시지 전송
+    if changed_users:
+        channel = bot.get_channel(DOKDO_CHANNEL_ID)
+        if channel:
+            msg_lines = ["💸 **자산 유지비 감가 정산 결과**"]
+            for uid, before, after in changed_users:
+                member = await fetch_user_safe(uid)
+                name = member.display_name if member else f"ID:{uid}"
+                msg_lines.append(f"• {name} → **{before:,}원 → {after:,}원**")
+            msg_lines.append("\n📉 지갑 잔액이 1억 이상일 경우 매일 50% 감가가 적용됩니다.")
+            await channel.send("\n".join(msg_lines))
+
+
 
 
 @tasks.loop(hours=24)
 async def auto_apply_maintenance():
     print("🕓 자산 유지비 정산 시작")
-    apply_maintenance_costs()
+    await apply_maintenance_costs(bot)     # ✅ await + bot 전달
+    await apply_bank_depreciation(bot)     # ✅ 비동기 메시지 포함
     print("✅ 자산 유지비 정산 완료")
 
-def decay_oduk_pool():
+
+
+
+
+async def decay_oduk_pool():
     global oduk_pool_cache
 
     current_amount = oduk_pool_cache.get("amount", 0)
@@ -334,17 +357,25 @@ def decay_oduk_pool():
         oduk_pool_cache["amount"] = new_amount
         save_oduk_pool(oduk_pool_cache)
         print(f"📉 오덕로또 상금 감가: {current_amount:,} → {new_amount:,}")
+
+        # ✅ 알림 전송
+        channel = bot.get_channel(DOKDO_CHANNEL_ID)
+        if channel:
+            await channel.send(
+                f"📉 **오덕로또 상금 감가 적용**\n"
+                f"💰 기존 상금: **{current_amount:,}원** → 현재 상금: **{new_amount:,}원**\n"
+                f"🧾 매일 자동 감가 정책에 따라 **20% 차감**되었으며, 최소 **2억 원**은 보장됩니다.\n"
+                f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
+            )
     else:
         print("✅ 오덕로또 상금이 2억 이하라 감가되지 않음")
-
 
 
 @tasks.loop(hours=24)
 async def auto_decay_oduk_pool():
     print("🕓 오덕로또 감가 시작")
-    decay_oduk_pool()
+    await decay_oduk_pool(bot)             # ✅ await + 메시지 포함 함수
     print("✅ 오덕로또 감가 완료")
-
 
 
 
@@ -5455,9 +5486,11 @@ def get_next_interest_time(user_id):
         return None
     return min(next_times)
 
-def apply_bank_depreciation():
+async def apply_bank_depreciation(bot):
     bank = load_bank_data()
     updated = False
+    total_cut = 0
+    affected_users = []
 
     for user_id, user_data in bank.items():
         total_balance = sum(d["amount"] - d.get("used", 0) for d in user_data.get("deposits", []))
@@ -5485,18 +5518,34 @@ def apply_bank_depreciation():
                 d for d in updated_deposits if (d["amount"] - d.get("used", 0)) > 0
             ]
             updated = True
+            total_cut += to_cut
+            affected_users.append((user_id, to_cut))
             print(f"🏦 감가 적용: {user_id} → {to_cut:,}원 차감됨")
 
     if updated:
         save_bank_data(bank)
 
+        # ✅ 감가 메시지 전송
+        channel = discord.utils.get(bot.get_all_channels(), name="오덕도박장")
+        if channel:
+            lines = [f"🏦 **은행 잔고 감가 정산 완료!**"]
+            for uid, cut in affected_users[:5]:
+                member = await fetch_user_safe(uid)
+                name = member.display_name if member else f"ID:{uid}"
+                lines.append(f"• {name} → **{cut:,}원** 차감")
+
+            if len(affected_users) > 5:
+                lines.append(f"외 {len(affected_users) - 5}명 더...")
+
+            lines.append(f"\n📉 하루 1회 자산 감가 정산이 자동 수행됩니다.")
+            await channel.send("\n".join(lines))
+
 @tasks.loop(hours=24)
 async def auto_apply_maintenance():
     print("🕓 자산 유지비 정산 시작")
-    apply_maintenance_costs()
-    apply_bank_depreciation()  # ⬅️ 추가
+    apply_maintenance_costs(bot)  # 이미 수정했을 것
+    await apply_bank_depreciation(bot)  # ✅ async로 실행해야 함
     print("✅ 자산 유지비 정산 완료")
-
 
 
 
