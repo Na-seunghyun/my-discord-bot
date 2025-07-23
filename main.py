@@ -162,6 +162,21 @@ def save_investments(data):
 
 
 
+async def fetch_user_safe(user_id):
+    try:
+        return await bot.fetch_user(int(user_id))
+    except Exception:
+        return None
+
+
+async def send_to_oduk_channel(message: str):
+    channel = discord.utils.get(bot.get_all_channels(), name="오덕도박장")
+    if channel:
+        await channel.send(message)
+
+
+
+
 
 
 
