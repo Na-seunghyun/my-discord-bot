@@ -5471,9 +5471,12 @@ async def 은행잔고(interaction: discord.Interaction, 대상: discord.Member 
 
 
 
-from discord import app_commands, Interaction, ButtonStyle, ui
-import discord
+import os
+import json
 import random
+from datetime import datetime, timedelta, timezone
+import discord
+from discord import app_commands, ui, Interaction, ButtonStyle
 
 # ✅ 시군구 포함된 지역 200개
 ALL_REGIONS = [
@@ -5497,13 +5500,65 @@ ALL_REGIONS = [
     "제주 제주시", "제주 서귀포시", "제주 애월읍", "제주 조천읍", "제주 구좌읍", "제주 성산읍", "제주 표선면", "제주 한림읍", "제주 한경면", "제주 대정읍"
 ]
 
+KST = timezone(timedelta(hours=9))
+
+REALESTATE_USAGE_FILE = "real_estate_usage.json"
+REALESTATE_PROFIT_FILE = "real_estate_profit.json"
+
+# ✅ 투자 횟수 추적
+def load_real_estate_usage():
+    if not os.path.exists(REALESTATE_USAGE_FILE):
+        return {}
+    with open(REALESTATE_USAGE_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_real_estate_usage(data):
+    with open(REALESTATE_USAGE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def get_today_real_estate_count(user_id: str):
+    today = datetime.now(KST).date().isoformat()
+    data = load_real_estate_usage()
+    entry = data.get(user_id, {"date": today, "count": 0})
+    if entry["date"] != today:
+        entry = {"date": today, "count": 0}
+    return entry["count"]
+
+def increment_real_estate_count(user_id: str):
+    today = datetime.now(KST).date().isoformat()
+    data = load_real_estate_usage()
+    entry = data.get(user_id, {"date": today, "count": 0})
+    if entry["date"] != today:
+        entry = {"date": today, "count": 0}
+    entry["count"] += 1
+    data[user_id] = entry
+    save_real_estate_usage(data)
+
+# ✅ 수익 랭킹 기록
+def load_real_estate_profits():
+    if not os.path.exists(REALESTATE_PROFIT_FILE):
+        return {}
+    with open(REALESTATE_PROFIT_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_real_estate_profits(data):
+    with open(REALESTATE_PROFIT_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def add_real_estate_profit(user_id: str, amount: int):
+    today = datetime.now(KST).date().isoformat()
+    data = load_real_estate_profits()
+    data.setdefault(today, {})
+    data[today][user_id] = data[today].get(user_id, 0) + amount
+    save_real_estate_profits(data)
+
+# ✅ 투자 버튼 뷰
 class RealEstateView(ui.View):
     def __init__(self, user: discord.User, 투자금: int):
         super().__init__(timeout=30)
         self.user = user
         self.invest_amount = 투자금
         self.disabled_regions = set()
-
         sampled_regions = random.sample(ALL_REGIONS, 25)
         for region in sampled_regions:
             button = ui.Button(label=region, style=ButtonStyle.primary, custom_id=f"region_{region}")
@@ -5514,124 +5569,136 @@ class RealEstateView(ui.View):
         async def callback(interaction: Interaction):
             if interaction.user.id != self.user.id:
                 return await interaction.response.send_message("❌ 본인만 사용할 수 있습니다.", ephemeral=True)
-
             if region in self.disabled_regions:
                 return await interaction.response.send_message("이미 선택한 지역입니다.", ephemeral=True)
 
             balance = get_balance(self.user.id)
             if balance < self.invest_amount:
-                return await interaction.response.send_message(
-                    f"❌ 잔액이 부족합니다.\n현재 잔액: **{balance:,}원**",
-                    ephemeral=True
-                )
+                return await interaction.response.send_message(f"❌ 잔액 부족\n현재 잔액: **{balance:,}원**", ephemeral=True)
 
-            # ✅ 수익률 계산
-            if random.random() < 0.02:
-                profit_rate = 300  # 🚀 로켓급등
+            # ✅ 투자 횟수 기반 손실 배율
+            user_id = str(self.user.id)
+            count = get_today_real_estate_count(user_id)
+            if count < 3: loss_multiplier = 1.0
+            elif count < 6: loss_multiplier = 1.2
+            elif count < 10: loss_multiplier = 1.5
+            else: loss_multiplier = 2.0
+
+            rocket_up = False
+            bonus_boost = False
+            if random.random() < 0.01:
+                profit_rate = 300
                 rocket_up = True
             else:
-                profit_rate = random.randint(-50, 80)
-                rocket_up = False
+                profit_rate = random.randint(-100, 50)
+                if profit_rate < 0:
+                    profit_rate = int(profit_rate * loss_multiplier)
+
+            if not rocket_up and random.random() < 0.03:
+                bonus_boost = True
+                profit_rate += 50
 
             profit_amount = int(self.invest_amount * (profit_rate / 100))
             tax = int(profit_amount * 0.1) if profit_amount > 0 else 0
             net_gain = profit_amount - tax
             receive = self.invest_amount + net_gain
 
-            # ✅ 잔액 반영
-            add_balance(self.user.id, receive - self.invest_amount)
-            final_balance = get_balance(self.user.id)
-
-            # ✅ 세금 적립
+            add_balance(user_id, receive - self.invest_amount)
+            final_balance = get_balance(user_id)
             if tax > 0:
                 add_oduk_pool(tax)
+            elif profit_amount < 0:
+                add_oduk_pool(int(abs(profit_amount) * 0.05))
 
-            # ✅ 메시지 구성
-            if profit_amount >= 0:
-                result_title = "🚀 대박 투자 성공!" if rocket_up else "📈 투자 성공!"
-                result_color = discord.Color.gold() if rocket_up else discord.Color.green()
-                profit_text = f"💰 **+{profit_amount:,}원 수익!**"
-                tax_text = f"🧾 세금 10%: {tax:,}원 → 오덕로또 적립"
-                special_text = "🔥 **[로켓급등]** 2% 확률의 기적적인 +300% 수익률 적중!\n\n" if rocket_up else ""
-                extra_text = ""
-                footer_text = "오덕 부동산 투자 시스템"
-            else:
-                result_title = "📉 투자 실패..."
-                result_color = discord.Color.red()
-                profit_text = f"💸 **{profit_amount:,}원 손실...**"
-                tax_text = "🧾 세금 없음 (손실)"
-                pool = get_oduk_pool_amount()
-                special_text = ""
-                extra_text = (
-                    f"\n\n🍜 손실 금액은 오덕 로또 상금 풀에 적립되었습니다!\n"
-                    f"💰 현재 오덕 로또 잔고: **{pool:,}원**\n"
-                    f"🎟️ `/오덕로또참여`로 복구의 기회를 잡아보세요!"
-                )
-                footer_text = "오덕 부동산 투자 시스템 • 실패자에게도 희망을..."
+            add_real_estate_profit(user_id, net_gain)
+            increment_real_estate_count(user_id)
+
+            # 연출 메시지
+            if rocket_up: effect_text = "💥 지역 개발 대박! 재개발 호재!"
+            elif profit_rate >= 40: effect_text = "📊 재건축 발표로 급등!"
+            elif profit_rate > 10: effect_text = "📈 집값 상승세로 이익 발생"
+            elif profit_rate > 0: effect_text = "📦 소폭 수익 발생"
+            elif profit_rate == 0: effect_text = "😐 부동산 시장 조용함 (본전)"
+            elif profit_rate > -30: effect_text = "🏚️ 거래 침체로 손실..."
+            elif profit_rate > -70: effect_text = "🔥 하락장! 큰 손해 발생"
+            else: effect_text = "💀 부동산 사기! 전액 손실..."
+
+            title_badge = "🚀 로켓 캐처" if rocket_up else \
+                          "💼 투자 귀재" if profit_rate >= 40 else \
+                          "💀 투기의 귀재" if profit_rate <= -70 else None
 
             embed = discord.Embed(
-                title=result_title,
+                title="🚀 대박 투자 성공!" if profit_amount >= 0 else "📉 투자 실패...",
                 description=(
                     f"👤 투자자: {interaction.user.mention}\n"
-                    f"{special_text}"
                     f"📍 투자 지역: **{region}**\n"
+                    f"{f'🎖️ 칭호: {title_badge}\n' if title_badge else ''}"
+                    f"{'✨ 보너스 수익률 +50%\n' if bonus_boost else ''}"
+                    f"💬 {effect_text}\n\n"
                     f"💵 투자금: {self.invest_amount:,}원\n"
                     f"📊 수익률: {profit_rate:+}%\n"
-                    f"{profit_text}\n"
-                    f"{tax_text}\n"
-                    f"💼 회수 금액: **{receive:,}원**\n"
-                    f"💰 최종 잔액: **{final_balance:,}원**"
-                    f"{extra_text}"
+                    f"💰 수익: {profit_amount:,}원\n"
+                    f"🧾 세금: {tax:,}원\n"
+                    f"💼 회수 금액: {receive:,}원\n"
+                    f"💰 최종 잔액: {final_balance:,}원"
                 ),
-                color=result_color
+                color=discord.Color.green() if profit_amount >= 0 else discord.Color.red()
             )
-            embed.set_footer(text=footer_text)
-            await interaction.response.send_message(embed=embed, ephemeral=False)
 
+            if loss_multiplier >= 1.5:
+                embed.add_field(name="⚠️ 투자 과열 경고", value=f"오늘 {count}회 투자 → 손실률 {loss_multiplier}배", inline=False)
+
+            await interaction.response.send_message(embed=embed)
             self.disabled_regions.add(region)
         return callback
 
-
-
+# ✅ 부동산투자 명령어
 @tree.command(name="부동산투자", description="전국 부동산 투자! 버튼을 눌러 수익을 확인해보세요.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(투자금="투자할 금액 (2만원 이상)")
 async def 부동산투자(interaction: Interaction, 투자금: int):
     if 투자금 < 20000:
         return await interaction.response.send_message("❌ 최소 투자금은 **20,000원**입니다.", ephemeral=True)
-
     await interaction.response.send_message(
-        f"📍 투자할 지역을 선택하세요!\n💵 투자금: **{투자금:,}원** (즉시 반영)",
+        f"📍 투자할 지역을 선택하세요!\n💵 투자금: **{투자금:,}원**", 
         view=RealEstateView(interaction.user, 투자금),
         ephemeral=True
     )
 
-
+# ✅ 자동완성
 @부동산투자.autocomplete("투자금")
 async def 투자금_자동완성(interaction: Interaction, current: str):
-    balances = load_balances()
     user_id = str(interaction.user.id)
-    balance = balances.get(user_id, {}).get("amount", 0)
-
+    balance = get_balance(user_id)
     if balance < 20000:
-        choices = [app_commands.Choice(name="❌ 최소 투자금 부족 (2만원 이상)", value="20000")]
-    else:
-        half = (balance // 2) // 1000 * 1000
-        allin = balance
-        base = [20000, 50000, 100000]
+        return [app_commands.Choice(name="❌ 최소 투자금 부족", value="20000")]
 
-        choices = [
-            app_commands.Choice(name=f"🔥 전액 투자 ({allin:,}원)", value=str(allin)),
-            app_commands.Choice(name=f"💸 절반 투자 ({half:,}원)", value=str(half)),
-        ]
+    base = [20000, 50000, 100000]
+    half = (balance // 2) // 1000 * 1000
+    allin = balance
+    choices = [
+        app_commands.Choice(name=f"🔥 전액 투자 ({allin:,}원)", value=str(allin)),
+        app_commands.Choice(name=f"💸 절반 투자 ({half:,}원)", value=str(half)),
+    ] + [
+        app_commands.Choice(name=f"✨ 추천 {val:,}원", value=str(val)) for val in base if val < balance
+    ]
+    await interaction.response.autocomplete(choices[:5])
 
-        for val in base:
-            if val < allin:
-                choices.append(app_commands.Choice(name=f"✨ 추천 {val:,}원", value=str(val)))
+# ✅ 부동산왕 명령어
+@tree.command(name="부동산왕", description="오늘의 부동산 투자 수익 랭킹", guild=discord.Object(id=GUILD_ID))
+async def 부동산왕(interaction: Interaction):
+    today = datetime.now(KST).date().isoformat()
+    data = load_real_estate_profits().get(today, {})
+    if not data:
+        return await interaction.response.send_message("오늘은 아직 투자 수익 기록이 없습니다.", ephemeral=True)
 
-    try:
-        await interaction.response.autocomplete(choices[:5])
-    except discord.NotFound:
-        print("⚠️ 자동완성 실패: 응답이 취소되었거나 만료되었습니다.")
+    top = sorted(data.items(), key=lambda x: x[1], reverse=True)[:5]
+    description = ""
+    for i, (uid, profit) in enumerate(top, 1):
+        user = await interaction.client.fetch_user(int(uid))
+        description += f"{i}. **{user.display_name}** - {'+' if profit >=0 else ''}{profit:,}원\n"
+
+    embed = discord.Embed(title="🏆 오늘의 부동산왕 TOP 5", description=description, color=discord.Color.blue())
+    await interaction.response.send_message(embed=embed)
 
 
 
