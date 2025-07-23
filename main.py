@@ -302,6 +302,17 @@ def load_badwords_regex(file_path=BADWORDS_FILE):
             regex_patterns.append(re.compile(pattern, re.IGNORECASE))
     return regex_patterns
 
+def filter_message(message: str):
+    # 링크 제거
+    if re.search(r"https?://[^\s]+", message):
+        return False  # 링크는 필터링 안 함
+
+    for pattern in BADWORD_PATTERNS:
+        if pattern.search(message):
+            return True
+    return False
+
+
 BADWORD_PATTERNS = load_badwords_regex()
 
 # 경고 데이터 불러오기
