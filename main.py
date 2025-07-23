@@ -5627,13 +5627,17 @@ class RealEstateView(ui.View):
                           "💼 투자 귀재" if profit_rate >= 40 else \
                           "💀 투기의 귀재" if profit_rate <= -70 else None
 
+            # 칭호/보너스 줄 문자열 미리 정의
+            title_line = f"🎖️ 칭호: {title_badge}\n" if title_badge else ""
+            bonus_line = "✨ 보너스 수익률 +50%\n" if bonus_boost else ""
+
             embed = discord.Embed(
                 title="🚀 대박 투자 성공!" if profit_amount >= 0 else "📉 투자 실패...",
                 description=(
                     f"👤 투자자: {interaction.user.mention}\n"
                     f"📍 투자 지역: **{region}**\n"
-                    f"{f'🎖️ 칭호: {title_badge}\n' if title_badge else ''}"
-                    f"{'✨ 보너스 수익률 +50%\n' if bonus_boost else ''}"
+                    f"{title_line}"
+                    f"{bonus_line}"
                     f"💬 {effect_text}\n\n"
                     f"💵 투자금: {self.invest_amount:,}원\n"
                     f"📊 수익률: {profit_rate:+}%\n"
@@ -5646,7 +5650,11 @@ class RealEstateView(ui.View):
             )
 
             if loss_multiplier >= 1.5:
-                embed.add_field(name="⚠️ 투자 과열 경고", value=f"오늘 {count}회 투자 → 손실률 {loss_multiplier}배", inline=False)
+                embed.add_field(
+                    name="⚠️ 투자 과열 경고",
+                    value=f"오늘 {count}회 투자 → 손실률 {loss_multiplier}배",
+                    inline=False
+                )
 
             await interaction.response.send_message(embed=embed)
             self.disabled_regions.add(region)
