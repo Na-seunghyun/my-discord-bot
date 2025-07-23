@@ -296,16 +296,16 @@ else:
 
 # ✅ 자산 구간별 유지비율 설정 (필요시 수정)
 MAINTENANCE_TIERS = [
-    (10_0000_0000, 0.50),  # 10억 이상 → 50%
-    (5_0000_0000, 0.25),   # 5억 이상 → 25%
-    (1_0000_0000, 0.10),   # 1억 이상 → 10%
+    (10_0000_0000, 0.70),  # 10억 이상 → 50%
+    (3_0000_0000, 0.50),   # 
+    (1_0000_0000, 0.15),   # 
 ]
 
 # 예시로 채널 ID 설정 (실제 사용 중인 ID로 교체하세요)
 DOKDO_CHANNEL_ID = 1394331814642057418  # 오덕도박장
 
 
-async def apply_maintenance_costs(bot):  # ✅ 인자 추가
+async def apply_maintenance_costs(bot):
     balances = load_balances()
     now = datetime.now(KST).isoformat()
     changed_users = []
@@ -316,11 +316,19 @@ async def apply_maintenance_costs(bot):  # ✅ 인자 추가
         if amount < 100_000_000:
             continue  # 1억 미만은 감가 대상 아님
 
-        deduction = int(amount * 0.5)  # 기본 50% 차감
+        # ✅ MAINTENANCE_TIERS 기준 감가율 결정
+        rate = 0
+        for threshold, r in MAINTENANCE_TIERS:
+            if amount >= threshold:
+                rate = r
+                break
+
+        deduction = int(amount * rate)
         new_amount = amount - deduction
 
+        # ✅ 최소 1억 보장
         if new_amount < 100_000_000:
-            deduction = amount - 100_000_000  # 최소 1억 보장
+            deduction = amount - 100_000_000
             new_amount = 100_000_000
 
         if deduction > 0:
@@ -340,8 +348,9 @@ async def apply_maintenance_costs(bot):  # ✅ 인자 추가
                 member = await fetch_user_safe(uid)
                 name = member.display_name if member else f"ID:{uid}"
                 msg_lines.append(f"• {name} → **{before:,}원 → {after:,}원**")
-            msg_lines.append("\n📉 지갑 잔액이 1억 이상일 경우 12시간마다 50% 감가가 적용됩니다.")
+            msg_lines.append("\n📉 자산이 1억 이상일 경우 매일 감가가 적용됩니다.")
             await channel.send("\n".join(msg_lines))
+
 
 
 
