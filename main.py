@@ -5742,6 +5742,9 @@ DEBUG = True
 CHICKEN_ALERT_COOLDOWN = 600
 chicken_alerts = {}
 recent_alerts = {}
+# 🐔 치킨 감지 버퍼 저장소
+pending_chicken_channels = {}  # {channel_name: {"start_time": datetime, "users": {user_id: discord.Member}}}
+
 KST = timezone(timedelta(hours=9))
 
 def log(msg):
@@ -5897,24 +5900,26 @@ async def detect_matching_pubg_users():
 
         recent_alerts[group_key] = now
 
-    # ✅ 치킨 감지 (그룹 중 누군가가 winner 또는 chicken 상태일 경우)
-    for members in groups:
-        group_key = frozenset(d["channel"] for d in members)
-
-        # ✅ 중복 알림 방지
-        if group_key in chicken_alerts and (now - chicken_alerts[group_key]).total_seconds() < CHICKEN_ALERT_COOLDOWN:
+    # ✅ 음성채널별 치킨 감지 (5초간 유예 및 누적 유저 감지)
+    for vc in guild.voice_channels:
+        members = [m for m in vc.members if not m.bot]
+        if not members:
             continue
 
-        found_winner = False
-        keywords = ["chicken", "winner", "dinner"]  # 감지할 키워드
+        ch_key = vc.name
+        now_detecting = pending_chicken_channels.get(ch_key)
 
-        for d in members:
-            user = d["user"]
+        if ch_key in chicken_alerts and (now - chicken_alerts[ch_key]).total_seconds() < CHICKEN_ALERT_COOLDOWN:
+            continue
+
+        keywords = ["chicken", "winner", "dinner"]
+        found_users = {}
+
+        for user in members:
             for act in user.activities:
                 if act.type != discord.ActivityType.playing:
                     continue
 
-                # 여러 필드에서 정보 수집
                 state = getattr(act, "state", "") or ""
                 details = getattr(act, "details", "") or ""
                 name = getattr(act, "name", "") or ""
@@ -5924,33 +5929,54 @@ async def detect_matching_pubg_users():
 
                 combined = f"{state} {details} {name} {large_image_text} {large_image} {small_image_text}".lower()
 
-                log(f"🔍 {user.display_name} 상태: {combined}")
-
-                if any(keyword in combined for keyword in keywords):
-                    found_winner = True
+                if any(k in combined for k in keywords):
+                    found_users[user.id] = user
                     break
 
-            if found_winner:
-                break
+        if found_users:
+            if not now_detecting:
+                pending_chicken_channels[ch_key] = {
+                    "start_time": now,
+                    "users": found_users.copy()
+                }
+                log(f"⏳ 치킨 감지 버퍼 시작: {ch_key} - {[u.display_name for u in found_users.values()]}")
+            else:
+                pending_chicken_channels[ch_key]["users"].update(found_users)
 
-        if not found_winner:
-            continue  # 치킨 아님
+    # ✅ 버퍼 만료된 채널 처리 (5초 경과)
+    expired_channels = []
+    for ch_key, data in pending_chicken_channels.items():
+        if (now - data["start_time"]).total_seconds() >= 5:
+            expired_channels.append(ch_key)
 
-        # ✅ 치킨 알림 전송
-        text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
-        if text_channel:
-            embed = discord.Embed(
-                title="🍗 치킨 획득 감지!",
-                description="\n".join(
-                    f"**{d['channel']}**: {d['user'].display_name}" for d in members
-                ),
-                color=discord.Color.gold()
-            )
-            embed.set_footer(text="오덕봇 감지 시스템 • 치킨 축하 메시지")
-            await text_channel.send(embed=embed)
-            log(f"🍗 치킨 알림 전송: {[d['user'].display_name for d in members]}")
+            detected_users = data["users"]
+            all_members = [m for vc in guild.voice_channels if vc.name == ch_key for m in vc.members if not m.bot]
 
-        chicken_alerts[group_key] = now
+            undetected_users = [u for u in all_members if u.id not in detected_users]
+
+            text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
+            if text_channel:
+                desc = (
+                    f"**{ch_key}** 채널의 유저들이 치킨을 먹었습니다!\n\n"
+                    f"👑 **감지된 유저**:\n> {', '.join(u.mention for u in detected_users.values())}\n\n"
+                )
+
+                if undetected_users:
+                    desc += f"🔇 **감지되지 않은 유저** (활동 상태 비공유):\n> {', '.join(u.display_name for u in undetected_users)}"
+
+                embed = discord.Embed(
+                    title="🍗 치킨 획득 감지!",
+                    description=desc,
+                    color=discord.Color.gold()
+                )
+                embed.set_footer(text="오덕봇 감지 시스템 • 치킨 축하 메시지")
+                await text_channel.send(embed=embed)
+                log(f"🍗 치킨 알림 전송 (버퍼 종료): {[u.display_name for u in detected_users.values()]}")
+
+            chicken_alerts[frozenset([ch_key])] = now
+
+    for ch_key in expired_channels:
+        pending_chicken_channels.pop(ch_key, None)
 
 
 
