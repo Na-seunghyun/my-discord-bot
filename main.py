@@ -6191,6 +6191,8 @@ for ch_key, data in pending_chicken_channels.items():
     elapsed = (now - data["start_time"]).total_seconds()
     detected_users = data["users"]
 
+    log(f"[DEBUG] 검사중: 채널={ch_key}, 경과시간={elapsed:.1f}s, 감지된 유저={len(detected_users)}명")
+
     # 🛡️ 일정 시간 이상 버퍼 유지 시 강제 제거
     if elapsed >= 30:
         log(f"⚠️ 치킨 버퍼 강제 제거 (30초 초과): {ch_key}")
@@ -6240,8 +6242,8 @@ for ch_key, data in pending_chicken_channels.items():
 
 # ✅ 버퍼 제거
 for ch_key in expired_channels:
+    log(f"[DEBUG] 버퍼 제거: {ch_key}")
     pending_chicken_channels.pop(ch_key, None)
-
 
 
 
