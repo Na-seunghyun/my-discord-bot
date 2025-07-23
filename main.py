@@ -5906,42 +5906,52 @@ async def detect_matching_pubg_users():
             continue
 
         found_winner = False
+        keywords = ["chicken", "winner", "dinner"]  # 감지할 키워드
+
         for d in members:
             user = d["user"]
             for act in user.activities:
-                if act.type == discord.ActivityType.playing:
-                    state = getattr(act, "state", "") or ""
-                    if "winner" in state.lower() or "chicken" in state.lower():
-                        found_winner = True
-                        break
+                if act.type != discord.ActivityType.playing:
+                    continue
+
+                # 여러 필드에서 정보 수집
+                state = getattr(act, "state", "") or ""
+                details = getattr(act, "details", "") or ""
+                name = getattr(act, "name", "") or ""
+                large_image_text = getattr(act, "large_image_text", "") or ""
+                large_image = getattr(act, "large_image", "") or ""
+                small_image_text = getattr(act, "small_image_text", "") or ""
+
+                combined = f"{state} {details} {name} {large_image_text} {large_image} {small_image_text}".lower()
+
+                log(f"🔍 {user.display_name} 상태: {combined}")
+
+                if any(keyword in combined for keyword in keywords):
+                    found_winner = True
+                    break
+
             if found_winner:
                 break
 
         if not found_winner:
             continue  # 치킨 아님
 
-        # ✅ 채널별 유저 정리
-        by_channel = {}
-        for d in members:
-            by_channel.setdefault(d["channel"], []).append(d["user"].display_name)
-        desc_lines = [f"**{ch}**: {', '.join(names)}" for ch, names in by_channel.items()]
-        desc = "\n".join(desc_lines)
-
+        # ✅ 치킨 알림 전송
         text_channel = discord.utils.get(guild.text_channels, name=ALERT_CHANNEL_NAME)
         if text_channel:
             embed = discord.Embed(
-                title="🍗 치킨 획득!",
-                description=f"**{', '.join(group_key)}** 채널의 플레이어들이 치킨을 먹었습니다!\n\n"
-                            f"{desc}\n"
-                            f"🎉 모두 축하해주세요!",
+                title="🍗 치킨 획득 감지!",
+                description="\n".join(
+                    f"**{d['channel']}**: {d['user'].display_name}" for d in members
+                ),
                 color=discord.Color.gold()
             )
-            embed.set_footer(text="오덕봇 • 중복 알림 방지 10분")
+            embed.set_footer(text="오덕봇 감지 시스템 • 치킨 축하 메시지")
             await text_channel.send(embed=embed)
-
             log(f"🍗 치킨 알림 전송: {[d['user'].display_name for d in members]}")
 
         chicken_alerts[group_key] = now
+
 
 
 
