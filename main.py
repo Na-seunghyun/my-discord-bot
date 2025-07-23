@@ -1044,6 +1044,9 @@ RATE_LIMIT = 10
 RATE_LIMIT_INTERVAL = 60
 _last_requests = []
 
+_cached_season_id = None
+_cached_season_time = None
+
 # ✅ JSON 피드백 로딩
 with open("feedback_data/pubg_feedback_full.json", "r", encoding="utf-8") as f:
     feedback_json = json.load(f)
@@ -1066,13 +1069,23 @@ def get_player_id(player_name):
     return data["data"][0]["id"]
 
 def get_season_id():
+    global _cached_season_id, _cached_season_time
+
+    now = datetime.utcnow()
+    if _cached_season_id and _cached_season_time and (now - _cached_season_time) < timedelta(hours=1):
+        return _cached_season_id
+
     url = f"https://api.pubg.com/shards/{PLATFORM}/seasons"
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     data = response.json()
     for season in data["data"]:
         if season["attributes"]["isCurrentSeason"]:
-            return season["id"]
+            season_id = season["id"]
+            _cached_season_id = season_id
+            _cached_season_time = now
+            print(f"🔁 시즌 ID 새로 로드됨: {season_id}")
+            return season_id
 
 def get_player_stats(player_id, season_id):
     url = f"https://api.pubg.com/shards/{PLATFORM}/players/{player_id}/seasons/{season_id}"
