@@ -6183,27 +6183,21 @@ async def detect_matching_pubg_users():
             else:
                 pending_chicken_channels[ch_key]["users"].update(found_users)
 
-    # ✅ 치킨 버퍼 만료 감지 및 메시지 발송
-    def get_user_hash(user_dict: dict[int, discord.Member]) -> str:
-        uid_list = sorted(user_dict.keys())
-        uid_str = ",".join(str(uid) for uid in uid_list)
-        return hashlib.sha256(uid_str.encode()).hexdigest()
+  
 
+    # ✅ 버퍼 만료된 채널 처리 (5초 경과)
     expired_channels = []
     for ch_key, data in pending_chicken_channels.items():
         if (now - data["start_time"]).total_seconds() >= 5:
             expired_channels.append(ch_key)
 
             detected_users = data["users"]
-            user_hash = get_user_hash(detected_users)
 
-            last_alert = chicken_alerts.get(ch_key)
-            if last_alert:
-                last_time = last_alert.get("timestamp")
-                last_hash = last_alert.get("hash")
-                if last_hash == user_hash and (now - last_time).total_seconds() < CHICKEN_ALERT_COOLDOWN:
-                    log(...)
-                    continue
+            # ✅ 동일 채널 중복 방지 (유저 해시 무시)
+            last_time = chicken_alerts.get(ch_key)
+            if last_time and (now - last_time).total_seconds() < CHICKEN_ALERT_COOLDOWN:
+                log(f"⏹️ 동일 채널({ch_key}) 치킨 감지 쿨타임 중 - 생략")
+                continue
 
             all_members = [m for vc in guild.voice_channels if vc.name == ch_key for m in vc.members if not m.bot]
             undetected_users = [u for u in all_members if u.id not in detected_users]
@@ -6215,7 +6209,7 @@ async def detect_matching_pubg_users():
                     f"👑 **감지된 유저**:\n> {', '.join(u.mention for u in detected_users.values())}\n\n"
                 )
                 if undetected_users:
-                    desc += f"🔇 **감지되지 않은 유저**:\n> {', '.join(u.display_name for u in undetected_users)}"
+                    desc += f"🔇 **감지되지 않은 유저** (활동 상태 비공유):\n> {', '.join(u.display_name for u in undetected_users)}"
 
                 embed = discord.Embed(
                     title="🍗 치킨 획득 감지!",
@@ -6224,11 +6218,10 @@ async def detect_matching_pubg_users():
                 )
                 embed.set_footer(text="오덕봇 감지 시스템 • 치킨 축하 메시지")
                 await text_channel.send(embed=embed)
+                log(f"🍗 치킨 알림 전송 (버퍼 종료): {[u.display_name for u in detected_users.values()]}")
 
-            chicken_alerts[ch_key] = {
-                "timestamp": now,
-                "hash": user_hash
-            }
+            # ✅ 채널 기준으로 마지막 알림 시간만 기록
+            chicken_alerts[ch_key] = now
 
     for ch_key in expired_channels:
         pending_chicken_channels.pop(ch_key, None)
