@@ -6218,6 +6218,24 @@ async def detect_matching_pubg_users():
         pending_chicken_channels.pop(ch_key, None)
 
 
+@tree.command(name="감가테스트", description="(채널 관리자 전용) 자산 유지비 감가를 수동 실행합니다.", guild=discord.Object(id=GUILD_ID))
+async def 감가테스트(interaction: discord.Interaction):
+    # 🔐 채널 관리자 권한 체크 (Manage Channels)
+    if not interaction.user.guild_permissions.manage_channels:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **채널 관리자 권한**이 있는 사용자만 실행할 수 있습니다.",
+            ephemeral=True
+        )
+
+    await interaction.response.defer(thinking=True)
+
+    await apply_maintenance_costs(bot)   # ✅ 지갑 감가
+    await apply_bank_depreciation(bot)   # ✅ 은행 감가
+    await decay_oduk_pool(bot)           # ✅ 오덕로또 감가
+
+    await interaction.followup.send("✅ 감가 테스트가 완료되었습니다. 로그 또는 알림 채널을 확인하세요.")
+
+
 
 
 
