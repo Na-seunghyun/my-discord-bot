@@ -279,6 +279,86 @@ else:
 
 
 
+# ✅ 자산 구간별 유지비율 설정 (필요시 수정)
+MAINTENANCE_TIERS = [
+    (10_0000_0000, 0.50),  # 10억 이상 → 50%
+    (5_0000_0000, 0.25),   # 5억 이상 → 25%
+    (1_0000_0000, 0.10),   # 1억 이상 → 10%
+]
+
+# ✅ 자산 유지비 정산 함수
+def apply_maintenance_costs():
+    balances = load_balances()
+    now = datetime.now(KST).isoformat()
+
+    for user_id, info in balances.items():
+        amount = info.get("amount", 0)
+
+        if amount < 100_000_000:
+            continue  # 1억 미만은 감가 대상 아님
+
+        deduction = int(amount * 0.5)  # 기본 50% 차감
+        new_amount = amount - deduction
+
+        if new_amount < 100_000_000:
+            deduction = amount - 100_000_000  # 최소 1억 보장
+            new_amount = 100_000_000
+
+        # 실제 차감이 있는 경우만 기록
+        if deduction > 0:
+            balances[user_id]["amount"] = new_amount
+            balances[user_id]["last_updated"] = now
+            print(f"💸 유지비 차감: {user_id} → {deduction:,}원")
+
+    save_balances(balances)
+
+
+@tasks.loop(hours=24)
+async def auto_apply_maintenance():
+    print("🕓 자산 유지비 정산 시작")
+    apply_maintenance_costs()
+    print("✅ 자산 유지비 정산 완료")
+
+def decay_oduk_pool():
+    global oduk_pool_cache
+
+    current_amount = oduk_pool_cache.get("amount", 0)
+    minimum_amount = 200_000_000  # 2억 보장
+    decay_rate = 0.20  # 20%
+
+    if current_amount > minimum_amount:
+        new_amount = int(current_amount * (1 - decay_rate))
+        if new_amount < minimum_amount:
+            new_amount = minimum_amount
+
+        oduk_pool_cache["amount"] = new_amount
+        save_oduk_pool(oduk_pool_cache)
+        print(f"📉 오덕로또 상금 감가: {current_amount:,} → {new_amount:,}")
+    else:
+        print("✅ 오덕로또 상금이 2억 이하라 감가되지 않음")
+
+
+
+@tasks.loop(hours=24)
+async def auto_decay_oduk_pool():
+    print("🕓 오덕로또 감가 시작")
+    decay_oduk_pool()
+    print("✅ 오덕로또 감가 완료")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 WELCOME_CHANNEL_NAME = "자유채팅방"  # 자유롭게 바꿔도 됨
@@ -5375,6 +5455,50 @@ def get_next_interest_time(user_id):
         return None
     return min(next_times)
 
+def apply_bank_depreciation():
+    bank = load_bank_data()
+    updated = False
+
+    for user_id, user_data in bank.items():
+        total_balance = sum(d["amount"] - d.get("used", 0) for d in user_data.get("deposits", []))
+        if total_balance > 100_000_000:
+            target_after_cut = max(100_000_000, total_balance // 2)
+            to_cut = total_balance - target_after_cut
+            remaining_cut = to_cut
+            updated_deposits = []
+
+            for deposit in sorted(user_data["deposits"], key=lambda d: d["timestamp"]):
+                available = deposit["amount"] - deposit.get("used", 0)
+                if available <= 0:
+                    updated_deposits.append(deposit)
+                    continue
+
+                reduce = min(available, remaining_cut)
+                deposit["used"] = deposit.get("used", 0) + reduce
+                remaining_cut -= reduce
+
+                updated_deposits.append(deposit)
+                if remaining_cut <= 0:
+                    break
+
+            bank[user_id]["deposits"] = [
+                d for d in updated_deposits if (d["amount"] - d.get("used", 0)) > 0
+            ]
+            updated = True
+            print(f"🏦 감가 적용: {user_id} → {to_cut:,}원 차감됨")
+
+    if updated:
+        save_bank_data(bank)
+
+@tasks.loop(hours=24)
+async def auto_apply_maintenance():
+    print("🕓 자산 유지비 정산 시작")
+    apply_maintenance_costs()
+    apply_bank_depreciation()  # ⬅️ 추가
+    print("✅ 자산 유지비 정산 완료")
+
+
+
 
 # ✅ /예금 커맨드
 @tree.command(name="예금", description="지갑에서 은행으로 돈을 예금합니다.", guild=discord.Object(id=GUILD_ID))
@@ -6040,8 +6164,14 @@ async def detect_matching_pubg_users():
 async def on_ready():
     global oduk_pool_cache
     global invites_cache
-
+    
     print(f"🤖 봇 로그인됨: {bot.user}")
+
+    if not auto_apply_maintenance.is_running():
+        auto_apply_maintenance.start()
+
+    if not auto_decay_oduk_pool.is_running():
+        auto_decay_oduk_pool.start()
 
     # ✅ 기존 루프 유지
     if not monitor_discord_ping.is_running():
