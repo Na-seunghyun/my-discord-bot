@@ -285,7 +285,7 @@ WELCOME_CHANNEL_NAME = "자유채팅방"  # 자유롭게 바꿔도 됨
 
 
 
-# ✅ 욕설 리스트 정규식 패턴 로드 함수
+# 욕설 리스트 정규식 패턴 로드 함수
 def load_badwords_regex(file_path=BADWORDS_FILE):
     regex_patterns = []
     if not os.path.exists(file_path):
@@ -301,9 +301,31 @@ def load_badwords_regex(file_path=BADWORDS_FILE):
             regex_patterns.append(re.compile(pattern, re.IGNORECASE))
     return regex_patterns
 
+# ✅ 링크 제거 함수
+def remove_urls(text: str):
+    return re.sub(r"https?://[^\s]+", "", text)
+
+# ✅ visible text만 필터링에 사용
+def extract_visible_text(message: discord.Message) -> str:
+    return remove_urls(message.content or "")
+    
+# ✅ 필터링 로직 (URL 제거 후 검사)
+def filter_message(text: str):
+    for pattern in BADWORD_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
+
+# ✅ *** 마스킹 함수도 URL 제거 적용
+def censor_badwords_regex(text, badword_patterns):
+    text = remove_urls(text)
+    for pattern in badword_patterns:
+        text = pattern.sub("***", text)
+    return text
+
 BADWORD_PATTERNS = load_badwords_regex()
 
-# ✅ 경고 데이터 불러오기
+# 경고 데이터 불러오기
 if os.path.exists(WARNINGS_FILE):
     with open(WARNINGS_FILE, "r", encoding="utf-8") as f:
         warnings = json.load(f)
@@ -314,37 +336,6 @@ def save_warnings():
     with open(WARNINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(warnings, f, indent=4)
 
-# ✅ 링크 제거 (텍스트에서)
-def remove_urls(text: str):
-    return re.sub(r"https?://[^\s]+", "", text)
-
-# ✅ 전체 메시지에서 텍스트/링크 추출
-def extract_full_text(message) -> str:
-    text = message.content or ""
-    for embed in message.embeds:
-        if hasattr(embed, "url"):
-            text += f" {embed.url}"
-    for attach in message.attachments:
-        if hasattr(attach, "url"):
-            text += f" {attach.url}"
-    return text
-
-# ✅ 욕설 감지 함수
-def filter_message(message_text: str):
-    cleaned = remove_urls(message_text)
-    for pattern in BADWORD_PATTERNS:
-        if pattern.search(cleaned):
-            return True
-    return False
-
-# ✅ 욕설 마스킹 함수
-def censor_badwords_regex(text, badword_patterns):
-    cleaned = remove_urls(text)
-    censored_text = cleaned
-    for pattern in badword_patterns:
-        censored_text = pattern.sub("***", censored_text)
-    return censored_text
-
 
 
 @bot.event
@@ -353,42 +344,24 @@ async def on_member_update(before, after):
         print(f"🔄 닉네임 변경 감지: {before.display_name} → {after.display_name}")
         await update_valid_pubg_ids(after.guild)
 
-
-
-
-
-
-
-
+# ✅ on_message 핸들러
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    text = extract_full_text(message)  # 🔄 content + embed + attachment URL 포함
-
-    if filter_message(text):
-        await message.delete()
-        await message.channel.send("⚠️ 욕설이 감지되었습니다.", delete_after=5)
-
-
-
-
-    
-
-    # ✅ 텍스트 채널인지 먼저 확인
     if not isinstance(message.channel, discord.TextChannel):
-        return  # DM이나 기타 채널일 경우 무시
+        return
 
-    msg = message.content
-    lowered_msg = msg.lower()
+    visible_text = extract_visible_text(message)  # ⛔ 링크 제거된 본문만 필터링
+    lowered_text = visible_text.lower()
 
-    if any(p.search(lowered_msg) for p in BADWORD_PATTERNS):
-        censored = censor_badwords_regex(msg, BADWORD_PATTERNS)
+    if filter_message(lowered_text):
+        censored = censor_badwords_regex(message.content, BADWORD_PATTERNS)
         try:
             await message.delete()
         except Exception as e:
-            print(f"메시지 삭제 실패: {e}")
+            print(f"❌ 메시지 삭제 실패: {e}")
 
         embed = discord.Embed(
             title="💬 욕설 필터링 안내",
@@ -397,7 +370,6 @@ async def on_message(message):
             color=0xFFD700
         )
         embed.set_footer(text="💡 오덕봇은 욕설은 자동으로 걸러주는 평화주의자입니다.")
-
         await message.channel.send(embed=embed)
 
         user_id = str(message.author.id)
@@ -405,6 +377,7 @@ async def on_message(message):
         save_warnings()
 
     await bot.process_commands(message)
+
 
 
 
