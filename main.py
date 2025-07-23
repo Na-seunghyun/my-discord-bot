@@ -1369,6 +1369,31 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
     except Exception as e:
         await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
 
+@전적.autocomplete("닉네임")
+async def 닉네임_자동완성(interaction: discord.Interaction, current: str):
+    guild = interaction.guild
+    if not guild:
+        return []
+
+    choices = []
+    for member in guild.members:
+        if member.bot or not member.nick:
+            continue
+
+        parts = member.nick.split("/")
+        if len(parts) >= 2:
+            nickname = parts[1].strip()
+            full_nick = member.nick.strip()
+
+            # current 검색어가 닉네임 전체 또는 PUBG ID에 포함될 때만
+            if current.lower() in full_nick.lower() or current.lower() in nickname.lower():
+                choices.append(app_commands.Choice(
+                    name=full_nick,  # 자동완성에 보이는 항목: 예) 토끼 / N_cafe24_A / 90
+                    value=nickname  # 실제 입력될 값: N_cafe24_A
+                ))
+
+    return choices[:25]
+
 
 
 @tree.command(name="시즌랭킹", description="현재 시즌의 항목별 TOP5을 확인합니다.", guild=discord.Object(id=GUILD_ID))
