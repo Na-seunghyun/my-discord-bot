@@ -5228,7 +5228,7 @@ def save_job_records(data):
         json.dump(data, f, indent=2)
 
 # ✅ 기록 업데이트 함수 (주차 확인 포함)
-def update_job_record(user_id: str, reward: int):
+def update_job_record(user_id: str, reward: int, job_type: str = "default"):
     now = datetime.now(KST)
     current_week = get_current_week_tag()
     today = now.date().isoformat()
@@ -5239,34 +5239,43 @@ def update_job_record(user_id: str, reward: int):
         "count": 0,
         "total_earned": 0,
         "last_time": "",
-        "daily": {}  # ✅ 추가
+        "daily": {},
+        "types": {}  # ✅ 알바 유형별 기록 추가
     })
 
-    # ✅ 주차가 바뀌면 초기화
+    # ✅ 주차 변경 시 기록 초기화
     if record.get("week") != current_week:
         record = {
             "week": current_week,
             "count": 0,
             "total_earned": 0,
             "last_time": "",
-            "daily": {}
+            "daily": {},
+            "types": {}
         }
 
-    # ✅ 일일 횟수 제한 체크
+    # ✅ 일일 횟수 제한 확인
     daily = record.get("daily", {})
     today_count = daily.get(today, 0)
     if today_count >= 5:
-        return False
+        return False  # 초과근무 → 실패 처리
 
-    # ✅ 기록 업데이트
+    # ✅ 기록 갱신
     record["count"] += 1
     record["total_earned"] += reward
     record["last_time"] = now.isoformat()
     daily[today] = today_count + 1
     record["daily"] = daily
+
+    # ✅ 알바유형별 횟수 누적
+    types = record.get("types", {})
+    types[job_type] = types.get(job_type, 0) + 1
+    record["types"] = types
+
     data[user_id] = record
     save_job_records(data)
     return True
+
 
 
 # ✅ 잔액 함수는 네 기존 코드 사용
@@ -5389,9 +5398,22 @@ async def 알바기록(interaction: discord.Interaction):
     last_time = datetime.fromisoformat(record["last_time"]).astimezone(KST)
     time_str = last_time.strftime("%Y-%m-%d %H:%M:%S")
 
+    # ✅ 알바 유형별 기록 정리
+    type_lines = []
+    types = record.get("types", {})
+    for job_type, count in types.items():
+        name = {
+            "default": "타자알바",
+            "box": "박스알바"
+        }.get(job_type, job_type)
+        type_lines.append(f"- {name}: {count}회")
+
+    type_summary = "\n".join(type_lines) or "- 없음"
+
     await interaction.response.send_message(
         f"📝 **{interaction.user.display_name}님의 이번 주 알바 기록**\n"
         f"- 총 알바 횟수: {record['count']}회\n"
+        f"{type_summary}\n"
         f"- 누적 수익: 💰 {record['total_earned']:,}원\n"
         f"- 마지막 알바: {time_str} (KST)",
         ephemeral=True
@@ -5421,6 +5443,114 @@ async def 초대기록(interaction: discord.Interaction):
     for part in chunks:
         await interaction.followup.send(part, ephemeral=True)
 
+
+# ✅ 박스알바 버튼 정의
+class BoxButton(discord.ui.Button):
+    def __init__(self, label, is_correct):
+        super().__init__(style=discord.ButtonStyle.primary, label=label)
+        self.is_correct = is_correct
+
+    async def callback(self, interaction: discord.Interaction):
+        view: discord.ui.View = self.view
+        if view.already_clicked:
+            return await interaction.response.send_message("⛔ 이미 누른 버튼입니다!", ephemeral=True)
+
+        view.already_clicked = True
+
+        if not self.is_correct:
+            return await interaction.response.edit_message(
+                content="💥 오답! 박스가 아닌 걸 치웠어요...\n❌ 알바 실패!",
+                view=None
+            )
+
+        # ✅ 정답 선택 처리
+        user_id = str(interaction.user.id)
+        reward = random.randint(500, 1500)
+        is_jackpot = False
+
+        if random.random() < 0.05:
+            reward *= 2
+            is_jackpot = True
+
+        success = update_job_record(user_id, reward, job_type="box")
+        if not success:
+            add_oduk_pool(reward)
+            pool_amount = get_oduk_pool_amount()
+
+            if random.random() < 0.4:
+                compensation = reward // 2
+                add_balance(user_id, compensation)
+                return await interaction.response.edit_message(
+                    content=(
+                        f"💢 초과근무! 알바비 **{reward:,}원**을 악덕 사장이 가로챘습니다.\n"
+                        f"⚖️ 고용노동부 신고 성공! **{compensation:,}원**을 되찾았습니다!\n"
+                        f"🏦 오덕로또 잔고: **{pool_amount:,}원**\n"
+                        f"🎟️ `/오덕로또참여`로 복수해보세요!"
+                    ),
+                    view=None
+                )
+
+            return await interaction.response.edit_message(
+                content=(
+                    f"💢 초과근무! 알바비 **{reward:,}원**이 몰수되었습니다.\n"
+                    f"💰 전액 오덕로또 잔고에 적립됨: **{pool_amount:,}원**\n"
+                    f"🎯 `/오덕로또참여`로 복수 기회를 노려보세요!"
+                ),
+                view=None
+            )
+
+        # ✅ 정상 보상 지급
+        add_balance(user_id, reward)
+
+        today = datetime.now(KST).date().isoformat()
+        record = load_job_records().get(user_id, {})
+        today_used = record.get("daily", {}).get(today, 0)
+        remaining = max(0, 5 - today_used)
+
+        msg = f"📦 박스를 정확히 치웠습니다! 💰 **{reward:,}원** 획득!"
+        if is_jackpot:
+            msg += "\n🎉 **우수 알바생! 보너스 지급으로 2배 보상!** 🎉"
+        msg += f"\n📌 오늘 남은 알바 가능 횟수: **{remaining}회** (총 5회 중)"
+        await interaction.response.edit_message(content=msg, view=None)
+
+
+# ✅ 박스알바 UI View 정의
+class BoxJobView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=10)
+        self.already_clicked = False
+
+        items = [
+            ("📦", True),
+            ("🗑️", False),
+            ("💣", False),
+            ("📦", True),
+            ("🐱", False),
+            ("🧽", False)
+        ]
+        random.shuffle(items)
+        for emoji, correct in items[:5]:
+            self.add_item(BoxButton(label=emoji, is_correct=correct))
+
+    async def on_timeout(self):
+        if not self.already_clicked:
+            await self.message.edit(content="⌛️ 시간 초과! 알바 실패!", view=None)
+
+
+# ✅ 박스알바 명령어 등록
+@tree.command(name="박스알바", description="박스를 정확히 클릭해 알바비를 벌어보세요!", guild=discord.Object(id=GUILD_ID))
+async def 박스알바(interaction: discord.Interaction):
+    if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
+    view = BoxJobView()
+    msg = await interaction.response.send_message(
+        "📦 **박스를 치워주세요!** (10초 이내, 실수하면 실패!)", view=view, ephemeral=True
+    )
+    view.message = await msg.original_response()
 
 
 
