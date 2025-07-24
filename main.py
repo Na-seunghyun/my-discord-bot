@@ -6087,11 +6087,20 @@ def is_due_for_repayment(loan_data):
     last = datetime.fromisoformat(loan_data["last_checked"])
     return (datetime.now(KST) - last).total_seconds() >= 1800
 
-def calculate_loan_due(principal, created_at_str, rate):
+def calculate_loan_due(principal, created_at_str, rate, *, force_future_30min=False):
     created_at = datetime.fromisoformat(created_at_str)
     now = datetime.now(KST)
-    elapsed = int((now - created_at).total_seconds() // 1800)
-    return int(principal * ((1 + rate) ** elapsed))
+    
+    if force_future_30min:
+        # 최소 1회차 이자가 계산되도록 30분 경과 기준
+        elapsed = max((now - created_at).total_seconds(), 1800)
+    else:
+        elapsed = (now - created_at).total_seconds()
+
+    intervals = int(elapsed // 1800)
+    return int(principal * ((1 + rate) ** intervals))
+
+
 
 def is_loan_restricted(user_id):
     loan = get_user_loan(user_id)
@@ -6256,7 +6265,8 @@ async def 대출정보(interaction: discord.Interaction):
 
     interest_rate = loan.get("interest_rate", 0.115)
     original = loan["amount"]
-    due = calculate_loan_due(original, loan["created_at"], interest_rate)
+    due = calculate_loan_due(original, loan["created_at"], interest_rate, force_future_30min=True)
+
 
     await interaction.response.send_message(
         f"📋 **대출 정보**\n"
