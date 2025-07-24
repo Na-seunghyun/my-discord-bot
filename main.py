@@ -5447,6 +5447,16 @@ def get_total_bank_balance(user_id):
     user_data = bank.get(str(user_id), {"deposits": []})
     return sum(d["amount"] - d.get("used", 0) for d in user_data.get("deposits", []))
 
+
+def reset_bank_deposits(user_id):
+    bank = load_bank_data()
+    if str(user_id) in bank:
+        del bank[str(user_id)]
+        save_bank_data(bank)
+
+
+
+
 # ✅ 예금 추가
 def add_bank_deposit(user_id, amount):
     bank = load_bank_data()
