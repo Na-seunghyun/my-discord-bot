@@ -6435,8 +6435,11 @@ async def try_repay(user_id, member):
     return format_repay_message(member, data["created_at"], total_due, result, grade_change)
 
 
+from discord.ext import tasks
+
 @tasks.loop(minutes=1)
 async def auto_repay_check():
+    print("🕓 [대출 상환 루프 시작됨]")
     loans = load_loans()
     for user_id in loans.keys():
         try:
@@ -6444,11 +6447,9 @@ async def auto_repay_check():
             if member:
                 result = await try_repay(user_id, member)
                 if result:
-                    print(f"[자동상환] {user_id}: {result.replace(chr(10), ' / ')}")
+                    print(f"[상환 처리] {user_id} → {result.replace(chr(10), ' / ')}")
         except Exception as e:
             print(f"❌ 자동상환 오류 - 유저 {user_id}: {e}")
-
-
 
 
 
