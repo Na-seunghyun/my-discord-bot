@@ -6613,7 +6613,7 @@ from datetime import datetime, timedelta, timezone
 from discord.ext import tasks
 
 # ✅ 설정값
-ALERT_CHANNEL_NAME = "자유채팅방"
+ALERT_CHANNEL_NAME = "치킨알림"
 ALERT_INTERVAL_SECONDS = 600
 COMPARE_TOLERANCE_SECONDS = 60
 DEBUG = True
