@@ -2359,8 +2359,8 @@ KST = timezone(timedelta(hours=9))
 DAILY_CLAIMS_FILE = "daily_claims.json"
 WEEKLY_CLAIMS_FILE = "weekly_claims.json"
 
-DAILY_REWARD = 50000
-WEEKLY_REWARD = 500000
+DAILY_REWARD = 5000
+WEEKLY_REWARD = 50000
 
 
 # ✅ 잔액 관련 함수 (예시로 기본구조 제공 — 실제 구현은 사용중인 balance 시스템으로 대체)
@@ -4310,11 +4310,20 @@ async def 초기화(interaction: discord.Interaction):
     # ✅ 6. 1:1 배틀 전적 초기화
     with open("pair_stats.json", "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False, indent=2)
-        
+
+    # ✅ 7. 알바 기록 초기화
+    with open(ALBA_RECORD_FILE, "w", encoding="utf-8") as f:
+        json.dump({}, f, indent=2)    
+
+    # ✅ 8. 은행 예금 기록 초기화
+    with open("bank.json", "w", encoding="utf-8") as f:
+        json.dump({}, f, indent=2)
+
+    
     await interaction.response.send_message(
         embed=create_embed(
             "✅ 초기화 완료",
-            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록, **송금 내역**, **배틀 전적**, **1:1 전적**이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
+            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록, **송금 내역**, **배틀 전적**, **1:1 전적**, **알바 기록**이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
             discord.Color.green()
         ),
         ephemeral=False
@@ -5293,12 +5302,12 @@ async def 타자알바(interaction: discord.Interaction):
 
         # ✅ 성공 처리
         elapsed = (end_time - start_time).total_seconds()
-        base_reward = 12000
-        penalty = int(elapsed * 600)
+        base_reward = 1200
+        penalty = int(elapsed * 60)
         reward = max(1000, base_reward - penalty)
 
-        # ✅ 2% 잭팟
-        if random.random() < 0.02:
+        # ✅ 1% 잭팟
+        if random.random() < 0.01:
             reward *= 3
             is_jackpot = True
         else:
@@ -5522,7 +5531,7 @@ async def apply_bank_depreciation(bot):
         if total_balance > 100_000_000:
             # ✅ 초과분의 절반만 감가, 최소 1억 보장
             excess = total_balance - 100_000_000
-            to_cut = excess // 2
+            to_cut = int(excess * 0.2)  # ✅ 20% 감가
             target_after_cut = total_balance - to_cut
 
             remaining_cut = to_cut
