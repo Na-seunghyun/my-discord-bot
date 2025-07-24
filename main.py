@@ -6161,6 +6161,12 @@ async def try_repay(user_id: str, member: discord.Member):
     if not loan:
         return None
 
+    # ⛔ 이자 1회도 발생하지 않았으면 상환 시도 금지
+    created_at_dt = datetime.fromisoformat(loan["created_at"])
+    elapsed_periods = int((datetime.now(KST) - created_at_dt).total_seconds() // 1800)
+    if elapsed_periods < 1:
+        return None  # 아직 첫 이자 발생 전이므로 상환하지 않음
+
     total_due = calculate_loan_due(loan["amount"], loan["created_at"], loan["interest_rate"])
     wallet = get_balance(user_id)
     bank = get_total_bank_balance(user_id)
@@ -6174,11 +6180,13 @@ async def try_repay(user_id: str, member: discord.Member):
     if wallet >= total_due:
         add_balance(user_id, -total_due)
         result_line = "✅ 결과: 상환 성공! (지갑 사용)"
+
     elif wallet + bank >= total_due:
         remain = total_due - wallet
         add_balance(user_id, -wallet)
         withdraw_from_bank(user_id, remain)
         result_line = "✅ 결과: 상환 성공! (지갑 + 은행 사용)"
+
     else:
         loan_data["unpaid_days"] += 1
         loan_data["consecutive_failures"] += 1
@@ -6197,7 +6205,7 @@ async def try_repay(user_id: str, member: discord.Member):
         result_line = f"❌ 결과: 상환 실패 → 연체 {loan_data['unpaid_days']}일, 실패 {fails}회"
         return format_repay_message(member, loan["created_at"], total_due, result_line)
 
-    # ✅ 성공 시 등급 회복 처리
+    # ✅ 상환 성공 시
     loan_data["consecutive_successes"] = loan_data.get("consecutive_successes", 0) + 1
     loan_data["consecutive_failures"] = 0
     loan_data["unpaid_days"] = 0
@@ -6218,6 +6226,7 @@ async def try_repay(user_id: str, member: discord.Member):
     save_loans(loans)
 
     return format_repay_message(member, loan["created_at"], total_due, result_line, grade_change)
+
 
 
 
