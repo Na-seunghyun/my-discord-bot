@@ -6033,7 +6033,7 @@ CREDIT_GRADES = {
     "C": {"name": "일반 고객", "limit": 50_000},
     "D": {"name": "신용 불량", "limit": 30_000},
     "E": {"name": "위험 고객", "limit": 10_000},
-    "F": {"name": "블랙리스트", "limit": 0}
+    "F": {"name": "블랙리스트", "limit": 5_000}
 }
 
 # ✅ 메시지 템플릿
@@ -6124,7 +6124,9 @@ def is_loan_restricted(user_id):
     loan = get_user_loan(user_id)
     if not loan:
         return False
-    return loan.get("credit_grade") == "F" or loan.get("consecutive_failures", 0) >= 1
+    # ❌ 연체 10회 이상인 경우만 대출 제한 (F등급 허용)
+    return loan.get("consecutive_failures", 0) >= 100
+
 
 def is_rejoin_suspicious(user_id):
     loan = get_user_loan(user_id)
@@ -6456,6 +6458,13 @@ async def try_repay(user_id, member, *, force=False):
     # ✅ 자동 상환 루프가 force=True일 때만 체크 없이 강제 진행
     if not force and not is_due_for_repayment(loan):
         return None
+
+    # ✅ 직전 상환시도 이후 일정 시간 이내면 중복 시도 방지 (±60초 범위 내 반복 상환 방지)
+    last_checked = datetime.fromisoformat(loan.get("last_checked", loan["created_at"]))
+    now = datetime.now(KST)
+    if (now - last_checked).total_seconds() < 1740:  # 29분 이내면 무시
+        return None
+
 
     rate = loan.get("interest_rate", 0.05)
     total_due = calculate_loan_due(
