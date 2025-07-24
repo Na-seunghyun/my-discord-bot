@@ -6134,15 +6134,43 @@ def is_rejoin_suspicious(user_id):
     last_checked = datetime.fromisoformat(loan.get("last_checked", loan["created_at"]))
     return joined > last_checked
 
+
+BANKRUPT_FILE = "bankrupt_log.json"
+
+def load_bankrupt_users():
+    if not os.path.exists(BANKRUPT_FILE):
+        return []
+    with open(BANKRUPT_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def add_to_bankrupt_log(user_id):
+    users = load_bankrupt_users()
+    uid = str(user_id)
+    if uid not in users:
+        users.append(uid)
+        with open(BANKRUPT_FILE, "w", encoding="utf-8") as f:
+            json.dump(users, f, indent=2)
+
+
+
+def was_bankrupted(user_id):
+    # 예: 별도 bankrupt_log.json에 기록해두고 거기서 확인
+    return str(user_id) in load_bankrupt_users()
+
+
+
+
 # ✅ 대출 생성
 
 def create_or_update_loan(user_id, amount, credit_grade="C"):
     loans = load_loans()
     user_id_str = str(user_id)
 
-    # ❗ 이미 대출 중이면 새로 생성하지 않음
     if user_id_str in loans:
-        return
+        return  # 이미 대출 중이면 무시
+
+    # ✅ 파산 기록이 있다면 F 등급으로 시작
+    credit_grade = "F" if was_bankrupted(user_id) else credit_grade
 
     now = datetime.now(KST).isoformat()
     loans[user_id_str] = {
@@ -6156,6 +6184,7 @@ def create_or_update_loan(user_id, amount, credit_grade="C"):
         "server_joined_at": now
     }
     save_loans(loans)
+
 
 
 # ✅ 등급/연체 기반 메시지 생성
@@ -6456,6 +6485,8 @@ async def try_repay(user_id, member, *, force=False):
             set_balance(user_id, 0)
             reset_bank_deposits(user_id)
             reset_investments(user_id)
+            
+            add_to_bankrupt_log(user_id)  # ✅ 파산 기록 추가!
 
             loans.pop(user_id, None)
             save_loans(loans)
