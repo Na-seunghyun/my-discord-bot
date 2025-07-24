@@ -6436,21 +6436,22 @@ async def 대출(interaction: discord.Interaction, 금액: int):
 
     user_id = str(interaction.user.id)
 
-    # ❌ 대출 제한 여부 확인 (연체 or 등급 F)
+    # ❌ 대출 제한 여부 확인 (연체 or 등급 F 등)
     if is_loan_restricted(user_id):
         return await interaction.response.send_message(
             "🚫 현재 신용등급 또는 연체로 인해 대출이 제한되었습니다.",
             ephemeral=True
         )
 
-    # ❌ 기존 대출 존재 여부 확인
-    if get_user_loan(user_id):
+    # ❌ 기존 대출 존재 여부 확인 (amount > 0인 경우만 대출 불가)
+    loan = get_user_loan(user_id)
+    if loan and loan.get("amount", 0) > 0:
         return await interaction.response.send_message(
             "❌ 이미 대출이 존재합니다. 상환 후 다시 시도해주세요.",
             ephemeral=True
         )
 
-    # ✅ 파산 기록 여부에 따라 등급 추정 (단순 출력을 위한 용도)
+    # ✅ 파산 기록 여부에 따라 등급 추정 (출력용)
     grade = "F" if was_bankrupted(user_id) else "C"
     limit = CREDIT_GRADES[grade]["limit"]
 
@@ -6462,7 +6463,7 @@ async def 대출(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    # ✅ 대출 실행 (등급 넘기지 않음 → 내부에서 결정)
+    # ✅ 대출 실행
     create_or_update_loan(user_id, 금액)
     add_balance(user_id, 금액)
 
@@ -6471,6 +6472,7 @@ async def 대출(interaction: discord.Interaction, 금액: int):
         f"📆 30분마다 이자가 복리로 적용됩니다. 늦기 전에 갚으세요!",
         ephemeral=True
     )
+
 
 
 
