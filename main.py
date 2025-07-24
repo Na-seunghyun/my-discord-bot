@@ -296,9 +296,9 @@ else:
 
 # ✅ 자산 구간별 유지비율 설정 (필요시 수정)
 MAINTENANCE_TIERS = [
-    (1_0000_0000, 0.15),   # 1억 이상 → 10%
-    (3_0000_0000, 0.50),   # 5억 이상 → 25%
-    (5_0000_0000, 0.70),  # 10억 이상 → 50%
+    (1000_0000, 0.15),   #  천만 원 이상 → 10%
+    (3000_0000, 0.50),   # 삼천 만 원 이상 → 25%
+    (5000_0000, 0.70),   # 오천 만 원 이상 → 50%
 ]
 
 # 예시로 채널 ID 설정 (실제 사용 중인 ID로 교체하세요)
@@ -313,7 +313,7 @@ async def apply_maintenance_costs(bot):
     for user_id, info in balances.items():
         amount = info.get("amount", 0)
 
-        if amount < 100_000_000:
+        if amount < 10_000_000:
             continue  # 1억 미만은 감가 대상 아님
 
         # ✅ MAINTENANCE_TIERS 기준 감가율 결정
@@ -327,9 +327,9 @@ async def apply_maintenance_costs(bot):
         new_amount = amount - deduction
 
         # ✅ 최소 1억 보장
-        if new_amount < 100_000_000:
-            deduction = amount - 100_000_000
-            new_amount = 100_000_000
+        if new_amount < 10_000_000:
+            deduction = amount - 10_000_000
+            new_amount = 10_000_000
 
         if deduction > 0:
             balances[user_id]["amount"] = new_amount
@@ -348,7 +348,7 @@ async def apply_maintenance_costs(bot):
                 member = await fetch_user_safe(uid)
                 name = member.display_name if member else f"ID:{uid}"
                 msg_lines.append(f"• {name} → **{before:,}원 → {after:,}원**")
-            msg_lines.append("\n📉 자산이 1억 이상일 경우 매일 감가가 적용됩니다.")
+            msg_lines.append("\n📉 자산이 천 만 원 이상일 경우 매일 감가가 적용됩니다.")
             await channel.send("\n".join(msg_lines))
 
 
@@ -370,7 +370,7 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
     global oduk_pool_cache
 
     current_amount = oduk_pool_cache.get("amount", 0)
-    minimum_amount = 200_000_000  # 2억 보장
+    minimum_amount = 5_000_000  # 5백 만 원 보장
     decay_rate = 0.20  # 20%
 
     if current_amount > minimum_amount:
@@ -388,7 +388,7 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
             await channel.send(
                 f"📉 **오덕로또 상금 감가 적용**\n"
                 f"💰 기존 상금: **{current_amount:,}원** → 현재 상금: **{new_amount:,}원**\n"
-                f"🧾 12시간 자동 감가 정책에 따라 **20% 차감**되었으며, 최소 **2억 원**은 보장됩니다.\n"
+                f"🧾 12시간 자동 감가 정책에 따라 **20% 차감**되었으며, 최소 **오 백 만 원 **은 보장됩니다.\n"
                 f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
             )
     else:
@@ -5528,9 +5528,9 @@ async def apply_bank_depreciation(bot):
     for user_id, user_data in bank.items():
         total_balance = sum(d["amount"] - d.get("used", 0) for d in user_data.get("deposits", []))
 
-        if total_balance > 100_000_000:
-            # ✅ 초과분의 절반만 감가, 최소 1억 보장
-            excess = total_balance - 100_000_000
+        if total_balance > 50_000_000:
+            # ✅ 초과분의 절반만 감가, 최소 5천 만 원 보장
+            excess = total_balance - 50_000_000
             to_cut = int(excess * 0.2)  # ✅ 20% 감가
             target_after_cut = total_balance - to_cut
 
