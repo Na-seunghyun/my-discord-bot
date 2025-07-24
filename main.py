@@ -160,6 +160,10 @@ def save_investments(data):
     with open(INVESTMENT_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
+def reset_investments(user_id: str):
+    investments = load_investments()
+    updated = [inv for inv in investments if inv["user_id"] != user_id]
+    save_investments(updated)
 
 
 async def fetch_user_safe(user_id):
