@@ -6436,7 +6436,7 @@ async def try_repay(user_id, member, *, force=False):
         data["consecutive_successes"] = 0
 
     clear_loan(user_id)
-    save_loans(loans)
+   
     return format_repay_message(member, data["created_at"], total_due, result, grade_change)
 
 
