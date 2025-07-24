@@ -6092,7 +6092,10 @@ def clear_loan(user_id):
 def is_due_for_repayment(loan_data):
     ref_time = loan_data.get("last_checked", loan_data["created_at"])
     last = datetime.fromisoformat(ref_time)
-    return (datetime.now(KST) - last).total_seconds() >= 1800
+    elapsed = (datetime.now(KST) - last).total_seconds()
+    print(f"[DEBUG] 상환 대상 확인: 기준시각={ref_time}, 경과={elapsed:.1f}초")
+    return elapsed >= 1800
+
 
 
 def calculate_loan_due(principal, created_at_str, rate, *, force_future_30min=False):
@@ -6217,7 +6220,10 @@ async def process_overdue_loans_on_startup(bot):
         if elapsed >= 1800:  # 30분 이상 경과
             member = bot.get_user(int(user_id)) or await bot.fetch_user(int(user_id))
             if member:
-                await try_repay(user_id, member)
+                result = await try_repay(user_id, member, force=True)
+                if result:
+                    print(f"🔁 [시작시 상환 처리] {user_id} → {result.replace(chr(10), ' / ')}")
+
 
 
 
@@ -6367,9 +6373,12 @@ async def 파산처리(interaction: discord.Interaction, 유저: discord.User):
 
 # ✅ 자동 상환
 
-async def try_repay(user_id, member):
+async def try_repay(user_id, member, *, force=False):
     loan = get_user_loan(user_id)
-    if not loan or not is_due_for_repayment(loan):
+    if not loan:
+        return None
+
+    if not force and not is_due_for_repayment(loan):
         return None
 
     total_due = calculate_loan_due(loan["amount"], loan["created_at"], loan["interest_rate"])
@@ -6379,7 +6388,6 @@ async def try_repay(user_id, member):
     loans = load_loans()
     data = loans[user_id]
 
-    # ✅ 누락 필드 안전하게 초기화
     data.setdefault("consecutive_successes", 0)
     data.setdefault("consecutive_failures", 0)
     data.setdefault("credit_grade", "C")
@@ -6396,11 +6404,9 @@ async def try_repay(user_id, member):
         withdraw_from_bank(user_id, total_due - wallet)
         result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}\n💰 상환금: {total_due:,}원"
     else:
-        # ❌ 상환 실패 처리
         data["consecutive_failures"] += 1
         data["consecutive_successes"] = 0
 
-        # 📉 등급 하락 조건
         if data["consecutive_failures"] >= 3:
             data["credit_grade"] = "F"
         elif data["consecutive_failures"] == 2:
@@ -6418,10 +6424,9 @@ async def try_repay(user_id, member):
         )
         return format_repay_message(member, data["created_at"], total_due, result)
 
-    # ✅ 상환 성공 시 등급 회복 조건 처리
+    # 성공 처리
     data["consecutive_successes"] += 1
     data["consecutive_failures"] = 0
-
     grades = list(CREDIT_GRADES.keys())
     idx = grades.index(data["credit_grade"])
     if data["consecutive_successes"] >= 2 and idx > 0:
@@ -6433,6 +6438,7 @@ async def try_repay(user_id, member):
     clear_loan(user_id)
     save_loans(loans)
     return format_repay_message(member, data["created_at"], total_due, result, grade_change)
+
 
 
 from discord.ext import tasks
