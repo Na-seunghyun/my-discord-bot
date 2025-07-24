@@ -6240,22 +6240,31 @@ async def try_repay(user_id, member):
     elif wallet + bank >= total_due:
         add_balance(user_id, -wallet)
         withdraw_from_bank(user_id, total_due - wallet)
-        result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}
-💰 상환금: {total_due:,}원"
+        result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}\n💰 상환금: {total_due:,}원"
     else:
+        # 상환 실패 처리
         data["consecutive_failures"] += 1
         data["consecutive_successes"] = 0
+
+        # 등급 하락 조건
         if data["consecutive_failures"] >= 3:
             data["credit_grade"] = "F"
         elif data["consecutive_failures"] == 2:
             data["credit_grade"] = "E"
+
         data["last_checked"] = datetime.now(KST).isoformat()
         loans[user_id] = data
         save_loans(loans)
+
         fails = data["consecutive_failures"]
-        result = f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], fails)}\n💣 누적 연체: {fails}회\n💰 상환금: {total_due:,}원"
+        result = (
+            f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], fails)}\n"
+            f"💣 누적 연체: {fails}회\n"
+            f"💰 상환금: {total_due:,}원"
+        )
         return format_repay_message(member, data["created_at"], total_due, result)
 
+    # 상환 성공 시 등급 조정
     data["consecutive_successes"] += 1
     data["consecutive_failures"] = 0
 
