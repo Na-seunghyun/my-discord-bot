@@ -6407,8 +6407,9 @@ async def 채무리스트(interaction: discord.Interaction):
 
 
 
-# ✅ 파산처리 명령어
 
+
+# ✅ 파산처리 명령어
 @tree.command(name="파산처리", description="특정 유저의 모든 자산, 투자, 채무를 초기화합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(유저="초기화할 대상 유저")
 async def 파산처리(interaction: discord.Interaction, 유저: discord.User):
@@ -6430,9 +6431,13 @@ async def 파산처리(interaction: discord.Interaction, 유저: discord.User):
     # 💥 투자 초기화
     reset_investments(user_id)
 
+    # 💥 파산 기록 추가
+    add_to_bankrupt_log(user_id)  # ✅ 반드시 추가!
+
     await interaction.response.send_message(
         f"☠️ `{유저.name}`님의 모든 자산이 초기화되었습니다. 이제 완전히 파산 처리되었습니다."
     )
+
 
 # ✅ 자동 상환
 
