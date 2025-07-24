@@ -6090,8 +6090,10 @@ def clear_loan(user_id):
         save_loans(loans)
 
 def is_due_for_repayment(loan_data):
-    last = datetime.fromisoformat(loan_data["last_checked"])
+    ref_time = loan_data.get("last_checked", loan_data["created_at"])
+    last = datetime.fromisoformat(ref_time)
     return (datetime.now(KST) - last).total_seconds() >= 1800
+
 
 def calculate_loan_due(principal, created_at_str, rate, *, force_future_30min=False):
     created_at = datetime.fromisoformat(created_at_str)
@@ -6437,11 +6439,14 @@ async def try_repay(user_id, member):
 async def auto_repay_check():
     loans = load_loans()
     for user_id in loans.keys():
-        user_id_str = str(user_id)
-        member = discord.utils.get(bot.get_all_members(), id=int(user_id_str))
-        if member:
-            await try_repay(user_id_str, member)
-
+        try:
+            member = discord.utils.get(bot.get_all_members(), id=int(user_id))
+            if member:
+                result = await try_repay(user_id, member)
+                if result:
+                    print(f"[자동상환] {user_id}: {result.replace(chr(10), ' / ')}")
+        except Exception as e:
+            print(f"❌ 자동상환 오류 - 유저 {user_id}: {e}")
 
 
 
