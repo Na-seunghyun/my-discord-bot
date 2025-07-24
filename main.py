@@ -6236,8 +6236,7 @@ async def try_repay(user_id, member):
 
     if wallet >= total_due:
         add_balance(user_id, -total_due)
-        result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}
-💰 상환금: {total_due:,}원"
+        result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}\n💰 상환금: {total_due:,}원"
     elif wallet + bank >= total_due:
         add_balance(user_id, -wallet)
         withdraw_from_bank(user_id, total_due - wallet)
@@ -6254,9 +6253,7 @@ async def try_repay(user_id, member):
         loans[user_id] = data
         save_loans(loans)
         fails = data["consecutive_failures"]
-        result = f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], fails)}
-💣 누적 연체: {fails}회
-💰 상환금: {total_due:,}원"
+        result = f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], fails)}\n💣 누적 연체: {fails}회\n💰 상환금: {total_due:,}원"
         return format_repay_message(member, data["created_at"], total_due, result)
 
     data["consecutive_successes"] += 1
@@ -6273,6 +6270,7 @@ async def try_repay(user_id, member):
     clear_loan(user_id)
     save_loans(loans)
     return format_repay_message(member, data["created_at"], total_due, result, grade_change)
+
 
 
 
