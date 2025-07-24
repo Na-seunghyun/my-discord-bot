@@ -6137,9 +6137,15 @@ def is_rejoin_suspicious(user_id):
 # ✅ 대출 생성
 
 def create_or_update_loan(user_id, amount, credit_grade="C"):
-    now = datetime.now(KST).isoformat()
     loans = load_loans()
-    loans[str(user_id)] = {
+    user_id_str = str(user_id)
+
+    # ❗ 이미 대출 중이면 새로 생성하지 않음
+    if user_id_str in loans:
+        return
+
+    now = datetime.now(KST).isoformat()
+    loans[user_id_str] = {
         "amount": amount,
         "created_at": now,
         "last_checked": now,
@@ -6150,6 +6156,7 @@ def create_or_update_loan(user_id, amount, credit_grade="C"):
         "server_joined_at": now
     }
     save_loans(loans)
+
 
 # ✅ 등급/연체 기반 메시지 생성
 
