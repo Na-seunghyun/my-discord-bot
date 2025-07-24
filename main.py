@@ -6209,7 +6209,10 @@ def format_repay_message(member, created_at, total_due, result, grade_change=Non
     return msg
 
 
+AUTO_REPAY_CHANNEL_ID = 1394331814642057418  # 오덕도박장 ID
+
 async def process_overdue_loans_on_startup(bot):
+    print("🚀 봇 시작 시 대출 상환 점검 시작")
     now = datetime.now(KST)
     loans = load_loans()
 
@@ -6217,12 +6220,20 @@ async def process_overdue_loans_on_startup(bot):
         created = datetime.fromisoformat(loan["created_at"])
         elapsed = (now - created).total_seconds()
 
-        if elapsed >= 1800:  # 30분 이상 경과
+        if elapsed >= 1800:
             member = bot.get_user(int(user_id)) or await bot.fetch_user(int(user_id))
             if member:
                 result = await try_repay(user_id, member, force=True)
                 if result:
                     print(f"🔁 [시작시 상환 처리] {user_id} → {result.replace(chr(10), ' / ')}")
+
+                    # ✅ 디스코드 채널로도 전송
+                    channel = bot.get_channel(AUTO_REPAY_CHANNEL_ID)
+                    if channel:
+                        try:
+                            await channel.send(result)
+                        except Exception as e:
+                            print(f"❌ 채널 전송 실패: {e}")
 
 
 
