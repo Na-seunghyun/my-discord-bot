@@ -4310,24 +4310,30 @@ async def 초기화(interaction: discord.Interaction):
     with open("battle_stats.json", "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False, indent=2)
 
-
     # ✅ 6. 1:1 배틀 전적 초기화
     with open("pair_stats.json", "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False, indent=2)
 
     # ✅ 7. 알바 기록 초기화
     with open(ALBA_RECORD_FILE, "w", encoding="utf-8") as f:
-        json.dump({}, f, indent=2)    
+        json.dump({}, f, indent=2)
 
     # ✅ 8. 은행 예금 기록 초기화
     with open("bank.json", "w", encoding="utf-8") as f:
         json.dump({}, f, indent=2)
 
-    
+    # ✅ 9. 대출 기록 초기화
+    with open("loan.json", "w", encoding="utf-8") as f:
+        json.dump({}, f, indent=2)
+
+    # ✅ 10. 신용등급 및 채무 이력 초기화
+    with open("loan_history.json", "w", encoding="utf-8") as f:
+        json.dump({}, f, indent=2)
+
     await interaction.response.send_message(
         embed=create_embed(
             "✅ 초기화 완료",
-            f"총 {len(balances)}명의 잔액과 오덕로또, 투자 보유/수익 기록, **송금 내역**, **배틀 전적**, **1:1 전적**, **알바 기록**이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
+            f"총 {len(balances)}명의 잔액, 오덕로또, 투자 기록, **송금 내역**, **배틀 전적**, **알바 기록**, **은행 예금**, **대출 및 채무 기록**이 초기화되었습니다.\n※ 투자 종목은 유지됩니다.",
             discord.Color.green()
         ),
         ephemeral=False
