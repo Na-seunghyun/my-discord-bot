@@ -6299,17 +6299,23 @@ async def 대출(interaction: discord.Interaction, 금액: int):
 
     user_id = str(interaction.user.id)
 
-    # 대출 불가 조건
+    # ❌ 대출 제한 여부 확인 (연체 or 등급 F)
     if is_loan_restricted(user_id):
-        return await interaction.response.send_message("🚫 현재 신용등급 또는 연체로 인해 대출이 제한되었습니다.", ephemeral=True)
+        return await interaction.response.send_message(
+            "🚫 현재 신용등급 또는 연체로 인해 대출이 제한되었습니다.",
+            ephemeral=True
+        )
 
-    # 기존 대출 존재 시 차단
+    # ❌ 기존 대출 존재 여부 확인
     if get_user_loan(user_id):
-        return await interaction.response.send_message("❌ 이미 대출이 존재합니다. 상환 후 다시 시도해주세요.", ephemeral=True)
+        return await interaction.response.send_message(
+            "❌ 이미 대출이 존재합니다. 상환 후 다시 시도해주세요.",
+            ephemeral=True
+        )
 
-    # 등급 및 한도 확인
-    grade = load_loans().get(user_id, {}).get("credit_grade", "C")
-    limit = CREDIT_GRADES.get(grade, CREDIT_GRADES["C"])["limit"]
+    # ✅ 파산 기록 여부에 따라 등급 추정 (단순 출력을 위한 용도)
+    grade = "F" if was_bankrupted(user_id) else "C"
+    limit = CREDIT_GRADES[grade]["limit"]
 
     if 금액 > limit or 금액 <= 0:
         return await interaction.response.send_message(
@@ -6319,8 +6325,8 @@ async def 대출(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    # 대출 실행
-    create_or_update_loan(user_id, 금액, credit_grade=grade)
+    # ✅ 대출 실행 (등급 넘기지 않음 → 내부에서 결정)
+    create_or_update_loan(user_id, 금액)
     add_balance(user_id, 금액)
 
     return await interaction.response.send_message(
@@ -6328,6 +6334,7 @@ async def 대출(interaction: discord.Interaction, 금액: int):
         f"📆 30분마다 이자가 복리로 적용됩니다. 늦기 전에 갚으세요!",
         ephemeral=True
     )
+
 
 
 
