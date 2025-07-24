@@ -5989,30 +5989,63 @@ async def 부동산왕(interaction: Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+
+
+
+
 import os
 import json
+import random
 from datetime import datetime, timedelta, timezone
+import discord
+from discord.ext import tasks
 
 # ✅ 설정
 LOAN_FILE = "loans.json"
 KST = timezone(timedelta(hours=9))
+LOAN_INTEREST_RATE = 0.05  # 30분 복리 이자율
 
 # ✅ 신용등급 테이블
 CREDIT_GRADES = {
-    "A": {"name": "초우량 고객", "limit": 300_000},
-    "B": {"name": "우량 고객", "limit": 200_000},
-    "C": {"name": "일반 고객", "limit": 150_000},
-    "D": {"name": "위험 고객", "limit": 100_000},
+    "S": {"name": "VVIP 고객", "limit": 150_000},
+    "A": {"name": "우수 고객", "limit": 100_000},
+    "B": {"name": "상위 고객", "limit": 70_000},
+    "C": {"name": "일반 고객", "limit": 50_000},
+    "D": {"name": "신용 불량", "limit": 30_000},
+    "E": {"name": "위험 고객", "limit": 10_000},
     "F": {"name": "블랙리스트", "limit": 0}
 }
 
-# ✅ 파일 보장
+# ✅ 메시지 템플릿
+SUCCESS_MESSAGES = [
+    "💸 상환 완료! 은행이 감동했습니다.",
+    "💰 채권자가 눈물을 훔쳤습니다... 감동의 상환!",
+    "📈 신용이 올라가는 소리가 들려요~",
+    "🧾 깔끔하게 갚았습니다. 당신은 금융계의 모범!",
+    "🎉 대출금 탈출! 축하드립니다!",
+    "😎 이 정도면 VIP! 은행이 제안서를 보냈습니다."
+]
+
+FAILURE_MESSAGES = [
+    "💀 연체 경고 1회... 채권자가 당신의 이름을 명부에 적었습니다.",
+    "🔪 오늘 밤 창문을 열어두지 마세요. 회수팀이 출발했습니다.",
+    "😨 이자는 돈으로만 갚는 게 아닐 수도 있습니다...",
+    "🩸 발톱을 뽑힐 준비는 되셨나요?",
+    "☠️ 지하금융조직이 당신의 위치를 파악 중입니다.",
+    "📉 신용등급 하락 중... 뼈까지 빚으로 덮이기 일보 직전!",
+    "🔫 채권자가 마지막 경고장을 보냈습니다.",
+    "🧨 이제 목숨값이 이자보다 싸질 수도...",
+    "👀 주변에 수상한 사람이 보이기 시작했다면... 연체 때문일지도요.",
+    "💼 당신의 장기를 감정하는 중입니다. 고급 간이시군요."
+]
+
+# ✅ 파일 보장 및 로드
+
 def ensure_loan_file():
     if not os.path.exists(LOAN_FILE):
         with open(LOAN_FILE, "w", encoding="utf-8") as f:
             json.dump({}, f)
 
-# ✅ 대출 데이터 로드/세이브
 def load_loans():
     ensure_loan_file()
     with open(LOAN_FILE, "r", encoding="utf-8") as f:
@@ -6022,10 +6055,10 @@ def save_loans(data):
     with open(LOAN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-# ✅ 유저 대출 정보
+# ✅ 유틸
+
 def get_user_loan(user_id):
-    loans = load_loans()
-    return loans.get(str(user_id))
+    return load_loans().get(str(user_id))
 
 def get_all_loan_users():
     return list(load_loans().keys())
@@ -6036,215 +6069,214 @@ def clear_loan(user_id):
         del loans[str(user_id)]
         save_loans(loans)
 
-# ✅ 대출 생성 (⏱️ datetime 저장)
-def create_or_update_loan(user_id, amount, interest_rate=0.115):
-    loans = load_loans()
+def is_due_for_repayment(loan_data):
+    last = datetime.fromisoformat(loan_data["last_checked"])
+    return (datetime.now(KST) - last).total_seconds() >= 1800
+
+def calculate_loan_due(principal, created_at_str, rate):
+    created_at = datetime.fromisoformat(created_at_str)
+    now = datetime.now(KST)
+    elapsed = int((now - created_at).total_seconds() // 1800)
+    return int(principal * ((1 + rate) ** elapsed))
+
+def is_loan_restricted(user_id):
+    loan = get_user_loan(user_id)
+    if not loan:
+        return False
+    return loan.get("credit_grade") == "F" or loan.get("consecutive_failures", 0) >= 1
+
+def is_rejoin_suspicious(user_id):
+    loan = get_user_loan(user_id)
+    if not loan:
+        return False
+    joined = datetime.fromisoformat(loan.get("server_joined_at", loan["created_at"]))
+    last_checked = datetime.fromisoformat(loan.get("last_checked", loan["created_at"]))
+    return joined > last_checked
+
+# ✅ 대출 생성
+
+def create_or_update_loan(user_id, amount, credit_grade="C"):
     now = datetime.now(KST).isoformat()
+    loans = load_loans()
     loans[str(user_id)] = {
         "amount": amount,
         "created_at": now,
-        "interest_rate": interest_rate,
-        "unpaid_days": 0,
+        "last_checked": now,
+        "interest_rate": LOAN_INTEREST_RATE,
+        "credit_grade": credit_grade,
         "consecutive_failures": 0,
-        "credit_grade": "C",
-        "last_checked": now
+        "consecutive_successes": 0,
+        "server_joined_at": now
     }
     save_loans(loans)
 
-# ✅ 복리 이자 계산 (30분 단위)
-def calculate_loan_due(principal, created_at_str, rate=0.115):
-    created_at = datetime.fromisoformat(created_at_str)
-    now = datetime.now(KST)
-    elapsed_periods = int((now - created_at).total_seconds() // 1800)  # 30분 단위
-    return int(principal * ((1 + rate) ** elapsed_periods))
+# ✅ 등급/연체 기반 메시지 생성
 
-# ✅ /대출 명령어
-@tree.command(name="대출", description="신용등급에 따라 대출을 받을 수 있습니다.", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(금액="대출받을 금액 (최대 등급별 한도)")
-async def 대출(interaction: discord.Interaction, 금액: int):
-    await interaction.response.defer(thinking=True)
+def get_failure_message(grade, fails):
+    severe = [
+        "💀 사채업자가 움직이기 시작했습니다.",
+        "🔪 목숨을 담보로 한 대출이었나요?", 
+        "📛 당신의 신용은 더 이상 존재하지 않습니다.",
+        "💼 장기 매각 경매가 시작됩니다..."
+    ]
+    medium = [
+        "💢 회수팀이 문 앞까지 도착했습니다.",
+        "🧨 연체가 계속되면 골치 아파집니다...",
+        "🚫 은행이 당신을 조용히 블랙리스트에 올렸습니다."
+    ]
+    mild = [
+        "⚠️ 연체 경고! 빨리 상환해주세요!",
+        "📉 신용등급 하락이 시작됐습니다.",
+        "📬 채권자에게 독촉장이 날아들었습니다."
+    ]
+    if grade in ["E", "F"] or fails >= 3:
+        return random.choice(severe)
+    elif grade in ["C", "D"] or fails == 2:
+        return random.choice(medium)
+    else:
+        return random.choice(mild)
 
-    user_id = str(interaction.user.id)
-    existing_loan = get_user_loan(user_id)
+def get_success_message(grade):
+    elite = [
+        "💎 금융 고수의 품격! 은행도 존경합니다.",
+        "🏅 신용 사회의 귀감! 당신을 본받고 싶어요.",
+        "💰 완벽한 상환! VIP 전용 금리 제안 예정."
+    ]
+    normal = [
+        "📈 신용이 올라가는 소리가 들려요~",
+        "🧾 깔끔하게 갚았습니다. 당신은 금융계의 모범!",
+        "🎉 대출금 탈출! 축하드립니다!"
+    ]
+    casual = [
+        "💸 상환 완료! 은행이 감동했습니다.",
+        "💰 채권자가 눈물을 훔쳤습니다... 감동의 상환!",
+        "😎 이 정도면 VIP! 은행이 제안서를 보냈습니다."
+    ]
+    if grade in ["S", "A"]:
+        return random.choice(elite)
+    elif grade in ["B", "C"]:
+        return random.choice(normal)
+    else:
+        return random.choice(casual)
 
-    # ✅ 기존 대출 여부 확인
-    if existing_loan:
-        return await interaction.followup.send(
-            f"⚠️ 이미 대출 중입니다. 상환 후 다시 대출할 수 있습니다.\n"
-            f"💸 대출잔액: **{existing_loan['amount']:,}원**, 등급: {existing_loan['credit_grade']}",
-            ephemeral=True
-        )
+# ✅ 메시지 포맷
 
-    # ✅ 신용등급 기본값
-    grade = "C"
-    credit_info = CREDIT_GRADES[grade]
-    limit = credit_info["limit"]
-
-    # ✅ 유효성 검사
-    if 금액 <= 0 or 금액 > limit:
-        return await interaction.followup.send(
-            f"❌ 대출 금액이 유효하지 않거나 한도를 초과했습니다.\n"
-            f"📊 현재 등급: **{grade} ({credit_info['name']})**\n"
-            f"💰 최대 대출 가능액: **{limit:,}원**",
-            ephemeral=True
-        )
-
-    # ✅ 대출 기록 + 잔액 추가
-    create_or_update_loan(user_id, 금액)
-    add_balance(user_id, 금액)
-
-    return await interaction.followup.send(
-        f"✅ **{금액:,}원** 대출 완료!\n"
-        f"📊 신용등급: **{grade} ({credit_info['name']})**, 최대한도: **{limit:,}원**\n"
-        f"💡 대출금은 **30분마다 11.5% 복리 이자**가 붙으며, **30분마다 상환 시도**가 이루어집니다.",
-        ephemeral=True
-    )
-
-@tree.command(name="대출정보", description="현재 대출 상태와 이자 정보를 확인합니다.", guild=discord.Object(id=GUILD_ID))
-async def 대출정보(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True)
-
-    user_id = str(interaction.user.id)
-    loan = get_user_loan(user_id)
-
-    if not loan:
-        return await interaction.followup.send("✅ 현재 대출 중인 내역이 없습니다.", ephemeral=True)
-
-    principal = loan["amount"]
-    rate = loan.get("interest_rate", 0.115)
-    grade = loan.get("credit_grade", "C")
-    grade_name = CREDIT_GRADES.get(grade, {}).get("name", "알 수 없음")
-    unpaid_days = loan.get("unpaid_days", 0)
-    failures = loan.get("consecutive_failures", 0)
-    created_at_str = loan["created_at"]
-
-    # 📌 30분 단위 복리 계산
-    total_due = calculate_loan_due(principal, created_at_str, rate)
-
-    created_at_dt = datetime.fromisoformat(created_at_str)
-    hours_elapsed = int((datetime.now(KST) - created_at_dt).total_seconds() // 3600)
-
-    return await interaction.followup.send(
-        f"📊 **대출 정보**\n"
-        f"> 💰 원금: **{principal:,}원**\n"
-        f"> 📈 이자율: **11.5% / 30분**\n"
-        f"> ⏱️ 경과시간: **{hours_elapsed}시간**\n"
-        f"> 💸 상환 필요 금액: **{total_due:,}원**\n"
-        f"> 🧾 신용등급: **{grade} ({grade_name})**\n"
-        f"> ⚠️ 연체일수: **{unpaid_days}일**, ⛔ 실패횟수: {failures}회",
-        ephemeral=True
-    )
-
-
-
-def format_repay_message(member: discord.Member, created_at: str, total_due: int, result: str, grade_change: str = None):
-    created_dt = datetime.fromisoformat(created_at).astimezone(KST)
-    date_str = created_dt.strftime("%-m/%-d %H:%M")
-
+def format_repay_message(member, created_at, total_due, result, grade_change=None):
+    dt = datetime.fromisoformat(created_at).astimezone(KST)
     msg = (
-        f"💸 **상환 시도 결과**\n"
-        f"📍 사용자: {member.mention}\n"
-        f"📆 대출 생성일: {date_str}\n"
+        f"\n💸 **상환 시도 결과**\n"
+        f"📍 사용자: {member.mention if hasattr(member, 'mention') else member.id}\n"
+        f"📆 대출일: {dt:%m/%d %H:%M}\n"
         f"💰 상환금: {total_due:,}원\n"
         f"{result}"
     )
-
     if grade_change:
         msg += f"\n🏅 등급: {grade_change}"
     return msg
 
+# ✅ 채무리스트 명령어
 
+@tree.command(name="채무리스트", description="현재 모든 대출중인 유저들의 정보를 확인합니다.", guild=discord.Object(id=GUILD_ID))
+async def 채무리스트(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+    loans = load_loans()
+    if not loans:
+        return await interaction.followup.send("✅ 현재 대출중인 유저가 없습니다.", ephemeral=True)
 
+    lines = ["📋 **현재 채무자 목록**"]
+    for uid, data in loans.items():
+        user = await bot.fetch_user(int(uid))
+        total_due = calculate_loan_due(data["amount"], data["created_at"], data["interest_rate"])
+        lines.append(
+            f"- {user.name} ({user.id}): 💰 {total_due:,}원 | 등급: {data['credit_grade']} | 연체: {data['consecutive_failures']}회"
+        )
+    await interaction.followup.send("
+".join(lines), ephemeral=True)
 
-async def try_repay(user_id: str, member: discord.Member):
+# ✅ 파산처리 명령어
+
+@tree.command(name="파산처리", description="특정 유저의 모든 자산, 투자, 채무를 초기화합니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(유저="초기화할 대상 유저")
+async def 파산처리(interaction: discord.Interaction, 유저: discord.User):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("🚫 이 명령어는 관리자만 사용할 수 있습니다.", ephemeral=True)
+
+    user_id = str(유저.id)
+
+    # 💥 채무 초기화
+    clear_loan(user_id)
+
+    # 💥 잔고 초기화
+    set_balance(user_id, 0)
+
+    # 💥 은행 초기화
+    reset_bank_deposits(user_id)
+
+    # 💥 투자 초기화
+    reset_investments(user_id)
+
+    await interaction.response.send_message(
+        f"☠️ `{유저.name}`님의 모든 자산이 초기화되었습니다. 이제 완전히 파산 처리되었습니다."
+    )
+
+# ✅ 자동 상환
+
+async def try_repay(user_id, member):
     loan = get_user_loan(user_id)
-    if not loan:
+    if not loan or not is_due_for_repayment(loan):
         return None
-
-    # ⛔ 이자 1회도 발생하지 않았으면 상환 시도 금지
-    created_at_dt = datetime.fromisoformat(loan["created_at"])
-    elapsed_periods = int((datetime.now(KST) - created_at_dt).total_seconds() // 1800)
-    if elapsed_periods < 1:
-        return None  # 아직 첫 이자 발생 전이므로 상환하지 않음
 
     total_due = calculate_loan_due(loan["amount"], loan["created_at"], loan["interest_rate"])
     wallet = get_balance(user_id)
     bank = get_total_bank_balance(user_id)
-
     loans = load_loans()
-    loan_data = loans[str(user_id)]
-
-    result_line = ""
+    data = loans[user_id]
+    result = ""
     grade_change = None
 
     if wallet >= total_due:
         add_balance(user_id, -total_due)
-        result_line = "✅ 결과: 상환 성공! (지갑 사용)"
-
+        result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}
+💰 상환금: {total_due:,}원"
     elif wallet + bank >= total_due:
-        remain = total_due - wallet
         add_balance(user_id, -wallet)
-        withdraw_from_bank(user_id, remain)
-        result_line = "✅ 결과: 상환 성공! (지갑 + 은행 사용)"
-
+        withdraw_from_bank(user_id, total_due - wallet)
+        result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}
+💰 상환금: {total_due:,}원"
     else:
-        loan_data["unpaid_days"] += 1
-        loan_data["consecutive_failures"] += 1
-        loan_data["consecutive_successes"] = 0
-        fails = loan_data["consecutive_failures"]
-
-        if fails >= 3:
-            loan_data["credit_grade"] = "F"
-        elif fails == 2:
-            loan_data["credit_grade"] = "D"
-
-        loan_data["last_checked"] = datetime.now(KST).isoformat()
-        loans[user_id] = loan_data
+        data["consecutive_failures"] += 1
+        data["consecutive_successes"] = 0
+        if data["consecutive_failures"] >= 3:
+            data["credit_grade"] = "F"
+        elif data["consecutive_failures"] == 2:
+            data["credit_grade"] = "E"
+        data["last_checked"] = datetime.now(KST).isoformat()
+        loans[user_id] = data
         save_loans(loans)
+        fails = data["consecutive_failures"]
+        result = f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], fails)}
+💣 누적 연체: {fails}회
+💰 상환금: {total_due:,}원"
+        return format_repay_message(member, data["created_at"], total_due, result)
 
-        result_line = f"❌ 결과: 상환 실패 → 연체 {loan_data['unpaid_days']}일, 실패 {fails}회"
-        return format_repay_message(member, loan["created_at"], total_due, result_line)
+    data["consecutive_successes"] += 1
+    data["consecutive_failures"] = 0
 
-    # ✅ 상환 성공 시
-    loan_data["consecutive_successes"] = loan_data.get("consecutive_successes", 0) + 1
-    loan_data["consecutive_failures"] = 0
-    loan_data["unpaid_days"] = 0
-
-    current_grade = loan_data.get("credit_grade", "C")
-    grade_order = ["F", "D", "C", "B", "A"]
-    idx = grade_order.index(current_grade)
-    success_count = loan_data["consecutive_successes"]
-
-    if success_count >= 2 and idx < len(grade_order) - 1:
-        new_grade = grade_order[idx + 1]
-        loan_data["credit_grade"] = new_grade
-        loan_data["consecutive_successes"] = 0
-        grade_change = f"{current_grade} → {new_grade}"
+    grades = list(CREDIT_GRADES.keys())
+    idx = grades.index(data["credit_grade"])
+    if data["consecutive_successes"] >= 2 and idx > 0:
+        new_grade = grades[idx - 1]
+        grade_change = f"{data['credit_grade']} → {new_grade}"
+        data["credit_grade"] = new_grade
+        data["consecutive_successes"] = 0
 
     clear_loan(user_id)
-    loans[user_id] = loan_data
     save_loans(loans)
-
-    return format_repay_message(member, loan["created_at"], total_due, result_line, grade_change)
-
+    return format_repay_message(member, data["created_at"], total_due, result, grade_change)
 
 
 
 
-@tasks.loop(minutes=30)
-async def auto_loan_repayment():
-    channel = discord.utils.get(bot.get_all_channels(), name="오덕도박장")
-    if not channel:
-        print("❌ '오덕도박장' 텍스트채널을 찾을 수 없습니다.")
-        return
-
-    for guild in bot.guilds:
-        for member in guild.members:
-            user_id = str(member.id)
-            if get_user_loan(user_id):
-                msg = await try_repay(user_id, member)
-                if msg:
-                    await channel.send(msg)
 
 
 
