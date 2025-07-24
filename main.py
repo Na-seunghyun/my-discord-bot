@@ -6090,11 +6090,11 @@ def clear_loan(user_id):
         save_loans(loans)
 
 def is_due_for_repayment(loan_data):
-    ref_time = loan_data.get("last_checked", loan_data["created_at"])
-    last = datetime.fromisoformat(ref_time)
-    elapsed = (datetime.now(KST) - last).total_seconds()
-    print(f"[DEBUG] 상환 대상 확인: 기준시각={ref_time}, 경과={elapsed:.1f}초")
-    return elapsed >= 1800
+    created_at = datetime.fromisoformat(loan_data["created_at"])
+    elapsed = (datetime.now(KST) - created_at).total_seconds()
+    print(f"[DEBUG] 상환 대상 확인: 대출시각={created_at.isoformat()}, 경과={elapsed:.1f}초")
+    return elapsed >= 1800  # 30분
+
 
 
 
