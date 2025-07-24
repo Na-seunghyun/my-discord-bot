@@ -6089,11 +6089,17 @@ def clear_loan(user_id):
         del loans[str(user_id)]
         save_loans(loans)
 
-def is_due_for_repayment(loan_data):
-    created_at = datetime.fromisoformat(loan_data["created_at"])
-    elapsed = (datetime.now(KST) - created_at).total_seconds()
-    print(f"[DEBUG] 상환 대상 확인: 대출시각={created_at.isoformat()}, 경과={elapsed:.1f}초")
-    return elapsed >= 1800  # 30분
+def is_due_for_repayment(loan: dict) -> bool:
+    created_at = datetime.fromisoformat(loan["created_at"])
+    now = datetime.now(KST)
+
+    # 경과 시간 (초)
+    elapsed = (now - created_at).total_seconds()
+
+    # ⏱️ 30분 단위 시점 (±60초 허용)
+    remainder = elapsed % 1800
+    return remainder <= 60 or remainder >= 1740  # ±60초 내 오차만 허용
+
 
 
 
@@ -6389,15 +6395,17 @@ async def try_repay(user_id, member, *, force=False):
     if not loan:
         return None
 
+    # ✅ 자동 상환 루프가 force=True일 때만 체크 없이 강제 진행
     if not force and not is_due_for_repayment(loan):
         return None
 
     rate = loan.get("interest_rate", 0.05)
-    total_due = calculate_loan_due(loan["amount"], loan["created_at"], rate, force_future_30min=True)
+    total_due = calculate_loan_due(
+        loan["amount"], loan["created_at"], rate, force_future_30min=False
+    )
 
     wallet = get_balance(user_id)
     bank = get_total_bank_balance(user_id)
-   
 
     loans = load_loans()
     data = loans[user_id]
@@ -6413,14 +6421,34 @@ async def try_repay(user_id, member, *, force=False):
     if wallet >= total_due:
         add_balance(user_id, -total_due)
         result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}\n💰 상환금: {total_due:,}원"
+        clear_loan(user_id)
+
     elif wallet + bank >= total_due:
         add_balance(user_id, -wallet)
         withdraw_from_bank(user_id, total_due - wallet)
         result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}\n💰 상환금: {total_due:,}원"
+        clear_loan(user_id)
+
     else:
         data["consecutive_failures"] += 1
         data["consecutive_successes"] = 0
 
+        # ☠️ 자동 파산 처리
+        if data["consecutive_failures"] >= 15:
+            clear_loan(user_id)
+            set_balance(user_id, 0)
+            reset_bank_deposits(user_id)
+            reset_investments(user_id)
+
+            loans.pop(user_id, None)
+            save_loans(loans)
+
+            return (
+                f"☠️ **{member.display_name}**님은 **연체 15회 초과**로 자동 파산 처리되었습니다.\n"
+                f"💥 모든 자산과 채무가 초기화되었습니다."
+            )
+
+        # 신용등급 하락
         if data["consecutive_failures"] >= 3:
             data["credit_grade"] = "F"
         elif data["consecutive_failures"] == 2:
@@ -6438,7 +6466,7 @@ async def try_repay(user_id, member, *, force=False):
         )
         return format_repay_message(member, data["created_at"], total_due, result)
 
-    # 성공 처리
+    # 등급 회복 로직
     data["consecutive_successes"] += 1
     data["consecutive_failures"] = 0
     grades = list(CREDIT_GRADES.keys())
@@ -6449,9 +6477,12 @@ async def try_repay(user_id, member, *, force=False):
         data["credit_grade"] = new_grade
         data["consecutive_successes"] = 0
 
-    clear_loan(user_id)
-   
+    loans[user_id] = data
+    save_loans(loans)
+
     return format_repay_message(member, data["created_at"], total_due, result, grade_change)
+
+
 
 
 
@@ -6469,10 +6500,10 @@ async def auto_repay_check():
         try:
             member = get(bot.get_all_members(), id=int(user_id))
             if member:
-                result = await try_repay(user_id, member)  # ✅ force 제거됨
+                result = await try_repay(user_id, member)  # ✅ 내부에서 is_due_for_repayment 검사
                 if result:
                     print(f"[상환 처리] {user_id} → {result.replace(chr(10), ' / ')}")
-                    
+
                     channel = bot.get_channel(AUTO_REPAY_CHANNEL_ID)
                     if channel:
                         await channel.send(result)
