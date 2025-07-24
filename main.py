@@ -6315,16 +6315,25 @@ async def 대출정보(interaction: discord.Interaction):
 
     interest_rate = loan.get("interest_rate", 0.05)
     original = loan["amount"]
-    due = calculate_loan_due(original, loan["created_at"], interest_rate, force_future_30min=True)
+    grade = loan.get("credit_grade", "C")
+    failures = loan.get("consecutive_failures", 0)
 
+    # ✅ 현재 시점 기준 상환금 (지금 갚으면)
+    due_now = calculate_loan_due(original, loan["created_at"], interest_rate, force_future_30min=False)
+
+    # ✅ 다음 상환 타이밍 기준 상환금 (예고용)
+    due_next = calculate_loan_due(original, loan["created_at"], interest_rate, force_future_30min=True)
 
     await interaction.response.send_message(
         f"📋 **대출 정보**\n"
         f"📆 대출일: {created_at.strftime('%Y-%m-%d %H:%M')}\n"
         f"💵 대출원금: {original:,}원\n"
-        f"📈 현재 이율: {interest_rate * 100:.2f}% (30분 복리)\n"
+        f"📈 이자율: {interest_rate * 100:.2f}% (30분 복리)\n"
+        f"📉 신용등급: {grade}\n"
+        f"💣 누적 연체: {failures}회\n"
         f"⏳ 경과 시간: {elapsed_minutes:.1f}분\n"
-        f"💰 상환금 총액: {int(due):,}원",
+        f"💰 현재 상환금: {due_now:,}원\n"
+        f"🕒 다음 상환 예정금: {due_next:,}원",
         ephemeral=True
     )
 
