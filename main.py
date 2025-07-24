@@ -6441,19 +6441,28 @@ async def try_repay(user_id, member, *, force=False):
 
 
 
-from discord.ext import tasks
+from discord.utils import get
+
+# 반드시 고정된 채널 ID 사용 (채널 이름으로 찾는 건 불안정)
+AUTO_REPAY_CHANNEL_ID = 1394331814642057418  # 오덕도박장 채널 ID로 바꿔주세요
 
 @tasks.loop(minutes=1)
 async def auto_repay_check():
     print("🕓 [대출 상환 루프 시작됨]")
     loans = load_loans()
+
     for user_id in loans.keys():
         try:
-            member = discord.utils.get(bot.get_all_members(), id=int(user_id))
+            member = get(bot.get_all_members(), id=int(user_id))
             if member:
-                result = await try_repay(user_id, member, force=True)  # ✅ 이렇게!
+                result = await try_repay(user_id, member, force=True)
                 if result:
                     print(f"[상환 처리] {user_id} → {result.replace(chr(10), ' / ')}")
+                    
+                    # ✅ 실제 Discord 채널로 전송
+                    channel = bot.get_channel(AUTO_REPAY_CHANNEL_ID)
+                    if channel:
+                        await channel.send(result)
         except Exception as e:
             print(f"❌ 자동상환 오류 - 유저 {user_id}: {e}")
 
