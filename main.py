@@ -6234,12 +6234,19 @@ async def 채무리스트(interaction: discord.Interaction):
 
     lines = ["📋 **현재 채무자 목록**"]
     for uid, data in loans.items():
-        user = await bot.fetch_user(int(uid))
+        try:
+            member = interaction.guild.get_member(int(uid)) or await interaction.guild.fetch_member(int(uid))
+            name_display = member.display_name
+        except discord.NotFound:
+            name_display = f"(알 수 없음 - {uid})"
+
         total_due = calculate_loan_due(data["amount"], data["created_at"], data["interest_rate"])
         lines.append(
-            f"- {user.name} ({user.id}): 💰 {total_due:,}원 | 등급: {data['credit_grade']} | 연체: {data['consecutive_failures']}회"
+            f"- {name_display} ({uid}): 💰 {total_due:,}원 | 등급: {data['credit_grade']} | 연체: {data['consecutive_failures']}회"
         )
+
     await interaction.followup.send("\n".join(lines), ephemeral=True)
+
 
 
 # ✅ 파산처리 명령어
