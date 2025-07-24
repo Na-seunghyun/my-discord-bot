@@ -6485,15 +6485,25 @@ async def try_repay(user_id, member, *, force=False):
             set_balance(user_id, 0)
             reset_bank_deposits(user_id)
             reset_investments(user_id)
-            
-            add_to_bankrupt_log(user_id)  # ✅ 파산 기록 추가!
 
-            loans.pop(user_id, None)
+            add_to_bankrupt_log(user_id)  # ✅ 파산 기록 추가
+
+            now = datetime.now(KST).isoformat()
+            loans[user_id] = {
+                "amount": 0,
+                "created_at": now,
+                "last_checked": now,
+                "interest_rate": LOAN_INTEREST_RATE,
+                "credit_grade": "F",
+                "consecutive_failures": 0,
+                "consecutive_successes": 0,
+                "server_joined_at": now
+            }
             save_loans(loans)
 
             return (
                 f"☠️ **{member.display_name}**님은 **연체 15회 초과**로 자동 파산 처리되었습니다.\n"
-                f"💥 모든 자산과 채무가 초기화되었습니다."
+                f"💥 모든 자산과 채무가 초기화되며, 신용등급은 `F`로 기록됩니다."
             )
 
         # 신용등급 하락
@@ -6514,21 +6524,10 @@ async def try_repay(user_id, member, *, force=False):
         )
         return format_repay_message(member, data["created_at"], total_due, result)
 
-    # 등급 회복 로직
+    # ✅ 성공 시 등급 회복 로직
     data["consecutive_successes"] += 1
     data["consecutive_failures"] = 0
-    grades = list(CREDIT_GRADES.keys())
-    idx = grades.index(data["credit_grade"])
-    if data["consecutive_successes"] >= 2 and idx > 0:
-        new_grade = grades[idx - 1]
-        grade_change = f"{data['credit_grade']} → {new_grade}"
-        data["credit_grade"] = new_grade
-        data["consecutive_successes"] = 0
 
-    loans[user_id] = data
-    save_loans(loans)
-
-    return format_repay_message(member, data["created_at"], total_due, result, grade_change)
 
 
 
