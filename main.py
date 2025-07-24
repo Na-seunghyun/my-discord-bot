@@ -5547,10 +5547,15 @@ async def 박스알바(interaction: discord.Interaction):
         )
 
     view = BoxJobView()
-    msg = await interaction.response.send_message(
+
+    # ✅ 메시지 먼저 응답
+    await interaction.response.send_message(
         "📦 **박스를 치워주세요!** (10초 이내, 실수하면 실패!)", view=view, ephemeral=True
     )
-    view.message = await msg.original_response()
+
+    # ✅ 이후 메시지 객체 저장
+    view.message = await interaction.original_response()
+
 
 
 
