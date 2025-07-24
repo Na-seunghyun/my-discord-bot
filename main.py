@@ -6203,6 +6203,25 @@ def format_repay_message(member, created_at, total_due, result, grade_change=Non
         msg += f"\n🏅 등급: {grade_change}"
     return msg
 
+
+async def process_overdue_loans_on_startup(bot):
+    now = datetime.now(KST)
+    loans = load_loans()
+
+    for user_id, loan in loans.items():
+        created = datetime.fromisoformat(loan["created_at"])
+        elapsed = (now - created).total_seconds()
+
+        if elapsed >= 1800:  # 30분 이상 경과
+            member = bot.get_user(int(user_id)) or await bot.fetch_user(int(user_id))
+            if member:
+                await try_repay(user_id, member)
+
+
+
+
+
+
 GAMBLING_CHANNEL_ID = 1394331814642057418
 
 
@@ -6759,6 +6778,8 @@ async def 감가테스트(interaction: discord.Interaction):
 async def on_ready():
     global oduk_pool_cache
     global invites_cache
+
+    await process_overdue_loans_on_startup(bot)
     
     print(f"🤖 봇 로그인됨: {bot.user}")
 
