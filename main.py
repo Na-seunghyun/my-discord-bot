@@ -6501,7 +6501,7 @@ async def try_repay(user_id, member, *, force=False):
         data["consecutive_successes"] = 0
 
         # ☠️ 자동 파산 처리
-        if data["consecutive_failures"] >= 15:
+        if data["consecutive_failures"] >= 5:
             clear_loan(user_id)
             set_balance(user_id, 0)
             reset_bank_deposits(user_id)
