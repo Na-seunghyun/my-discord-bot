@@ -6190,8 +6190,8 @@ async def 채무리스트(interaction: discord.Interaction):
         lines.append(
             f"- {user.name} ({user.id}): 💰 {total_due:,}원 | 등급: {data['credit_grade']} | 연체: {data['consecutive_failures']}회"
         )
-    await interaction.followup.send("
-".join(lines), ephemeral=True)
+    await interaction.followup.send("\n".join(lines), ephemeral=True)
+
 
 # ✅ 파산처리 명령어
 
