@@ -6188,6 +6188,7 @@ def format_repay_message(member, created_at, total_due, result, grade_change=Non
         msg += f"\n🏅 등급: {grade_change}"
     return msg
 
+GAMBLING_CHANNEL_ID = 1394331814642057418
 
 
 @tree.command(name="대출", description="신용등급에 따라 돈을 대출받습니다.", guild=discord.Object(id=GUILD_ID))
