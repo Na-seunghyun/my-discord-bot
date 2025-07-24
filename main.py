@@ -5304,7 +5304,7 @@ async def 타자알바(interaction: discord.Interaction):
         elapsed = (end_time - start_time).total_seconds()
         base_reward = 1200
         penalty = int(elapsed * 60)
-        reward = max(1000, base_reward - penalty)
+        reward = max(120, base_reward - penalty)
 
         # ✅ 1% 잭팟
         if random.random() < 0.01:
