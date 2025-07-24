@@ -6469,16 +6469,16 @@ async def auto_repay_check():
         try:
             member = get(bot.get_all_members(), id=int(user_id))
             if member:
-                result = await try_repay(user_id, member, force=True)
+                result = await try_repay(user_id, member)  # ✅ force 제거됨
                 if result:
                     print(f"[상환 처리] {user_id} → {result.replace(chr(10), ' / ')}")
                     
-                    # ✅ 실제 Discord 채널로 전송
                     channel = bot.get_channel(AUTO_REPAY_CHANNEL_ID)
                     if channel:
                         await channel.send(result)
         except Exception as e:
             print(f"❌ 자동상환 오류 - 유저 {user_id}: {e}")
+
 
 
 
