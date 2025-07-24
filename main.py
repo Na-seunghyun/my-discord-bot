@@ -6093,12 +6093,13 @@ def is_due_for_repayment(loan: dict) -> bool:
     created_at = datetime.fromisoformat(loan["created_at"])
     now = datetime.now(KST)
 
-    # 경과 시간 (초)
     elapsed = (now - created_at).total_seconds()
+    if elapsed < 1800:
+        return False  # ❌ 30분 미만이면 무조건 상환 불가
 
-    # ⏱️ 30분 단위 시점 (±60초 허용)
+    # ✅ 30분 이상인 경우에만 ±60초 범위 허용
     remainder = elapsed % 1800
-    return remainder <= 60 or remainder >= 1740  # ±60초 내 오차만 허용
+    return remainder <= 60 or remainder >= 1740
 
 
 
