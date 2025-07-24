@@ -6433,6 +6433,14 @@ async def try_repay(user_id, member):
     return format_repay_message(member, data["created_at"], total_due, result, grade_change)
 
 
+@tasks.loop(minutes=1)
+async def auto_repay_check():
+    loans = load_loans()
+    for user_id in loans.keys():
+        user_id_str = str(user_id)
+        member = discord.utils.get(bot.get_all_members(), id=int(user_id_str))
+        if member:
+            await try_repay(user_id_str, member)
 
 
 
@@ -6788,6 +6796,7 @@ async def on_ready():
     global invites_cache
 
     await process_overdue_loans_on_startup(bot)
+    auto_repay_check.start()
     
     print(f"🤖 봇 로그인됨: {bot.user}")
 
