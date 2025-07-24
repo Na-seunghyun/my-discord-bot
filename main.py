@@ -6451,7 +6451,7 @@ async def auto_repay_check():
         try:
             member = discord.utils.get(bot.get_all_members(), id=int(user_id))
             if member:
-                result = await try_repay(user_id, member)
+                result = await try_repay(user_id, member, force=True)  # ✅ 이렇게!
                 if result:
                     print(f"[상환 처리] {user_id} → {result.replace(chr(10), ' / ')}")
         except Exception as e:
