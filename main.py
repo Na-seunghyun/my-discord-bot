@@ -6373,8 +6373,16 @@ async def try_repay(user_id, member):
     total_due = calculate_loan_due(loan["amount"], loan["created_at"], loan["interest_rate"])
     wallet = get_balance(user_id)
     bank = get_total_bank_balance(user_id)
+
     loans = load_loans()
     data = loans[user_id]
+
+    # ✅ 누락 필드 안전하게 초기화
+    data.setdefault("consecutive_successes", 0)
+    data.setdefault("consecutive_failures", 0)
+    data.setdefault("credit_grade", "C")
+    data.setdefault("unpaid_days", 0)
+
     result = ""
     grade_change = None
 
@@ -6386,11 +6394,11 @@ async def try_repay(user_id, member):
         withdraw_from_bank(user_id, total_due - wallet)
         result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}\n💰 상환금: {total_due:,}원"
     else:
-        # 상환 실패 처리
+        # ❌ 상환 실패 처리
         data["consecutive_failures"] += 1
         data["consecutive_successes"] = 0
 
-        # 등급 하락 조건
+        # 📉 등급 하락 조건
         if data["consecutive_failures"] >= 3:
             data["credit_grade"] = "F"
         elif data["consecutive_failures"] == 2:
@@ -6408,7 +6416,7 @@ async def try_repay(user_id, member):
         )
         return format_repay_message(member, data["created_at"], total_due, result)
 
-    # 상환 성공 시 등급 조정
+    # ✅ 상환 성공 시 등급 회복 조건 처리
     data["consecutive_successes"] += 1
     data["consecutive_failures"] = 0
 
