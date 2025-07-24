@@ -6174,6 +6174,55 @@ def format_repay_message(member, created_at, total_due, result, grade_change=Non
         msg += f"\n🏅 등급: {grade_change}"
     return msg
 
+
+
+@tree.command(name="대출", description="신용등급에 따라 돈을 대출받습니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(금액="대출할 금액 (최대 금액은 등급에 따라 다름)")
+async def 대출(interaction: discord.Interaction, 금액: int):
+    # ✅ 오덕도박장 외 채널 차단
+    if interaction.channel.id != GAMBLING_CHANNEL_ID:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
+    user_id = str(interaction.user.id)
+
+    # 대출 불가 조건
+    if is_loan_restricted(user_id):
+        return await interaction.response.send_message("🚫 현재 신용등급 또는 연체로 인해 대출이 제한되었습니다.", ephemeral=True)
+
+    # 기존 대출 존재 시 차단
+    if get_user_loan(user_id):
+        return await interaction.response.send_message("❌ 이미 대출이 존재합니다. 상환 후 다시 시도해주세요.", ephemeral=True)
+
+    # 등급 및 한도 확인
+    grade = load_loans().get(user_id, {}).get("credit_grade", "C")
+    limit = CREDIT_GRADES.get(grade, CREDIT_GRADES["C"])["limit"]
+
+    if 금액 > limit or 금액 <= 0:
+        return await interaction.response.send_message(
+            f"❌ 대출 금액이 잘못되었거나 현재 등급에서 허용되지 않습니다.\n"
+            f"📊 등급: {grade} ({CREDIT_GRADES[grade]['name']})\n"
+            f"💰 최대 대출 가능액: {limit:,}원",
+            ephemeral=True
+        )
+
+    # 대출 실행
+    create_or_update_loan(user_id, 금액, credit_grade=grade)
+    add_balance(user_id, 금액)
+
+    return await interaction.response.send_message(
+        f"🏦 대출 완료!\n💰 금액: {금액:,}원\n📊 등급: {grade} ({CREDIT_GRADES[grade]['name']})\n"
+        f"📆 30분마다 이자가 복리로 적용됩니다. 늦기 전에 갚으세요!",
+        ephemeral=True
+    )
+
+
+
+
+
+
 # ✅ 채무리스트 명령어
 
 @tree.command(name="채무리스트", description="현재 모든 대출중인 유저들의 정보를 확인합니다.", guild=discord.Object(id=GUILD_ID))
@@ -6198,11 +6247,12 @@ async def 채무리스트(interaction: discord.Interaction):
 @tree.command(name="파산처리", description="특정 유저의 모든 자산, 투자, 채무를 초기화합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(유저="초기화할 대상 유저")
 async def 파산처리(interaction: discord.Interaction, 유저: discord.User):
-    if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("🚫 이 명령어는 관리자만 사용할 수 있습니다.", ephemeral=True)
+    perms = interaction.user.guild_permissions
+    if not (perms.administrator or perms.manage_channels):
+        return await interaction.response.send_message("🚫 이 명령어는 서버 관리자 또는 채널 관리자만 사용할 수 있습니다.", ephemeral=True)
 
     user_id = str(유저.id)
-
+    
     # 💥 채무 초기화
     clear_loan(user_id)
 
@@ -6637,7 +6687,6 @@ async def on_ready():
     
     print(f"🤖 봇 로그인됨: {bot.user}")
 
-    auto_loan_repayment.start()
 
     if not auto_apply_maintenance.is_running():
         auto_apply_maintenance.start()
