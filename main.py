@@ -6235,6 +6235,43 @@ async def 대출(interaction: discord.Interaction, 금액: int):
 
 
 
+@tree.command(name="대출정보", description="내 현재 대출 현황을 확인합니다.", guild=discord.Object(id=GUILD_ID))
+async def 대출정보(interaction: discord.Interaction):
+    # ✅ 오덕도박장 채널에서만 사용 가능
+    if interaction.channel.id != GAMBLING_CHANNEL_ID:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.",
+            ephemeral=True
+        )
+
+    user_id = str(interaction.user.id)
+    loan = get_user_loan(user_id)
+
+    if not loan:
+        return await interaction.response.send_message("✅ 현재 대출 중인 내역이 없습니다.", ephemeral=True)
+
+    created_at = datetime.fromisoformat(loan["created_at"]).astimezone(KST)
+    now = datetime.now(KST)
+    elapsed_minutes = (now - created_at).total_seconds() / 60
+
+    interest_rate = loan.get("interest_rate", 0.115)
+    original = loan["amount"]
+    due = calculate_loan_due(original, loan["created_at"], interest_rate)
+
+    await interaction.response.send_message(
+        f"📋 **대출 정보**\n"
+        f"📆 대출일: {created_at.strftime('%Y-%m-%d %H:%M')}\n"
+        f"💵 대출원금: {original:,}원\n"
+        f"📈 현재 이율: {interest_rate * 100:.2f}% (30분 복리)\n"
+        f"⏳ 경과 시간: {elapsed_minutes:.1f}분\n"
+        f"💰 상환금 총액: {int(due):,}원",
+        ephemeral=True
+    )
+
+
+
+
+
 
 
 
