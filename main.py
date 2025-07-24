@@ -6307,7 +6307,7 @@ async def 대출정보(interaction: discord.Interaction):
     now = datetime.now(KST)
     elapsed_minutes = (now - created_at).total_seconds() / 60
 
-    interest_rate = loan.get("interest_rate", 0.115)
+    interest_rate = loan.get("interest_rate", 0.05)
     original = loan["amount"]
     due = calculate_loan_due(original, loan["created_at"], interest_rate, force_future_30min=True)
 
@@ -6392,9 +6392,12 @@ async def try_repay(user_id, member, *, force=False):
     if not force and not is_due_for_repayment(loan):
         return None
 
-    total_due = calculate_loan_due(loan["amount"], loan["created_at"], loan["interest_rate"])
+    rate = loan.get("interest_rate", 0.05)
+    total_due = calculate_loan_due(loan["amount"], loan["created_at"], rate, force_future_30min=True)
+
     wallet = get_balance(user_id)
     bank = get_total_bank_balance(user_id)
+   
 
     loans = load_loans()
     data = loans[user_id]
