@@ -5576,9 +5576,10 @@ async def apply_bank_depreciation(bot):
 @tasks.loop(hours=12)
 async def auto_apply_maintenance():
     print("🕓 자산 유지비 정산 시작")
-    apply_maintenance_costs(bot)  # 이미 수정했을 것
-    await apply_bank_depreciation(bot)  # ✅ async로 실행해야 함
+    await apply_maintenance_costs(bot)           # ✅ await 추가!
+    await apply_bank_depreciation(bot)           # 이미 정상 처리
     print("✅ 자산 유지비 정산 완료")
+
 
 
 
