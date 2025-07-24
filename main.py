@@ -6303,10 +6303,7 @@ def create_or_update_loan(user_id, amount, credit_grade="C"):
     loans = load_loans()
     user_id_str = str(user_id)
 
-    if user_id_str in loans:
-        return  # 이미 대출 중이면 무시
-
-    # ✅ 파산 기록이 있다면 F 등급으로 시작
+    # ✅ 기존 대출이 존재하더라도 덮어쓰기 허용
     credit_grade = "F" if was_bankrupted(user_id) else credit_grade
 
     now = datetime.now(KST).isoformat()
@@ -6321,6 +6318,7 @@ def create_or_update_loan(user_id, amount, credit_grade="C"):
         "server_joined_at": now
     }
     save_loans(loans)
+
 
 
 
@@ -6479,7 +6477,6 @@ async def 대출(interaction: discord.Interaction, 금액: int):
 
 @tree.command(name="대출정보", description="내 현재 대출 현황을 확인합니다.", guild=discord.Object(id=GUILD_ID))
 async def 대출정보(interaction: discord.Interaction):
-    # ✅ 오덕도박장 채널에서만 사용 가능
     if interaction.channel.id != GAMBLING_CHANNEL_ID:
         return await interaction.response.send_message(
             "❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.",
@@ -6489,7 +6486,8 @@ async def 대출정보(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     loan = get_user_loan(user_id)
 
-    if not loan:
+    # ✅ amount가 0이면 파산 상태 → 대출 없음으로 간주
+    if not loan or loan.get("amount", 0) == 0:
         return await interaction.response.send_message("✅ 현재 대출 중인 내역이 없습니다.", ephemeral=True)
 
     created_at = datetime.fromisoformat(loan["created_at"]).astimezone(KST)
