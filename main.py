@@ -300,9 +300,9 @@ else:
 
 # ✅ 자산 구간별 유지비율 설정 (필요시 수정)
 MAINTENANCE_TIERS = [
-    (1000_0000, 0.15),   #  천만 원 이상 → 10%
-    (3000_0000, 0.50),   # 삼천 만 원 이상 → 25%
-    (5000_0000, 0.70),   # 오천 만 원 이상 → 50%
+    (500_0000, 0.15),   #  오백만 원 이상 → 10%
+    (1000_0000, 0.50),   # 천 만 원 이상 → 25%
+    (3000_0000, 0.70),   # 삼천 만 원 이상 → 50%
 ]
 
 # 예시로 채널 ID 설정 (실제 사용 중인 ID로 교체하세요)
@@ -352,14 +352,14 @@ async def apply_maintenance_costs(bot):
                 member = await fetch_user_safe(uid)
                 name = member.display_name if member else f"ID:{uid}"
                 msg_lines.append(f"• {name} → **{before:,}원 → {after:,}원**")
-            msg_lines.append("\n📉 자산이 천 만 원 이상일 경우 매일 감가가 적용됩니다.")
+            msg_lines.append("\n📉 자산이 오백 만 원 이상일 경우 6시간 마다 감가가 적용됩니다.")
             await channel.send("\n".join(msg_lines))
 
 
 
 
 
-@tasks.loop(hours=12)
+@tasks.loop(hours=6)
 async def auto_apply_maintenance():
     print("🕓 자산 유지비 정산 시작")
     await apply_maintenance_costs(bot)     # ✅ await + bot 전달
@@ -374,8 +374,8 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
     global oduk_pool_cache
 
     current_amount = oduk_pool_cache.get("amount", 0)
-    minimum_amount = 5_000_000  # 5백 만 원 보장
-    decay_rate = 0.20  # 20%
+    minimum_amount = 1_000_000  # 5백 만 원 보장
+    decay_rate = 0.50  # 50%
 
     if current_amount > minimum_amount:
         new_amount = int(current_amount * (1 - decay_rate))
@@ -392,14 +392,14 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
             await channel.send(
                 f"📉 **오덕로또 상금 감가 적용**\n"
                 f"💰 기존 상금: **{current_amount:,}원** → 현재 상금: **{new_amount:,}원**\n"
-                f"🧾 12시간 자동 감가 정책에 따라 **20% 차감**되었으며, 최소 **오 백 만 원 **은 보장됩니다.\n"
+                f"🧾 6시간 자동 감가 정책에 따라 **50% 차감**되었으며, 최소 **백 만 원 **은 보장됩니다.\n"
                 f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
             )
     else:
         print("✅ 오덕로또 상금이 2억 이하라 감가되지 않음")
 
 
-@tasks.loop(hours=12)
+@tasks.loop(hours=6)
 async def auto_decay_oduk_pool():
     print("🕓 오덕로또 감가 시작")
     await decay_oduk_pool(bot)             # ✅ await + 메시지 포함 함수
@@ -5714,9 +5714,9 @@ async def apply_bank_depreciation(bot):
     for user_id, user_data in bank.items():
         total_balance = sum(d["amount"] - d.get("used", 0) for d in user_data.get("deposits", []))
 
-        if total_balance > 50_000_000:
-            # ✅ 초과분의 절반만 감가, 최소 5천 만 원 보장
-            excess = total_balance - 50_000_000
+        if total_balance > 5_000_000:
+            # ✅ 초과분의 절반만 감가, 최소 5백 만 원 보장
+            excess = total_balance - 5_000_000
             to_cut = int(excess * 0.2)  # ✅ 20% 감가
             target_after_cut = total_balance - to_cut
 
@@ -5759,7 +5759,7 @@ async def apply_bank_depreciation(bot):
             lines.append(f"\n📉 총 차감액: **{total_cut:,}원**")
             await channel.send("\n".join(lines))
 
-@tasks.loop(hours=12)
+@tasks.loop(hours=6)
 async def auto_apply_maintenance():
     print("🕓 자산 유지비 정산 시작")
     await apply_maintenance_costs(bot)           # ✅ await 추가!
