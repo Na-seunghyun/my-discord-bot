@@ -6618,15 +6618,14 @@ async def process_overdue_loans_on_startup(bot):
 
 
 
-def get_grade_recovery_message(grade: str, success: int):
+def get_grade_recovery_message(data):
+    grade = data.get("credit_grade", "F")
+    success = data.get("consecutive_successes", 0)
+
     grade_order = ["F", "E", "D", "C", "B", "A", "S"]
     recovery_required = {
-        "F": 2,
-        "E": 2,
-        "D": 2,
-        "C": 3,
-        "B": 4,
-        "A": 5,
+        "F": 2, "E": 2, "D": 2,
+        "C": 3, "B": 4, "A": 5,
     }
 
     if grade not in grade_order:
@@ -6638,11 +6637,10 @@ def get_grade_recovery_message(grade: str, success: int):
         if idx + 1 < len(grade_order):
             new_grade = grade_order[idx + 1]
             return f"🏅 등급: {grade} → {new_grade} 승급!", new_grade, 0
-    else:
-        remain = required - success
-        return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {grade})", grade, success
 
-    return "", grade, success
+    remain = required - success
+    return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {grade})", grade, success
+
 
 
 
@@ -6902,9 +6900,7 @@ async def try_repay(user_id, member, *, force=False):
         data["consecutive_failures"] = 0
 
         # ✅ 등급 회복 메시지 및 새 등급 계산
-        current_grade = data["credit_grade"]
-        current_success = data["consecutive_successes"]
-        grade_message, new_grade, new_success = get_grade_recovery_message(current_grade, current_success)
+        grade_message, updated_credit_grade, updated_success = get_grade_recovery_message(data)
 
         # ✅ created_at 백업
         created_at_backup = loan["created_at"]
