@@ -6622,7 +6622,6 @@ def get_grade_recovery_message(data):
     grade = data.get("credit_grade", "F")
     success = data.get("consecutive_successes", 0)
 
-    # 복구 기준표 (예시)
     grade_order = ["F", "E", "D", "C", "B", "A", "S"]
     recovery_required = {
         "F": 2,
@@ -6634,7 +6633,7 @@ def get_grade_recovery_message(data):
     }
 
     if grade not in grade_order:
-        return ""
+        return "", grade, success
 
     required = recovery_required.get(grade, 3)
     if success >= required:
@@ -6643,12 +6642,14 @@ def get_grade_recovery_message(data):
             new_grade = grade_order[idx + 1]
             data["credit_grade"] = new_grade
             data["consecutive_successes"] = 0
-            return f"🏅 등급: {grade} → {new_grade} 승급!"
+            return f"🏅 등급: {grade} → {new_grade} 승급!", new_grade, 0
     else:
         remain = required - success
-        return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {grade})"
+        return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {grade})", grade, success
 
-    return ""
+    return "", grade, success
+
+
 
 
 
@@ -6906,14 +6907,14 @@ async def try_repay(user_id, member, *, force=False):
         data["consecutive_failures"] = 0
 
         # ✅ 등급 회복 로직 (data 내부 등급이 변경됨)
-        grade_change = get_grade_recovery_message(data)
+        grade_message, updated_grade, updated_success = get_grade_recovery_message(data)
 
         # ✅ created_at 백업
         created_at_backup = loan["created_at"]
 
         # ✅ 최신 등급 및 성공 횟수 반영
-        updated_credit_grade = data["credit_grade"]
-        consecutive_successes = data["consecutive_successes"]
+        updated_credit_grade = updated_grade
+        consecutive_successes = updated_success
 
         # ✅ 대출 초기화
         clear_loan(user_id)
@@ -6930,9 +6931,9 @@ async def try_repay(user_id, member, *, force=False):
         }
         save_loans(loans)
 
-
         # ✅ 정상 메시지 출력
-        return format_repay_message(member, created_at_backup, total_due, "✅ 결과: 상환 성공!", grade_change=grade_change)
+        return format_repay_message(member, created_at_backup, total_due, "✅ 결과: 상환 성공!", grade_change=grade_message)
+
 
 
 
