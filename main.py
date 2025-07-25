@@ -6921,21 +6921,23 @@ async def 상환(interaction: discord.Interaction):
     member = interaction.user
 
     loan = get_user_loan(user_id)
-    if not loan:
+    if not loan or loan.get("amount", 0) <= 0:
         return await interaction.response.send_message(
             "✅ 현재 상환할 대출금이 없습니다.",
             ephemeral=True
         )
 
-    # ⏳ 수동 상환 강제 처리
+    # 수동 상환은 언제든 시도 가능
     result = await try_repay(user_id, member, force=True)
+
     if result:
         await interaction.response.send_message(result)
     else:
         await interaction.response.send_message(
-            "❌ 상환 조건이 아직 충족되지 않아 실패했습니다.\n(예: 잔액 부족, 대출금 0원 등)",
+            "❌ 상환 실패! 잔액이 부족하거나 처리 중 오류가 발생했습니다.",
             ephemeral=True
         )
+
 
 
 
