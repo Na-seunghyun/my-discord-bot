@@ -6855,7 +6855,6 @@ async def 채무리스트(interaction: discord.Interaction):
 
 
 
-# ✅ 파산처리 명령어
 @tree.command(name="파산처리", description="특정 유저의 모든 자산, 투자, 채무를 초기화합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(유저="초기화할 대상 유저")
 async def 파산처리(interaction: discord.Interaction, 유저: discord.User):
@@ -6864,9 +6863,19 @@ async def 파산처리(interaction: discord.Interaction, 유저: discord.User):
         return await interaction.response.send_message("🚫 이 명령어는 서버 관리자 또는 채널 관리자만 사용할 수 있습니다.", ephemeral=True)
 
     user_id = str(유저.id)
-    
-    # 💥 채무 초기화
-    clear_loan(user_id)
+
+    # 💥 대출 완전 초기화 (clear_loan 대신 직접 지정)
+    loans = load_loans()
+    loans[user_id] = {
+        "amount": 0,
+        "credit_grade": "F",              # ✅ 강제 F등급
+        "consecutive_successes": 0,       # ✅ 성공횟수 초기화
+        "consecutive_failures": 0,
+        "created_at": "",
+        "last_checked": "",
+        "unpaid_days": 0,
+    }
+    save_loans(loans)
 
     # 💥 잔고 초기화
     set_balance(user_id, 0)
@@ -6878,11 +6887,12 @@ async def 파산처리(interaction: discord.Interaction, 유저: discord.User):
     reset_investments(user_id)
 
     # 💥 파산 기록 추가
-    add_to_bankrupt_log(user_id)  # ✅ 반드시 추가!
+    add_to_bankrupt_log(user_id)
 
     await interaction.response.send_message(
         f"☠️ `{유저.name}`님의 모든 자산이 초기화되었습니다. 이제 완전히 파산 처리되었습니다."
     )
+
 
 
 # ✅ 자동 상환
