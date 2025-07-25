@@ -6807,7 +6807,8 @@ async def 채무리스트(interaction: discord.Interaction):
         except Exception as e:
             lines.append(f"- ⚠️ 오류 유저: {name_display} ({uid}) → {str(e)}")
 
-    await interaction.followup.send("\
+    await interaction.followup.send("\n".join(lines), ephemeral=True)
+
 
 
 
