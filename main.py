@@ -5507,7 +5507,7 @@ class BoxButton(discord.ui.Button):
             pool_amount = get_oduk_pool_amount()
 
             if random.random() < 0.8:
-               compensation = int(reward * 0.8)  # 80% 보상
+                compensation = int(reward * 0.8)  # 80% 보상
                 add_balance(user_id, compensation)
                 return await interaction.response.edit_message(
                     content=(
