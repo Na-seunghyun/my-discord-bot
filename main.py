@@ -374,13 +374,13 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
     global oduk_pool_cache
 
     current_amount = oduk_pool_cache.get("amount", 0)
-    minimum_amount = 1_000_000  # 5백 만 원 보장
+    minimum_amount = 1_000_000  # 백만 원 보장
     decay_rate = 0.50  # 50%
 
     if current_amount > minimum_amount:
-        new_amount = int(current_amount * (1 - decay_rate))
-        if new_amount < minimum_amount:
-            new_amount = minimum_amount
+        excess = current_amount - minimum_amount
+        cut = int(excess * decay_rate)
+        new_amount = current_amount - cut
 
         oduk_pool_cache["amount"] = new_amount
         save_oduk_pool(oduk_pool_cache)
@@ -392,18 +392,19 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
             await channel.send(
                 f"📉 **오덕로또 상금 감가 적용**\n"
                 f"💰 기존 상금: **{current_amount:,}원** → 현재 상금: **{new_amount:,}원**\n"
-                f"🧾 6시간 자동 감가 정책에 따라 **50% 차감**되었으며, 최소 **백 만 원 **은 보장됩니다.\n"
+                f"🧾 **100만 원 초과분의 50%**가 감가되었으며, 최소 **100만 원**은 보장됩니다.\n"
                 f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
             )
     else:
-        print("✅ 오덕로또 상금이 2억 이하라 감가되지 않음")
+        print("✅ 오덕로또 상금이 100만 원 이하라 감가되지 않음")
 
 
-@tasks.loop(hours=6)
+@tasks.loop(hours=6, wait=True)
 async def auto_decay_oduk_pool():
     print("🕓 오덕로또 감가 시작")
-    await decay_oduk_pool(bot)             # ✅ await + 메시지 포함 함수
+    await decay_oduk_pool(bot)
     print("✅ 오덕로또 감가 완료")
+
 
 
 
