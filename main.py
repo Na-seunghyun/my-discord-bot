@@ -6438,8 +6438,10 @@ def is_due_for_repayment(loan: dict) -> bool:
 
 
 
-
 def calculate_loan_due(principal, created_at_str, rate, *, force_future_30min=False):
+    if not created_at_str:
+        raise ValueError("created_at 누락")
+
     created_at = datetime.fromisoformat(created_at_str)
     now = datetime.now(KST)
 
@@ -6450,6 +6452,7 @@ def calculate_loan_due(principal, created_at_str, rate, *, force_future_30min=Fa
         intervals += 1  # ✅ "다음 상환 예정금"용 예고 회차
 
     return int(principal * ((1 + rate) ** intervals))
+
 
 
 
