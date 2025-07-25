@@ -6632,24 +6632,34 @@ def get_grade_recovery_message(data):
     grade = data.get("credit_grade", "F")
     success = data.get("consecutive_successes", 0)
 
+    # 복구 기준표 (예시)
     grade_order = ["F", "E", "D", "C", "B", "A", "S"]
     recovery_required = {
-        "F": 2, "E": 2, "D": 2,
-        "C": 3, "B": 4, "A": 5,
+        "F": 2,
+        "E": 2,
+        "D": 2,
+        "C": 3,
+        "B": 4,
+        "A": 5,
     }
 
     if grade not in grade_order:
-        return "", grade, success  # 빈 메시지, 현재 등급, 성공횟수 그대로 반환
+        return "", grade, success  # 오류 방지 기본값 반환
 
     required = recovery_required.get(grade, 3)
     if success >= required:
         idx = grade_order.index(grade)
         if idx + 1 < len(grade_order):
             new_grade = grade_order[idx + 1]
+            data["credit_grade"] = new_grade
+            data["consecutive_successes"] = 0
             return f"🏅 등급: {grade} → {new_grade} 승급!", new_grade, 0
+    else:
+        remain = required - success
+        return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {grade})", grade, success
 
-    remain = required - success
-    return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {grade})", grade, success
+    return "", grade, success
+
 
 
 
