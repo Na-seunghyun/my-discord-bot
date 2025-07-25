@@ -6962,12 +6962,31 @@ async def try_repay(user_id, member, *, force=False):
 
     if data["consecutive_failures"] >= 5:
         clear_loan(user_id)
+
+        # 🧨 파산 처리: 모든 자산 초기화
         set_balance(user_id, 0)
         reset_bank_deposits(user_id)
         reset_investments(user_id)
         add_to_bankrupt_log(user_id)
+
+        # ✅ 파산 상태로 명확히 설정
+        loans = load_loans()
+        loans[user_id] = {
+            "amount": 0,
+            "credit_grade": "F",              # 강제 F 등급
+            "consecutive_successes": 0,       # 성공 횟수 초기화
+            "consecutive_failures": 0,
+            "created_at": "",                 # 완전 초기화
+            "last_checked": "",
+            "unpaid_days": 0,
+        }
         save_loans(loans)
-        return f"☠️ **{member.display_name}**님은 **연체 5회 초과**로 자동 파산 처리되었습니다.\n💥 모든 자산과 채무가 초기화되며, 신용등급은 `F`로 기록됩니다."
+
+        return (
+            f"☠️ **{member.display_name}**님은 **연체 5회 초과**로 자동 파산 처리되었습니다.\n"
+            f"💥 모든 자산과 채무가 초기화되며, 신용등급은 `F`로 기록됩니다."
+        )
+
 
     if data["consecutive_failures"] >= 3:
         data["credit_grade"] = "F"
