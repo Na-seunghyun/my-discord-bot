@@ -6425,15 +6425,15 @@ def is_due_for_repayment(loan: dict) -> bool:
 def calculate_loan_due(principal, created_at_str, rate, *, force_future_30min=False):
     created_at = datetime.fromisoformat(created_at_str)
     now = datetime.now(KST)
-    
+
     if force_future_30min:
-        # 최소 1회차 이자가 계산되도록 30분 경과 기준
-        elapsed = max((now - created_at).total_seconds(), 1800)
+        elapsed = max((now - created_at).total_seconds(), 1)  # 최소 1초로 처리
     else:
         elapsed = (now - created_at).total_seconds()
 
-    intervals = int(elapsed // 1800)
+    intervals = max(int(elapsed // 1800) + 1, 1)  # ✅ 최소 1회차부터 시작
     return int(principal * ((1 + rate) ** intervals))
+
 
 
 
@@ -6913,6 +6913,30 @@ async def try_repay(user_id, member, *, force=False):
             f"💣 누적 연체: {fails}회"
         )
         return format_repay_message(member, data["created_at"], total_due, result)
+
+
+@tree.command(name="상환", description="현재 대출금을 즉시 상환 시도합니다.", guild=discord.Object(id=GUILD_ID))
+async def 상환(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    member = interaction.user
+
+    loan = get_user_loan(user_id)
+    if not loan:
+        return await interaction.response.send_message(
+            "✅ 현재 상환할 대출금이 없습니다.",
+            ephemeral=True
+        )
+
+    # ⏳ 수동 상환 강제 처리
+    result = await try_repay(user_id, member, force=True)
+    if result:
+        await interaction.response.send_message(result)
+    else:
+        await interaction.response.send_message(
+            "❌ 상환 조건이 아직 충족되지 않아 실패했습니다.\n(예: 잔액 부족, 대출금 0원 등)",
+            ephemeral=True
+        )
+
 
 
 
