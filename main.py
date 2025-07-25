@@ -6619,27 +6619,37 @@ async def process_overdue_loans_on_startup(bot):
 
 
 def get_grade_recovery_message(data):
-    current = data.get("credit_grade", "C")
+    grade = data.get("credit_grade", "F")
     success = data.get("consecutive_successes", 0)
 
-    table = {
-        "F": ("E", 2),
-        "E": ("D", 2),
-        "D": ("C", 2),
-        "C": ("B", 3),
-        "B": ("A", 4),
-        "A": ("S", 5),
-        "S": ("S", 999),  # 최고등급
+    # 복구 기준표 (예시)
+    grade_order = ["F", "E", "D", "C", "B", "A", "S"]
+    recovery_required = {
+        "F": 2,
+        "E": 2,
+        "D": 2,
+        "C": 3,
+        "B": 4,
+        "A": 5,
     }
 
-    next_grade, needed = table.get(current, ("S", 999))
+    if grade not in grade_order:
+        return ""
 
-    if success >= needed:
-        data["credit_grade"] = next_grade
-        return f"🏅 등급: `{current} → {next_grade}` 승급!"
+    required = recovery_required.get(grade, 3)
+    if success >= required:
+        idx = grade_order.index(grade)
+        if idx + 1 < len(grade_order):
+            new_grade = grade_order[idx + 1]
+            data["credit_grade"] = new_grade
+            data["consecutive_successes"] = 0
+            return f"🏅 등급: {grade} → {new_grade} 승급!"
     else:
-        remain = needed - success
-        return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {current})"
+        remain = required - success
+        return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {grade})"
+
+    return ""
+
 
 
 def get_user_credit_grade(user_id: str) -> str:
