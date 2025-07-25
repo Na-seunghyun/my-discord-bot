@@ -5235,7 +5235,6 @@ def update_job_record(user_id: str, reward: int, job_type: str = "default", *, s
     today = now.date().isoformat()
     data = load_job_records()
 
-    # ✅ 기본 구조
     record = data.get(user_id, {
         "week": current_week,
         "count": 0,
@@ -5248,7 +5247,6 @@ def update_job_record(user_id: str, reward: int, job_type: str = "default", *, s
         "types": {}
     })
 
-    # ✅ 주차 변경 시 초기화
     if record.get("week") != current_week:
         record = {
             "week": current_week,
@@ -5262,25 +5260,33 @@ def update_job_record(user_id: str, reward: int, job_type: str = "default", *, s
             "types": {}
         }
 
-    record["attempts"] += 1  # ✅ 무조건 시도 횟수는 증가
+    record["attempts"] += 1
 
-    # ✅ 유형별 기록 기본값
     if job_type not in record["types"]:
         record["types"][job_type] = {"success": 0, "fail": 0}
 
-    if over_limit:
-        record["limit_exceeded"] += 1
-        record["types"][job_type]["fail"] += 1
-    elif success:
+    # ✅ 오늘 횟수 확인
+    today_count = record.get("daily", {}).get(today, 0)
+    if success and not over_limit:
+        if today_count >= 5:
+            # ✅ 초과근무로 간주하고 False 반환
+            return False
+
+        # ✅ 정상 성공 기록
         record["count"] += 1
         record["total_earned"] += reward
         record["last_time"] = now.isoformat()
 
         daily = record.get("daily", {})
-        daily[today] = daily.get(today, 0) + 1
+        daily[today] = today_count + 1
         record["daily"] = daily
 
         record["types"][job_type]["success"] += 1
+
+    elif over_limit:
+        record["limit_exceeded"] += 1
+        record["types"][job_type]["fail"] += 1
+
     else:
         record["failures"] += 1
         record["types"][job_type]["fail"] += 1
@@ -5289,6 +5295,7 @@ def update_job_record(user_id: str, reward: int, job_type: str = "default", *, s
     save_job_records(data)
 
     return success and not over_limit
+
 
 
 
