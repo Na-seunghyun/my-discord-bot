@@ -6402,23 +6402,26 @@ def get_all_loan_users():
 
 def clear_loan(user_id):
     loans = load_loans()
-    data = loans.get(user_id)
-
-    # ⛔ 기존 데이터가 없다면 무시
-    if not data:
+    if user_id not in loans:
         return
 
-    # 등급, 성공/실패 기록 보존
     preserved = {
-        "credit_grade": data.get("credit_grade", "C"),
-        "consecutive_successes": data.get("consecutive_successes", 0),
-        "consecutive_failures": data.get("consecutive_failures", 0),
-        "unpaid_days": data.get("unpaid_days", 0),
-        # created_at 등도 보존할 수 있음
+        "credit_grade": loans[user_id].get("credit_grade", "C"),
+        "consecutive_successes": loans[user_id].get("consecutive_successes", 0),
+        "consecutive_failures": loans[user_id].get("consecutive_failures", 0),
+        "unpaid_days": loans[user_id].get("unpaid_days", 0)
     }
 
-    loans[user_id] = preserved
+    # 대출 관련 필드 초기화
+    loans[user_id] = {
+        **preserved,
+        "amount": 0,
+        "created_at": "",
+        "last_checked": ""
+    }
+
     save_loans(loans)
+
 
 def is_due_for_repayment(loan: dict) -> bool:
     created_at = datetime.fromisoformat(loan["created_at"])
