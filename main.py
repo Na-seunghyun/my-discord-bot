@@ -5460,6 +5460,7 @@ async def 초대기록(interaction: discord.Interaction):
 
 
 # ✅ 박스알바 버튼 정의
+# ✅ 박스알바 버튼 정의
 class BoxButton(discord.ui.Button):
     def __init__(self, label, is_correct):
         super().__init__(style=discord.ButtonStyle.primary, label=label)
@@ -5471,7 +5472,6 @@ class BoxButton(discord.ui.Button):
             return await interaction.response.send_message("⛔ 이미 누른 버튼입니다!", ephemeral=True)
 
         view.already_clicked = True
-
         user_id = str(interaction.user.id)
 
         if not self.is_correct:
@@ -5489,6 +5489,7 @@ class BoxButton(discord.ui.Button):
             reward *= 2
             is_jackpot = True
 
+        # ✅ 알바 가능 횟수 확인
         success = update_job_record(user_id, reward, job_type="box")
         if not success:
             update_job_record(user_id, reward, job_type="box", over_limit=True)  # ⛔ 초과근무 기록
@@ -5500,19 +5501,20 @@ class BoxButton(discord.ui.Button):
                 add_balance(user_id, compensation)
                 return await interaction.response.edit_message(
                     content=(
-                        f"💢 초과근무! 알바비 **{reward:,}원**을 악덕 사장이 가로챘습니다.\n"
+                        f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
                         f"⚖️ 고용노동부 신고 성공! **{compensation:,}원**을 되찾았습니다!\n"
-                        f"🏦 오덕로또 잔고: **{pool_amount:,}원**\n"
-                        f"🎟️ `/오덕로또참여`로 복수해보세요!"
+                        f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
+                        f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!"
                     ),
                     view=None
                 )
 
             return await interaction.response.edit_message(
                 content=(
-                    f"💢 초과근무! 알바비 **{reward:,}원**이 몰수되었습니다.\n"
-                    f"💰 전액 오덕로또 잔고에 적립됨: **{pool_amount:,}원**\n"
-                    f"🎯 `/오덕로또참여`로 복수 기회를 노려보세요!"
+                    f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
+                    f"💰 알바비는 모두 **오덕로또 상금 풀**에 적립되었습니다.\n"
+                    f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
+                    f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!"
                 ),
                 view=None
             )
