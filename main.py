@@ -6505,8 +6505,13 @@ def create_or_update_loan(user_id, amount, credit_grade="C"):
     loans = load_loans()
     user_id_str = str(user_id)
 
-    # ✅ 기존 대출이 존재하더라도 덮어쓰기 허용
-    credit_grade = "F" if was_bankrupted(user_id) else credit_grade
+    # 기존 데이터 보존
+    existing = loans.get(user_id_str, {})
+    preserved_success = existing.get("consecutive_successes", 0)
+    preserved_grade = existing.get("credit_grade", credit_grade)
+
+    # 파산 이력이 있다면 강제 F 등급
+    preserved_grade = "F" if was_bankrupted(user_id) else preserved_grade
 
     now = datetime.now(KST).isoformat()
     loans[user_id_str] = {
@@ -6514,12 +6519,13 @@ def create_or_update_loan(user_id, amount, credit_grade="C"):
         "created_at": now,
         "last_checked": now,
         "interest_rate": LOAN_INTEREST_RATE,
-        "credit_grade": credit_grade,
+        "credit_grade": preserved_grade,
         "consecutive_failures": 0,
-        "consecutive_successes": 0,
+        "consecutive_successes": preserved_success,  # ✅ 보존된 값 사용
         "server_joined_at": now
     }
     save_loans(loans)
+
 
 
 
