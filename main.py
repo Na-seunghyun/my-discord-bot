@@ -399,14 +399,16 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
         print("✅ 오덕로또 상금이 100만 원 이하라 감가되지 않음")
 
 
-@tasks.loop(hours=6, wait=True)
+@tasks.loop(hours=6)
 async def auto_decay_oduk_pool():
     print("🕓 오덕로또 감가 시작")
     await decay_oduk_pool(bot)
     print("✅ 오덕로또 감가 완료")
 
-
-
+@auto_decay_oduk_pool.before_loop
+async def before_auto_decay():
+    print("🕓 봇 시작 후 첫 감가까지 6시간 대기...")
+    await asyncio.sleep(6 * 3600)  # 6시간 대기
 
 
 
