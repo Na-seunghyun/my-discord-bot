@@ -6492,9 +6492,12 @@ def add_to_bankrupt_log(user_id):
 
 
 
-def was_bankrupted(user_id):
-    # 예: 별도 bankrupt_log.json에 기록해두고 거기서 확인
-    return str(user_id) in load_bankrupt_users()
+def was_bankrupted(user_id: str) -> bool:
+    loans = load_loans()
+    loan = loans.get(str(user_id), {})
+    # ✅ 실제로 현재 등급이 F이고, 연속 성공이 0이면 파산 상태로 간주
+    return loan.get("credit_grade") == "F" and loan.get("consecutive_successes", 0) == 0
+
 
 
 
