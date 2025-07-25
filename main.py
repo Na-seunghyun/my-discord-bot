@@ -6874,7 +6874,6 @@ async def 파산처리(interaction: discord.Interaction, 유저: discord.User):
 
 # ✅ 자동 상환
 
-
 async def try_repay(user_id, member, *, force=False):
     loan = get_user_loan(user_id)
     if not loan:
@@ -6909,7 +6908,7 @@ async def try_repay(user_id, member, *, force=False):
     result = ""
     grade_change = None
 
-    # ✅ 상환 성공 처리
+    # ✅ 상환 성공
     if wallet >= total_due or wallet + bank >= total_due:
         if wallet >= total_due:
             add_balance(user_id, -total_due)
@@ -6920,22 +6919,18 @@ async def try_repay(user_id, member, *, force=False):
         data["consecutive_successes"] += 1
         data["consecutive_failures"] = 0
 
-        # ✅ 등급 회복 메시지 및 새 등급 계산
+        # 등급 회복 처리
         grade_message, updated_credit_grade, updated_success = get_grade_recovery_message(data)
 
-
-        # ✅ created_at 백업
         created_at_backup = loan["created_at"]
-
-        # ✅ 대출 초기화
         clear_loan(user_id)
 
-        # ✅ 복구: 등급 및 회복 횟수 반영
+        # 등급 및 성공횟수 복원
         loans = load_loans()
         loans[user_id] = {
             "amount": 0,
-            "credit_grade": new_grade,
-            "consecutive_successes": new_success,
+            "credit_grade": updated_credit_grade,
+            "consecutive_successes": updated_success,
             "consecutive_failures": 0,
             "created_at": created_at_backup,
             "last_checked": now.isoformat(),
@@ -6944,34 +6939,36 @@ async def try_repay(user_id, member, *, force=False):
 
         return format_repay_message(member, created_at_backup, total_due, "✅ 결과: 상환 성공!", grade_change=grade_message)
 
-
-
-
-
     # ❌ 상환 실패
-    else:
-        data["consecutive_failures"] += 1
-        data["consecutive_successes"] = 0
+    data["consecutive_failures"] += 1
+    data["consecutive_successes"] = 0
+    data["unpaid_days"] += 1
 
-        if data["consecutive_failures"] >= 5:
-            clear_loan(user_id)
-            set_balance(user_id, 0)
-            reset_bank_deposits(user_id)
-            reset_investments(user_id)
-            add_to_bankrupt_log(user_id)
-            save_loans(loans)
-            return f"☠️ **{member.display_name}**님은 **연체 5회 초과**로 자동 파산 처리되었습니다.\n💥 모든 자산과 채무가 초기화되며, 신용등급은 `F`로 기록됩니다."
-
-        if data["consecutive_failures"] >= 3:
-            data["credit_grade"] = "F"
-        elif data["consecutive_failures"] == 2:
-            data["credit_grade"] = "E"
-
-        data["last_checked"] = now.isoformat()
-        loans[user_id] = data
+    if data["consecutive_failures"] >= 5:
+        clear_loan(user_id)
+        set_balance(user_id, 0)
+        reset_bank_deposits(user_id)
+        reset_investments(user_id)
+        add_to_bankrupt_log(user_id)
         save_loans(loans)
+        return f"☠️ **{member.display_name}**님은 **연체 5회 초과**로 자동 파산 처리되었습니다.\n💥 모든 자산과 채무가 초기화되며, 신용등급은 `F`로 기록됩니다."
 
-        return format_repay_message(member, data["created_at"], total_due, f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], data['consecutive_failures'])}\n💣 누적 연체: {data['consecutive_failures']}회")
+    if data["consecutive_failures"] >= 3:
+        data["credit_grade"] = "F"
+    elif data["consecutive_failures"] == 2:
+        data["credit_grade"] = "E"
+
+    data["last_checked"] = now.isoformat()
+    loans[user_id] = data
+    save_loans(loans)
+
+    return format_repay_message(
+        member,
+        loan["created_at"],
+        total_due,
+        f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], data['consecutive_failures'])}\n💣 누적 연체: {data['consecutive_failures']}회"
+    )
+
 
 
 
