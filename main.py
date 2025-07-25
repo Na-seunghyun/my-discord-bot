@@ -6555,18 +6555,19 @@ def get_success_message(grade):
 
 # ✅ 메시지 포맷
 
-def format_repay_message(member, created_at, total_due, result, grade_change=None):
-    dt = datetime.fromisoformat(created_at).astimezone(KST)
-    msg = (
-        f"\n💸 **상환 시도 결과**\n"
-        f"📍 사용자: {member.mention if hasattr(member, 'mention') else member.id}\n"
-        f"📆 대출일: {dt:%m/%d %H:%M}\n"
-        f"💰 상환금: {total_due:,}원\n"
-        f"{result}"
-    )
+def format_repay_message(member, created_at_str, amount, result, grade_change=None):
+    created_at = datetime.fromisoformat(created_at_str).astimezone(KST)
+    lines = [
+        f"💸 상환 시도 결과",
+        f"📍 사용자: {member.mention}",
+        f"📆 대출일: {created_at.strftime('%m/%d %H:%M')}",
+        f"💰 상환금: {amount:,}원",
+        result,
+    ]
     if grade_change:
-        msg += f"\n🏅 등급: {grade_change}"
-    return msg
+        lines.append(grade_change)  # ✅ "🏅 등급:" 포함된 메시지 그대로 추가
+    return "\n".join(lines)
+
 
 
 AUTO_REPAY_CHANNEL_ID = 1394331814642057418  # 오덕도박장 ID
@@ -6830,7 +6831,7 @@ async def try_repay(user_id, member, *, force=False):
 
     now = datetime.now(KST)
     last_checked = datetime.fromisoformat(loan.get("last_checked", loan["created_at"]))
-    if not force and (now - last_checked).total_seconds() < 1740:
+    if (now - last_checked).total_seconds() < 1740 and not force:
         return None
 
     rate = loan.get("interest_rate", 0.05)
@@ -6838,7 +6839,6 @@ async def try_repay(user_id, member, *, force=False):
         loan["amount"], loan["created_at"], rate, force_future_30min=False
     )
 
-    # ✅ 파산 직후 0원 대출 방지
     if total_due <= 0:
         return None
 
@@ -6855,7 +6855,7 @@ async def try_repay(user_id, member, *, force=False):
     result = ""
     grade_change = None
 
-    # ✅ 상환 가능 (지갑 또는 은행 포함)
+    # ✅ 상환 성공 처리
     if wallet >= total_due or wallet + bank >= total_due:
         if wallet >= total_due:
             add_balance(user_id, -total_due)
@@ -6863,12 +6863,10 @@ async def try_repay(user_id, member, *, force=False):
             add_balance(user_id, -wallet)
             withdraw_from_bank(user_id, total_due - wallet)
 
-        # ✅ 성공 처리
-        result = f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}"
         data["consecutive_successes"] += 1
         data["consecutive_failures"] = 0
 
-        # ✅ 등급 회복 메시지 포함 (등급 갱신 처리 포함)
+        # ✅ 등급 회복 로직
         grade_change = get_grade_recovery_message(data)
 
         # ✅ 저장 및 대출 초기화
@@ -6877,29 +6875,22 @@ async def try_repay(user_id, member, *, force=False):
         save_loans(loans)
         clear_loan(user_id)
 
-        return format_repay_message(member, data["created_at"], total_due, result, grade_change=grade_change)
+        return format_repay_message(member, data["created_at"], total_due, f"✅ 결과: 상환 성공! {get_success_message(data['credit_grade'])}", grade_change=grade_change)
 
     # ❌ 상환 실패
     else:
         data["consecutive_failures"] += 1
         data["consecutive_successes"] = 0
 
-        # ❌ 파산 처리 (연체 5회 이상)
         if data["consecutive_failures"] >= 5:
             clear_loan(user_id)
             set_balance(user_id, 0)
             reset_bank_deposits(user_id)
             reset_investments(user_id)
             add_to_bankrupt_log(user_id)
+            save_loans(loans)
+            return f"☠️ **{member.display_name}**님은 **연체 5회 초과**로 자동 파산 처리되었습니다.\n💥 모든 자산과 채무가 초기화되며, 신용등급은 `F`로 기록됩니다."
 
-            save_loans(loans)  # 남은 데이터 저장
-
-            return (
-                f"☠️ **{member.display_name}**님은 **연체 5회 초과**로 자동 파산 처리되었습니다.\n"
-                f"💥 모든 자산과 채무가 초기화되며, 신용등급은 `F`로 기록됩니다."
-            )
-
-        # ❌ 등급 하락 반영
         if data["consecutive_failures"] >= 3:
             data["credit_grade"] = "F"
         elif data["consecutive_failures"] == 2:
@@ -6909,12 +6900,8 @@ async def try_repay(user_id, member, *, force=False):
         loans[user_id] = data
         save_loans(loans)
 
-        fails = data["consecutive_failures"]
-        result = (
-            f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], fails)}\n"
-            f"💣 누적 연체: {fails}회"
-        )
-        return format_repay_message(member, data["created_at"], total_due, result)
+        return format_repay_message(member, data["created_at"], total_due, f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], data['consecutive_failures'])}\n💣 누적 연체: {data['consecutive_failures']}회")
+
 
 
 @tree.command(name="상환", description="현재 대출금을 즉시 상환 시도합니다.", guild=discord.Object(id=GUILD_ID))
