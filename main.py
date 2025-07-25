@@ -6598,7 +6598,17 @@ async def process_overdue_loans_on_startup(bot):
     loans = load_loans()
 
     for user_id, loan in loans.items():
-        created = datetime.fromisoformat(loan["created_at"])
+        created_at_str = loan.get("created_at", "")
+        if not created_at_str:
+            print(f"⚠️ 유저 {user_id}의 created_at 누락됨. 건너뜁니다.")
+            continue
+
+        try:
+            created = datetime.fromisoformat(created_at_str)
+        except ValueError:
+            print(f"❌ 유저 {user_id}의 created_at 형식 오류: {created_at_str}")
+            continue
+
         elapsed = (now - created).total_seconds()
 
         if elapsed >= 1800:
@@ -6608,13 +6618,13 @@ async def process_overdue_loans_on_startup(bot):
                 if result:
                     print(f"🔁 [시작시 상환 처리] {user_id} → {result.replace(chr(10), ' / ')}")
 
-                    # ✅ 디스코드 채널로도 전송
                     channel = bot.get_channel(AUTO_REPAY_CHANNEL_ID)
                     if channel:
                         try:
                             await channel.send(result)
                         except Exception as e:
                             print(f"❌ 채널 전송 실패: {e}")
+
 
 
 
