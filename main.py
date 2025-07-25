@@ -6794,9 +6794,11 @@ async def 채무리스트(interaction: discord.Interaction):
         except discord.NotFound:
             name_display = f"(알 수 없음 - {uid})"
 
-        total_due = calculate_loan_due(data["amount"], data["created_at"], data["interest_rate"])
+        # ✅ interest_rate 누락 대비
+        rate = data.get("interest_rate", 0.05)
+        total_due = calculate_loan_due(data["amount"], data["created_at"], rate)
         lines.append(
-            f"- {name_display} ({uid}): 💰 {total_due:,}원 | 등급: {data['credit_grade']} | 연체: {data['consecutive_failures']}회"
+            f"- {name_display} ({uid}): 💰 {total_due:,}원 | 등급: {data.get('credit_grade', 'N/A')} | 연체: {data.get('consecutive_failures', 0)}회"
         )
 
     await interaction.followup.send("\n".join(lines), ephemeral=True)
