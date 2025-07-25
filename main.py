@@ -6629,7 +6629,7 @@ def get_grade_recovery_message(data):
     }
 
     if grade not in grade_order:
-        return "", grade, success
+        return "", grade, success  # 빈 메시지, 현재 등급, 성공횟수 그대로 반환
 
     required = recovery_required.get(grade, 3)
     if success >= required:
@@ -6640,6 +6640,7 @@ def get_grade_recovery_message(data):
 
     remain = required - success
     return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {grade})", grade, success
+
 
 
 
@@ -6901,6 +6902,7 @@ async def try_repay(user_id, member, *, force=False):
 
         # ✅ 등급 회복 메시지 및 새 등급 계산
         grade_message, updated_credit_grade, updated_success = get_grade_recovery_message(data)
+
 
         # ✅ created_at 백업
         created_at_backup = loan["created_at"]
