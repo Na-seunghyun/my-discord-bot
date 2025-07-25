@@ -212,11 +212,104 @@ def get_balance(user_id):
 
 def set_balance(user_id, amount):
     data = load_balances()
-    data[str(user_id)] = {
-        "amount": amount,
-        "last_updated": datetime.utcnow().isoformat()
-    }
+    uid = str(user_id)
+    user_data = data.get(uid, {})
+    
+    user_data["amount"] = amount
+    user_data["last_updated"] = datetime.utcnow().isoformat()
+    
+    # 도박 승/패 기록 유지
+    user_data.setdefault("gamble", {"win": 0, "lose": 0})
+    
+    data[uid] = user_data
     save_balances(data)
+
+def record_gamble_result(user_id, success: bool):
+    data = load_balances()
+    uid = str(user_id)
+    if uid not in data:
+        data[uid] = {"amount": 0, "last_updated": datetime.utcnow().isoformat()}
+    
+    data[uid].setdefault("gamble", {"win": 0, "lose": 0})
+    if success:
+        data[uid]["gamble"]["win"] += 1
+    else:
+        data[uid]["gamble"]["lose"] += 1
+
+    save_balances(data)
+
+def get_gamble_title(user_id: str, success: bool) -> str:
+    data = load_balances().get(str(user_id), {})
+    stats = data.get("gamble", {})
+    win = stats.get("win", 0)
+    lose = stats.get("lose", 0)
+    total = win + lose
+    rate = win / total if total > 0 else 0
+
+    success_titles = []
+    failure_titles = []
+    winrate_titles = []
+
+    # 🎯 A. 성공 수 기반 칭호
+    if win >= 500:
+        success_titles.append("👑 전설의 갬블러")
+    elif win >= 300:
+        success_titles.append("🥇 도박왕")
+    elif win >= 200:
+        success_titles.append("🥈 대박 기운")
+    elif win >= 100:
+        success_titles.append("🥉 강운 보유자")
+    elif win >= 50:
+        success_titles.append("🌟 행운의 손")
+    elif win >= 20:
+        success_titles.append("🎯 슬슬 감이 온다")
+    elif win >= 10:
+        success_titles.append("🔰 초심자 치고 잘함")
+
+    # 💀 B. 실패 수 기반 칭호
+    if lose >= 500:
+        failure_titles.append("💀 도박중독자")
+    elif lose >= 300:
+        failure_titles.append("⚰️ 파산 직전")
+    elif lose >= 200:
+        failure_titles.append("☠️ 불운의 화신")
+    elif lose >= 100:
+        failure_titles.append("💔 눈물의 도박사")
+    elif lose >= 50:
+        failure_titles.append("😵 현타 온다")
+    elif lose >= 20:
+        failure_titles.append("😓 안 풀리는 하루")
+
+    # 🧠 C. 승률 기반 (50회 이상)
+    if total >= 50:
+        if rate >= 0.85:
+            winrate_titles.append("🍀 신의 손")
+        elif rate >= 0.70:
+            winrate_titles.append("🧠 전략가")
+        elif rate <= 0.20:
+            winrate_titles.append("🐌 패배 장인")
+        elif rate <= 0.35:
+            winrate_titles.append("🪦 계속 해도 괜찮은가요?")
+
+    # 🗂️ D. 누적 시도 칭호 (추가)
+    if total >= 1000:
+        winrate_titles.append("🕹️ 역사적인 갬블러")
+    elif total >= 500:
+        winrate_titles.append("📜 기록을 남긴 자")
+    elif total >= 200:
+        winrate_titles.append("🧾 꽤 해본 사람")
+    elif total >= 100:
+        winrate_titles.append("🔖 갬블러 생활 중")
+
+    # ✅ 반환: 성공 or 실패 칭호 + 승률 칭호 (조건 충족 시)
+    if success:
+        return " / ".join(success_titles + winrate_titles) or "🔸 무명 도전자"
+    else:
+        return " / ".join(failure_titles + winrate_titles) or "🔸 무명 도전자"
+
+
+
+
 
 def add_balance(user_id, amount):
     current = get_balance(user_id)
@@ -2643,10 +2736,14 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     # 최소 베팅, 잔액 부족 체크
     if 베팅액 < 100:
         return await interaction.response.send_message(
-            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **100원**입니다.", discord.Color.red()), ephemeral=True)
+            embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **100원**입니다.", discord.Color.red()),
+            ephemeral=True
+        )
     if balance < 베팅액:
         return await interaction.response.send_message(
-            embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()), ephemeral=True)
+            embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()),
+            ephemeral=True
+        )
 
     # 잔액 차감
     add_balance(user_id, -베팅액)
@@ -2668,24 +2765,26 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         return f"[{bar}]"
 
     bar = create_graph_bar(success_chance, roll)
-    updated_balance = get_balance(user_id)
 
     # 성공
     if roll <= success_chance:
-        # ✅ 1% 확률로 4배 잭팟
         is_jackpot = random.random() < 0.01
         multiplier = 4 if is_jackpot else 2
         reward = 베팅액 * multiplier
         add_balance(user_id, reward)
         final_balance = get_balance(user_id)
 
-        jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
+        # ✅ 기록 반영
+        record_gamble_result(user_id, success=True)
+        title = get_gamble_title(user_id, success=True)
 
+        jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
         embed = create_embed(
             "🎉 도박 성공!",
             f"{jackpot_msg}"
             f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원",
+            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n"
+            f"🏅 칭호: {title}",
             discord.Color.gold() if is_jackpot else discord.Color.green(),
             user_id
         )
@@ -2694,19 +2793,26 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     else:
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
+
+        # ✅ 기록 반영
+        record_gamble_result(user_id, success=False)
+        title = get_gamble_title(user_id, success=False)
+
         embed = create_embed(
             "💀 도박 실패!",
             (
                 f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
                 f"-{베팅액:,}원 손실...\n"
                 f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
-                f"🎟️ `/오덕로또참여`로 도전하세요!"
+                f"🎟️ `/오덕로또참여`로 도전하세요!\n\n"
+                f"🏅 칭호: {title}"
             ),
             discord.Color.red(),
             user_id
         )
 
     await interaction.response.send_message(embed=embed)
+
 
 @도박.autocomplete("베팅액")
 async def 베팅액_자동완성(interaction: discord.Interaction, current: str):
@@ -2788,10 +2894,10 @@ class LotteryButton(Button):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
         self.correct_slot = correct_slot
         self.베팅액 = 베팅액
-        self.user_id = user_id
+        self.user_id = str(user_id)
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.user_id:
+        if interaction.user.id != int(self.user_id):
             return await interaction.response.send_message("❌ 본인만 참여할 수 있습니다.", ephemeral=True)
         if self.view.stopped:
             return await interaction.response.send_message("❌ 이미 복권이 종료되었습니다.", ephemeral=True)
@@ -2800,23 +2906,38 @@ class LotteryButton(Button):
 
         try:
             if self.label == self.correct_slot:
-                add_balance(self.user_id, self.베팅액 * 3)
+                # 성공 처리
+                reward = self.베팅액 * 3
+                add_balance(self.user_id, reward)
+                record_gamble_result(self.user_id, True)
+                titles = get_gamble_title(self.user_id, True)
+                title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
                 title = "🎉 당첨!"
-                desc = f"축하합니다! **{self.베팅액 * 3:,}원**을 획득했습니다!"
+                desc = (
+                    f"축하합니다! **{reward:,}원**을 획득했습니다!"
+                    f"\n💰 잔액: **{get_balance(self.user_id):,}원**"
+                    f"{title_str}"
+                )
                 color = discord.Color.green()
+
             else:
+                # 실패 처리
                 add_oduk_pool(self.베팅액)
+                record_gamble_result(self.user_id, False)
                 pool_amt = get_oduk_pool_amount()
+                titles = get_gamble_title(self.user_id, False)
+                title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
                 title = "💔 꽝!"
                 desc = (
                     f"아쉽지만 탈락입니다.\n**{self.베팅액:,}원**을 잃었습니다.\n\n"
                     f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
                     f"🎟️ `/오덕로또참여`로 참여하세요!"
+                    f"{title_str}"
                 )
                 color = discord.Color.red()
 
             await interaction.response.edit_message(
-                embed=create_embed(title, desc, color, str(self.user_id)),
+                embed=create_embed(title, desc, color, self.user_id),
                 view=None
             )
 
@@ -2824,6 +2945,7 @@ class LotteryButton(Button):
             print(f"❌ 복권 버튼 오류: {e}")
             if not interaction.response.is_done():
                 await interaction.response.send_message("⚠️ 오류가 발생했습니다.", ephemeral=True)
+
 
 
 # 🎯 복권 인터페이스 (버튼 3개)
@@ -2905,9 +3027,6 @@ async def 복권_배팅액_자동완성(interaction: discord.Interaction, curren
 
 
 
-
-
-
 @tree.command(name="슬롯", description="애니메이션 슬롯머신 게임!", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
 async def 슬롯(interaction: discord.Interaction, 베팅액: int):
@@ -2922,7 +3041,6 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
     symbols = ["🍒", "🍋", "🍇", "🍉", "💎"]
     balance = get_balance(user_id)
 
-
     if 베팅액 < 1000:
         return await interaction.response.send_message(
             embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **1,000원**입니다.", discord.Color.red()), ephemeral=False)
@@ -2931,7 +3049,10 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         return await interaction.response.send_message(
             embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()), ephemeral=False)
 
+    # 💸 잔액 차감
     add_balance(user_id, -베팅액)
+
+    # 🎰 슬롯머신 연출
     await interaction.response.defer()
     message = await interaction.followup.send("🎰 슬롯머신 작동 중...", wait=True)
 
@@ -2943,6 +3064,8 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         await asyncio.sleep(0.7)
 
     result_str = " | ".join(result)
+
+    # 🎯 최대 연속 일치 계산
     max_streak = 1
     cur_streak = 1
     for i in range(1, len(result)):
@@ -2952,31 +3075,47 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         else:
             cur_streak = 1
 
+    # 🎉 성공
     if max_streak == 5:
         winnings = 베팅액 * 10
         add_balance(user_id, winnings)
-        outcome = f"🎉 **5개 연속 일치! +{winnings:,}원 획득!**"
+        record_gamble_result(user_id, True)
+        titles = get_gamble_title(user_id, True)
+        title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
+        outcome = f"🎉 **5개 연속 일치! +{winnings:,}원 획득!**{title_str}"
         color = discord.Color.green()
+
     elif max_streak >= 3:
         winnings = 베팅액 * 4
         add_balance(user_id, winnings)
-        outcome = f"✨ **{max_streak}개 연속 일치! +{winnings:,}원 획득!**"
+        record_gamble_result(user_id, True)
+        titles = get_gamble_title(user_id, True)
+        title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
+        outcome = f"✨ **{max_streak}개 연속 일치! +{winnings:,}원 획득!**{title_str}"
         color = discord.Color.green()
+
+    # 💀 실패
     else:
         add_oduk_pool(베팅액)
+        record_gamble_result(user_id, False)
         pool_amt = get_oduk_pool_amount()
-
+        titles = get_gamble_title(user_id, False)
+        title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
         outcome = (
             f"😢 **꽝! 다음 기회를 노려보세요.\n-{베팅액:,}원 손실**\n\n"
             f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
             f"🎟️ `/오덕로또참여`로 참여하세요!"
+            f"{title_str}"
         )
         color = discord.Color.red()
 
-
     await message.edit(
-        content=f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n{outcome}\n💵 현재 잔액: {get_balance(user_id):,}원"
+        content=(
+            f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n"
+            f"{outcome}\n💵 현재 잔액: {get_balance(user_id):,}원"
+        )
     )
+
 
 
 @슬롯.autocomplete("베팅액")
@@ -3181,6 +3320,14 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
             add_battle_result(str(winner.id), 1, 0, self.amount)
             add_battle_result(str(loser.id), 0, 1, -self.amount)
 
+            # ✅ 도박 전적 기록 추가 (칭호용)
+            record_gamble_result(str(winner.id), True)
+            record_gamble_result(str(loser.id), False)
+
+            # ✅ 칭호
+            winner_titles = get_gamble_title(str(winner.id), True)
+            loser_titles = get_gamble_title(str(loser.id), False)
+
             # ✅ 개인간 전적 기록
             pair_stats = load_pair_stats()
             uid1, uid2 = sorted([str(self.caller.id), str(self.target.id)])
@@ -3214,11 +3361,14 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
                 f"(세금 {tax:,}원 → 오덕로또 적립)\n\n"
                 f"📊 전체 전적 ({self.caller.display_name} vs {self.target.display_name}): "
                 f"{caller_wins}승 {target_wins}패 (승률 {winrate}%)\n"
+                f"🏅 {winner.display_name} 칭호: {winner_titles or '없음'}\n"
+                f"💀 {loser.display_name} 칭호: {loser_titles or '없음'}\n\n"
                 f"💰 현재 잔액:\n"
                 f"  {self.caller.display_name}: **{caller_amount:,}원**\n"
                 f"  {self.target.display_name}: **{target_amount:,}원**\n"
                 f"🎟️ `/오덕로또참여`로 오늘의 운도 시험해보세요!"
             )
+
 
         @discord.ui.button(label="거절", style=discord.ButtonStyle.danger)
         async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
