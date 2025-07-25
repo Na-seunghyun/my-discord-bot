@@ -6618,10 +6618,7 @@ async def process_overdue_loans_on_startup(bot):
 
 
 
-def get_grade_recovery_message(data):
-    grade = data.get("credit_grade", "F")
-    success = data.get("consecutive_successes", 0)
-
+def get_grade_recovery_message(grade: str, success: int):
     grade_order = ["F", "E", "D", "C", "B", "A", "S"]
     recovery_required = {
         "F": 2,
@@ -6640,8 +6637,6 @@ def get_grade_recovery_message(data):
         idx = grade_order.index(grade)
         if idx + 1 < len(grade_order):
             new_grade = grade_order[idx + 1]
-            data["credit_grade"] = new_grade
-            data["consecutive_successes"] = 0
             return f"🏅 등급: {grade} → {new_grade} 승급!", new_grade, 0
     else:
         remain = required - success
@@ -6906,33 +6901,31 @@ async def try_repay(user_id, member, *, force=False):
         data["consecutive_successes"] += 1
         data["consecutive_failures"] = 0
 
-        # ✅ 등급 회복 로직 (data 내부 등급이 변경됨)
-        grade_message, updated_grade, updated_success = get_grade_recovery_message(data)
+        # ✅ 등급 회복 메시지 및 새 등급 계산
+        current_grade = data["credit_grade"]
+        current_success = data["consecutive_successes"]
+        grade_message, new_grade, new_success = get_grade_recovery_message(current_grade, current_success)
 
         # ✅ created_at 백업
         created_at_backup = loan["created_at"]
 
-        # ✅ 최신 등급 및 성공 횟수 반영
-        updated_credit_grade = updated_grade
-        consecutive_successes = updated_success
-
         # ✅ 대출 초기화
         clear_loan(user_id)
 
-        # ✅ 복구: 최신 정보 반영
+        # ✅ 복구: 등급 및 회복 횟수 반영
         loans = load_loans()
         loans[user_id] = {
             "amount": 0,
-            "credit_grade": updated_credit_grade,
-            "consecutive_successes": consecutive_successes,
+            "credit_grade": new_grade,
+            "consecutive_successes": new_success,
             "consecutive_failures": 0,
             "created_at": created_at_backup,
             "last_checked": now.isoformat(),
         }
         save_loans(loans)
 
-        # ✅ 정상 메시지 출력
         return format_repay_message(member, created_at_backup, total_due, "✅ 결과: 상환 성공!", grade_change=grade_message)
+
 
 
 
