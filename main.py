@@ -6612,12 +6612,14 @@ def get_grade_recovery_message(data):
     }
 
     next_grade, needed = table.get(current, ("S", 999))
+
     if success >= needed:
         data["credit_grade"] = next_grade
-        return f"{current} → {next_grade} 등급 회복 🎉"
+        return f"🏅 등급: `{current} → {next_grade}` 승급!"
     else:
         remain = needed - success
-        return f"🕐 등급 회복까지 {remain}회 남음 (현재: {current})"
+        return f"🏅 등급: 🕐 등급 회복까지 {remain}회 남음 (현재: {current})"
+
 
 def get_user_credit_grade(user_id: str) -> str:
     loan = get_user_loan(user_id)
