@@ -5227,54 +5227,69 @@ def save_job_records(data):
     with open(ALBA_RECORD_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-# ✅ 기록 업데이트 함수 (주차 확인 포함)
-def update_job_record(user_id: str, reward: int, job_type: str = "default"):
+
+# ✅ 기록 업데이트 함수 (성공/실패/초과근무 포함)
+def update_job_record(user_id: str, reward: int, job_type: str = "default", *, success: bool = True, over_limit: bool = False):
     now = datetime.now(KST)
     current_week = get_current_week_tag()
     today = now.date().isoformat()
     data = load_job_records()
 
+    # ✅ 기본 구조
     record = data.get(user_id, {
         "week": current_week,
         "count": 0,
+        "failures": 0,
+        "limit_exceeded": 0,
+        "attempts": 0,
         "total_earned": 0,
         "last_time": "",
         "daily": {},
-        "types": {}  # ✅ 알바 유형별 기록 추가
+        "types": {}
     })
 
-    # ✅ 주차 변경 시 기록 초기화
+    # ✅ 주차 변경 시 초기화
     if record.get("week") != current_week:
         record = {
             "week": current_week,
             "count": 0,
+            "failures": 0,
+            "limit_exceeded": 0,
+            "attempts": 0,
             "total_earned": 0,
             "last_time": "",
             "daily": {},
             "types": {}
         }
 
-    # ✅ 일일 횟수 제한 확인
-    daily = record.get("daily", {})
-    today_count = daily.get(today, 0)
-    if today_count >= 5:
-        return False  # 초과근무 → 실패 처리
+    record["attempts"] += 1  # ✅ 무조건 시도 횟수는 증가
 
-    # ✅ 기록 갱신
-    record["count"] += 1
-    record["total_earned"] += reward
-    record["last_time"] = now.isoformat()
-    daily[today] = today_count + 1
-    record["daily"] = daily
+    # ✅ 유형별 기록 기본값
+    if job_type not in record["types"]:
+        record["types"][job_type] = {"success": 0, "fail": 0}
 
-    # ✅ 알바유형별 횟수 누적
-    types = record.get("types", {})
-    types[job_type] = types.get(job_type, 0) + 1
-    record["types"] = types
+    if over_limit:
+        record["limit_exceeded"] += 1
+        record["types"][job_type]["fail"] += 1
+    elif success:
+        record["count"] += 1
+        record["total_earned"] += reward
+        record["last_time"] = now.isoformat()
+
+        daily = record.get("daily", {})
+        daily[today] = daily.get(today, 0) + 1
+        record["daily"] = daily
+
+        record["types"][job_type]["success"] += 1
+    else:
+        record["failures"] += 1
+        record["types"][job_type]["fail"] += 1
 
     data[user_id] = record
     save_job_records(data)
-    return True
+
+    return success and not over_limit
+
 
 
 
@@ -5287,7 +5302,6 @@ def add_balance(user_id, amount):
 # ✅ /타자알바 명령어
 @tree.command(name="타자알바", description="문장을 빠르게 입력해 돈을 벌어보세요!", guild=discord.Object(id=GUILD_ID))
 async def 타자알바(interaction: discord.Interaction):
-    # ✅ 허용된 채널: 오덕도박장, 오덕코인
     if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
         return await interaction.response.send_message(
             "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
@@ -5295,12 +5309,9 @@ async def 타자알바(interaction: discord.Interaction):
         )
 
     user_id = str(interaction.user.id)
-    current_week = get_current_week_tag()
     today = datetime.now(KST).date().isoformat()
-
-
-
     phrase = random.choice(TYPING_PHRASES)
+
     await interaction.response.send_message(
         f"📋 다음 문장을 **정확히** 입력해주세요. (20초 제한)\n\n```{phrase}```",
         ephemeral=True
@@ -5314,31 +5325,30 @@ async def 타자알바(interaction: discord.Interaction):
         msg = await bot.wait_for("message", timeout=20.0, check=check)
         end_time = datetime.now(KST)
 
-        # ✅ 문장 정확도 체크 먼저
         if msg.content.strip() != phrase:
+            update_job_record(user_id, 0, job_type="default", success=False)  # ✅ 실패 기록
             await msg.reply("❌ 문장이 틀렸습니다. 알바 실패!", mention_author=False)
             return
 
-        # ✅ 성공 처리
         elapsed = (end_time - start_time).total_seconds()
         base_reward = 1200
         penalty = int(elapsed * 60)
         reward = max(120, base_reward - penalty)
 
-        # ✅ 1% 잭팟
         if random.random() < 0.01:
             reward *= 3
             is_jackpot = True
         else:
             is_jackpot = False
 
-        success = update_job_record(user_id, reward)
+        # ✅ 초과근무 여부 기록
+        success = update_job_record(user_id, reward, job_type="default")
         if not success:
-            # ✅ 초과근무 → 오덕로또 상금 풀 적립
+            update_job_record(user_id, reward, job_type="default", over_limit=True)
+
             add_oduk_pool(reward)
             pool_amount = get_oduk_pool_amount()
 
-            # ✅ 20% 확률로 고용노동부 신고 성공 → 알바비 절반 돌려받기
             if random.random() < 0.4:
                 compensation = reward // 2
                 add_balance(user_id, compensation)
@@ -5357,15 +5367,12 @@ async def 타자알바(interaction: discord.Interaction):
                 mention_author=False
             )
 
-
         add_balance(user_id, reward)
 
-        # ✅ 최신 기록 불러와서 잔여횟수 계산
         record = load_job_records().get(user_id, {})
         today_used = record.get("daily", {}).get(today, 0)
         remaining = max(0, 5 - today_used)
 
-        # ✅ 성공 메시지 출력
         message = (
             f"✅ **{elapsed:.1f}초** 만에 성공!\n"
             f"💰 **{reward:,}원**을 획득했습니다."
@@ -5377,7 +5384,9 @@ async def 타자알바(interaction: discord.Interaction):
         await msg.reply(message, mention_author=False)
 
     except asyncio.TimeoutError:
+        update_job_record(user_id, 0, job_type="default", success=False)  # ✅ 시간 초과 실패 기록
         await interaction.followup.send("⌛️ 시간이 초과되었습니다. 알바 실패!", ephemeral=True)
+
 
 
 
@@ -5393,31 +5402,37 @@ async def 알바기록(interaction: discord.Interaction):
     record = data.get(user_id)
 
     if not record or record.get("week") != current_week:
-        return await interaction.response.send_message("🙅 이번 주 알바 기록이 없습니다.", ephemeral=True)
+        return await interaction.response.send_message("🙅 이번 주 알바 기록이 없습니다.")
 
     last_time = datetime.fromisoformat(record["last_time"]).astimezone(KST)
     time_str = last_time.strftime("%Y-%m-%d %H:%M:%S")
 
-    # ✅ 알바 유형별 기록 정리
     type_lines = []
-    types = record.get("types", {})
-    for job_type, count in types.items():
+    for job_type, stat in record.get("types", {}).items():
         name = {
             "default": "타자알바",
             "box": "박스알바"
         }.get(job_type, job_type)
-        type_lines.append(f"- {name}: {count}회")
+
+        s = stat.get("success", 0)
+        f = stat.get("fail", 0)
+        type_lines.append(f"- {name}: 시도 {s + f}회 (✅ {s} / ❌ {f})")
 
     type_summary = "\n".join(type_lines) or "- 없음"
 
     await interaction.response.send_message(
         f"📝 **{interaction.user.display_name}님의 이번 주 알바 기록**\n"
-        f"- 총 알바 횟수: {record['count']}회\n"
+        f"📆 주차: {record['week']}\n"
+        f"- 총 시도 횟수: {record.get('attempts', 0)}회\n"
+        f"- 성공: ✅ {record.get('count', 0)}회\n"
+        f"- 실패: ❌ {record.get('failures', 0)}회\n"
+        f"- 제한 초과 시도: 🚫 {record.get('limit_exceeded', 0)}회\n"
         f"{type_summary}\n"
         f"- 누적 수익: 💰 {record['total_earned']:,}원\n"
         f"- 마지막 알바: {time_str} (KST)",
-        ephemeral=True
+        ephemeral=False  # 전체 공개
     )
+
 
 
 @tree.command(name="초대기록", description="현재 초대 코드 기록을 확인합니다.", guild=discord.Object(id=GUILD_ID))
@@ -5457,14 +5472,16 @@ class BoxButton(discord.ui.Button):
 
         view.already_clicked = True
 
+        user_id = str(interaction.user.id)
+
         if not self.is_correct:
+            update_job_record(user_id, 0, job_type="box", success=False)  # ❌ 실패 기록
             return await interaction.response.edit_message(
                 content="💥 오답! 박스가 아닌 걸 치웠어요...\n❌ 알바 실패!",
                 view=None
             )
 
-        # ✅ 정답 선택 처리
-        user_id = str(interaction.user.id)
+        # ✅ 정답 처리
         reward = random.randint(500, 1500)
         is_jackpot = False
 
@@ -5474,6 +5491,7 @@ class BoxButton(discord.ui.Button):
 
         success = update_job_record(user_id, reward, job_type="box")
         if not success:
+            update_job_record(user_id, reward, job_type="box", over_limit=True)  # ⛔ 초과근무 기록
             add_oduk_pool(reward)
             pool_amount = get_oduk_pool_amount()
 
@@ -5499,7 +5517,7 @@ class BoxButton(discord.ui.Button):
                 view=None
             )
 
-        # ✅ 정상 보상 지급
+        # ✅ 정상 보상
         add_balance(user_id, reward)
 
         today = datetime.now(KST).date().isoformat()
@@ -5516,9 +5534,10 @@ class BoxButton(discord.ui.Button):
 
 # ✅ 박스알바 UI View 정의
 class BoxJobView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, interaction):
         super().__init__(timeout=10)
         self.already_clicked = False
+        self.interaction = interaction  # ✅ 저장
 
         items = [
             ("📦", True),
@@ -5534,7 +5553,10 @@ class BoxJobView(discord.ui.View):
 
     async def on_timeout(self):
         if not self.already_clicked:
+            user_id = str(self.interaction.user.id)
+            update_job_record(user_id, 0, job_type="box", success=False)
             await self.message.edit(content="⌛️ 시간 초과! 알바 실패!", view=None)
+
 
 
 # ✅ 박스알바 명령어 등록
@@ -5546,15 +5568,13 @@ async def 박스알바(interaction: discord.Interaction):
             ephemeral=True
         )
 
-    view = BoxJobView()
+    view = BoxJobView(interaction)  # ✅ 전달
 
-    # ✅ 메시지 먼저 응답
     await interaction.response.send_message(
         "📦 **박스를 치워주세요!** (10초 이내, 실수하면 실패!)", view=view, ephemeral=True
     )
-
-    # ✅ 이후 메시지 객체 저장
     view.message = await interaction.original_response()
+
 
 
 
