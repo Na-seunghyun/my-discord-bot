@@ -6469,6 +6469,15 @@ def get_grade_recovery_message(data):
         remain = needed - success
         return f"🕐 등급 회복까지 {remain}회 남음 (현재: {current})"
 
+def get_user_credit_grade(user_id: str) -> str:
+    loan = get_user_loan(user_id)
+    if loan:
+        return loan.get("credit_grade", "C")
+    if was_bankrupted(user_id):
+        return "F"
+    return "C"
+
+
 
 
 
@@ -6490,14 +6499,14 @@ async def 대출(interaction: discord.Interaction, 금액: int):
 
     user_id = str(interaction.user.id)
 
-    # ❌ 대출 제한 여부 확인 (연체 or 등급 F 등)
+    # ❌ 대출 제한 여부 확인 (연체 or 신용불량 등)
     if is_loan_restricted(user_id):
         return await interaction.response.send_message(
             "🚫 현재 신용등급 또는 연체로 인해 대출이 제한되었습니다.",
             ephemeral=True
         )
 
-    # ❌ 기존 대출 존재 여부 확인 (amount > 0인 경우만 대출 불가)
+    # ❌ 기존 대출 존재 여부 확인 (amount > 0인 경우 대출 불가)
     loan = get_user_loan(user_id)
     if loan and loan.get("amount", 0) > 0:
         return await interaction.response.send_message(
@@ -6505,9 +6514,9 @@ async def 대출(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    # ✅ 파산 기록 여부에 따라 등급 추정 (출력용)
-    grade = "F" if was_bankrupted(user_id) else "C"
-    limit = CREDIT_GRADES[grade]["limit"]
+    # ✅ 실제 유저의 신용등급 가져오기
+    grade = get_user_credit_grade(user_id)
+    limit = CREDIT_GRADES.get(grade, {"limit": 0})["limit"]
 
     if 금액 > limit or 금액 <= 0:
         return await interaction.response.send_message(
@@ -6518,7 +6527,7 @@ async def 대출(interaction: discord.Interaction, 금액: int):
         )
 
     # ✅ 대출 실행
-    create_or_update_loan(user_id, 금액)
+    create_or_update_loan(user_id, 금액, credit_grade=grade)
     add_balance(user_id, 금액)
 
     return await interaction.response.send_message(
@@ -6526,6 +6535,23 @@ async def 대출(interaction: discord.Interaction, 금액: int):
         f"📆 30분마다 이자가 복리로 적용됩니다. 늦기 전에 갚으세요!",
         ephemeral=True
     )
+
+
+@대출.autocomplete("금액")
+async def 대출금액_자동완성(interaction: discord.Interaction, current: str):
+    from discord import app_commands
+
+    user_id = str(interaction.user.id)
+    grade = get_user_credit_grade(user_id)
+    limit = CREDIT_GRADES.get(grade, {"limit": 0})["limit"]
+
+    half = limit // 2
+    suggestions = [
+        app_commands.Choice(name=f"💸 최대 대출 ({limit:,}원)", value=str(limit)),
+        app_commands.Choice(name=f"💰 절반 대출 ({half:,}원)", value=str(half)),
+    ]
+    return suggestions
+
 
 
 
@@ -6660,6 +6686,10 @@ async def try_repay(user_id, member, *, force=False):
         loan["amount"], loan["created_at"], rate, force_future_30min=False
     )
 
+    # ✅ 파산 직후 0원 대출 방지
+    if total_due <= 0:
+        return None
+
     wallet = get_balance(user_id)
     bank = get_total_bank_balance(user_id)
 
@@ -6686,9 +6716,10 @@ async def try_repay(user_id, member, *, force=False):
         data["consecutive_successes"] += 1
         data["consecutive_failures"] = 0
 
-        # ✅ 등급 회복 메시지 포함
+        # ✅ 등급 회복 메시지 포함 (등급 갱신 처리 포함)
         grade_change = get_grade_recovery_message(data)
 
+        # ✅ 저장 및 대출 초기화
         data["last_checked"] = now.isoformat()
         loans[user_id] = data
         save_loans(loans)
@@ -6701,6 +6732,7 @@ async def try_repay(user_id, member, *, force=False):
         data["consecutive_failures"] += 1
         data["consecutive_successes"] = 0
 
+        # ❌ 파산 처리 (연체 5회 이상)
         if data["consecutive_failures"] >= 5:
             clear_loan(user_id)
             set_balance(user_id, 0)
@@ -6708,24 +6740,14 @@ async def try_repay(user_id, member, *, force=False):
             reset_investments(user_id)
             add_to_bankrupt_log(user_id)
 
-            now_str = now.isoformat()
-            loans[user_id] = {
-                "amount": 0,
-                "created_at": now_str,
-                "last_checked": now_str,
-                "interest_rate": LOAN_INTEREST_RATE,
-                "credit_grade": "F",
-                "consecutive_failures": 0,
-                "consecutive_successes": 0,
-                "server_joined_at": now_str
-            }
-            save_loans(loans)
+            save_loans(loans)  # 남은 데이터 저장
 
             return (
                 f"☠️ **{member.display_name}**님은 **연체 5회 초과**로 자동 파산 처리되었습니다.\n"
                 f"💥 모든 자산과 채무가 초기화되며, 신용등급은 `F`로 기록됩니다."
             )
 
+        # ❌ 등급 하락 반영
         if data["consecutive_failures"] >= 3:
             data["credit_grade"] = "F"
         elif data["consecutive_failures"] == 2:
@@ -6741,6 +6763,8 @@ async def try_repay(user_id, member, *, force=False):
             f"💣 누적 연체: {fails}회"
         )
         return format_repay_message(member, data["created_at"], total_due, result)
+
+
 
 
 
