@@ -6426,12 +6426,12 @@ def calculate_loan_due(principal, created_at_str, rate, *, force_future_30min=Fa
     created_at = datetime.fromisoformat(created_at_str)
     now = datetime.now(KST)
 
-    if force_future_30min:
-        elapsed = max((now - created_at).total_seconds(), 1)  # 최소 1초로 처리
-    else:
-        elapsed = (now - created_at).total_seconds()
-
+    elapsed = (now - created_at).total_seconds()
     intervals = max(int(elapsed // 1800) + 1, 1)  # ✅ 최소 1회차부터 시작
+
+    if force_future_30min:
+        intervals += 1  # ✅ "다음 상환 예정금"용 예고 회차
+
     return int(principal * ((1 + rate) ** intervals))
 
 
@@ -6828,7 +6828,7 @@ async def try_repay(user_id, member, *, force=False):
 
     now = datetime.now(KST)
     last_checked = datetime.fromisoformat(loan.get("last_checked", loan["created_at"]))
-    if (now - last_checked).total_seconds() < 1740:
+    if not force and (now - last_checked).total_seconds() < 1740:
         return None
 
     rate = loan.get("interest_rate", 0.05)
