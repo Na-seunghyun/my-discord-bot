@@ -6869,25 +6869,31 @@ async def try_repay(user_id, member, *, force=False):
         # ✅ 등급 회복 로직
         grade_change = get_grade_recovery_message(data)
 
-        # ✅ 필요한 정보 백업
+        # ✅ 기존 created_at 백업
+        created_at_backup = loan["created_at"]
+
+        # ✅ credit_grade와 success 횟수 백업
         credit_grade = data["credit_grade"]
         consecutive_successes = data["consecutive_successes"]
 
         # ✅ 대출 초기화
         clear_loan(user_id)
 
-        # ✅ 등급/성공횟수 정보 복구 및 저장
+        # ✅ 복구: 등급 정보 및 성공 횟수 유지
+        loans = load_loans()  # 다시 로드
         loans[user_id] = {
             "amount": 0,
             "credit_grade": credit_grade,
             "consecutive_successes": consecutive_successes,
             "consecutive_failures": 0,
-            "created_at": now.isoformat(),
+            "created_at": created_at_backup,
             "last_checked": now.isoformat(),
         }
         save_loans(loans)
 
-        return format_repay_message(member, data["created_at"], total_due, result, grade_change=grade_change)
+        # ✅ 정상 메시지 출력
+        return format_repay_message(member, created_at_backup, total_due, "✅ 결과: 상환 성공!", grade_change=grade_change)
+
 
 
     # ❌ 상환 실패
