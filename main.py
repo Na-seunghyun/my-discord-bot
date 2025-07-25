@@ -6647,6 +6647,10 @@ def get_grade_recovery_message(data):
         return "", grade, success  # 오류 방지 기본값 반환
 
     required = recovery_required.get(grade, 3)
+
+    # ✅ 디버깅 로그 추가
+    print(f"[DEBUG] 등급 회복 체크: 현재등급={grade}, 성공횟수={success}, 필요횟수={required}")
+
     if success >= required:
         idx = grade_order.index(grade)
         if idx + 1 < len(grade_order):
@@ -6921,6 +6925,9 @@ async def try_repay(user_id, member, *, force=False):
 
         # 등급 회복 처리
         grade_message, updated_credit_grade, updated_success = get_grade_recovery_message(data)
+
+        # ✅ 디버깅 로그
+        print(f"[DEBUG] 상환 성공 → 등급={updated_credit_grade}, success={updated_success}")
 
         created_at_backup = loan["created_at"]
         clear_loan(user_id)
