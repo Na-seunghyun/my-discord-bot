@@ -6909,11 +6909,7 @@ async def try_repay(user_id, member, *, force=False):
     data.setdefault("credit_grade", "C")
     data.setdefault("unpaid_days", 0)
 
-    result = ""
-    grade_change = None
-
     # ✅ 상환 성공
-    # ✅ 상환 성공 처리
     if wallet >= total_due or wallet + bank >= total_due:
         if wallet >= total_due:
             add_balance(user_id, -total_due)
@@ -6921,16 +6917,11 @@ async def try_repay(user_id, member, *, force=False):
             add_balance(user_id, -wallet)
             withdraw_from_bank(user_id, total_due - wallet)
 
-        # ✅ 사전에 success 1 증가
         data["consecutive_successes"] += 1
         data["consecutive_failures"] = 0
 
-        # ✅ 등급 회복 메시지 및 새 등급 계산
-        grade_message, updated_credit_grade, updated_success = get_grade_recovery_message(data)
-
-        # ✅ 로그 확인
-        print(f"[DEBUG] 등급 회복 체크: 현재등급={data['credit_grade']}, 성공횟수={updated_success}")
-        print(f"[DEBUG] 상환 성공 → 등급={updated_credit_grade}, success={updated_success}")
+        # ✅ 등급 회복 메시지 (단, 반환된 success 값은 사용 안함!)
+        grade_message, updated_credit_grade, _ = get_grade_recovery_message(data)
 
         # ✅ created_at 백업
         created_at_backup = loan["created_at"]
@@ -6938,25 +6929,21 @@ async def try_repay(user_id, member, *, force=False):
         # ✅ 대출 초기화
         clear_loan(user_id)
 
-        # ✅ 복구: 등급 및 회복 횟수 반영
+        # ✅ 최신 상태 복구 (등급은 get_grade_recovery_message에서 갱신됨)
         loans = load_loans()
         loans[user_id] = {
             "amount": 0,
             "credit_grade": updated_credit_grade,
-            "consecutive_successes": updated_success,
+            "consecutive_successes": data["consecutive_successes"],  # 누적된 값 유지
             "consecutive_failures": 0,
             "created_at": created_at_backup,
             "last_checked": now.isoformat(),
         }
         save_loans(loans)
 
-        return format_repay_message(
-            member,
-            created_at_backup,
-            total_due,
-            "✅ 결과: 상환 성공!",
-            grade_change=grade_message
-        )
+        print(f"[DEBUG] 상환 성공 → 등급={updated_credit_grade}, success={data['consecutive_successes']}")
+        return format_repay_message(member, created_at_backup, total_due, "✅ 결과: 상환 성공!", grade_change=grade_message)
+
 
 
     # ❌ 상환 실패
