@@ -5745,7 +5745,6 @@ initialize_easter_egg_files()
 
 
 # ✅ 박스알바 버튼 정의
-# ✅ 박스알바 버튼 정의
 class BoxButton(discord.ui.Button):
     def __init__(self, label, is_correct):
         super().__init__(style=discord.ButtonStyle.primary, label=label)
@@ -5759,13 +5758,13 @@ class BoxButton(discord.ui.Button):
         view.already_clicked = True
         user_id = str(interaction.user.id)
 
+        # ❌ 오답 처리
         if not self.is_correct:
-            update_job_record(user_id, 0, job_type="box", success=False)  # ❌ 실패 기록
+            update_job_record(user_id, 0, job_type="box", success=False)
             return await interaction.response.edit_message(
                 content="💥 오답! 박스가 아닌 걸 치웠어요...\n❌ 알바 실패!",
                 view=None
             )
-
 
         # ✅ 정답 처리
         reward = random.randint(500, 1500)
@@ -5775,38 +5774,6 @@ class BoxButton(discord.ui.Button):
             is_jackpot = True
 
         success = update_job_record(user_id, reward, job_type="box")
-        if not success:
-            update_job_record(user_id, reward, job_type="box", over_limit=True)
-            add_oduk_pool(reward)
-            pool_amount = get_oduk_pool_amount()
-
-            if random.random() < 0.8:
-                compensation = int(reward * 0.8)
-                add_balance(user_id, compensation)
-                return await interaction.response.edit_message(
-                    content=(
-                        f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
-                        f"⚖️ 고용노동부 신고 성공! **{compensation:,}원**을 되찾았습니다!\n"
-                        f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
-                        f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!"
-                    ),
-                    view=None
-                )
-
-            return await interaction.response.edit_message(
-                content=(
-                    f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
-                    f"💰 알바비는 모두 **오덕로또 상금 풀**에 적립되었습니다.\n"
-                    f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
-                    f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!"
-                ),
-                view=None
-            )
-
-        # ✅ 정상 보상
-        add_balance(user_id, reward)
-
-        # ✅ 이스터에그 체크
         click_time = datetime.now(KST)
         view_buttons = [btn.label for btn in view.children if isinstance(btn, BoxButton)]
         easter_eggs = check_box_job_easter_eggs(
@@ -5815,18 +5782,44 @@ class BoxButton(discord.ui.Button):
             view_buttons=view_buttons,
             reward=reward,
             click_time=click_time,
-            start_time=getattr(view, "start_time", datetime.now(KST))  # 🔐 방어용            
+            start_time=getattr(view, "start_time", datetime.now(KST))
         )
 
-        # ✅ 메시지 구성
+        # ✅ 초과근무 처리
+        if not success:
+            update_job_record(user_id, reward, job_type="box", over_limit=True)
+            add_oduk_pool(reward)
+            pool_amount = get_oduk_pool_amount()
+
+            if random.random() < 0.8:
+                compensation = int(reward * 0.8)
+                add_balance(user_id, compensation)
+                msg = (
+                    f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
+                    f"⚖️ 고용노동부 신고 성공! **{compensation:,}원**을 되찾았습니다!\n"
+                    f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
+                    f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!"
+                )
+            else:
+                msg = (
+                    f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
+                    f"💰 알바비는 모두 **오덕로또 상금 풀**에 적립되었습니다.\n"
+                    f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
+                    f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!"
+                )
+
+        else:
+            # ✅ 정상 보상
+            add_balance(user_id, reward)
+            msg = f"📦 박스를 정확히 치웠습니다! 💰 **{reward:,}원** 획득!"
+            if is_jackpot:
+                msg += "\n🎉 **우수 알바생! 보너스 지급으로 2배 보상!** 🎉"
+
+        # ✅ 공통 메시지: 알바 가능 횟수
         today = datetime.now(KST).date().isoformat()
         record = load_job_records().get(user_id, {})
         today_used = record.get("daily", {}).get(today, 0)
         remaining = max(0, 5 - today_used)
-
-        msg = f"📦 박스를 정확히 치웠습니다! 💰 **{reward:,}원** 획득!"
-        if is_jackpot:
-            msg += "\n🎉 **우수 알바생! 보너스 지급으로 2배 보상!** 🎉"
         msg += f"\n📌 오늘 남은 알바 가능 횟수: **{remaining}회** (총 5회 중)"
 
         # ✅ 이스터에그 칭호 메시지 추가
@@ -5856,6 +5849,7 @@ class BoxButton(discord.ui.Button):
                         msg += "\n💥 위기관리 전문가: 💣 4개 속에서도 정답!"
 
         await interaction.response.edit_message(content=msg, view=None)
+
 
 
 
