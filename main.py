@@ -5619,6 +5619,49 @@ async def 초대기록(interaction: discord.Interaction):
         await interaction.followup.send(part, ephemeral=True)
 
 
+
+# ✅ 이스터에그 파일 초기화
+EASTER_EGG_FILE = "easter_eggs.json"
+EASTER_EGG_DEFS_FILE = "easter_egg_defs.json"
+
+default_easter_egg_data = {}
+default_easter_egg_defs = {
+    "reaction_god": ["⚡ 반사신경의 신", "1초 내 정답 클릭"],
+    "slow_but_accurate": ["🐢 느림의 미학", "7초 이상 후 정답 클릭"],
+    "midnight_worker": ["🌙 자정근무자", "00시~00시10분 사이에 알바 성공"],
+    "cat_finder": ["🐱 냥이탐지자", "🐱이 포함된 화면에서 성공"],
+    "bomb_defuser": ["💣 폭탄처리반", "💣이 포함된 화면에서 성공"],
+    "perfect_luck": ["🍀 행운의 신", "잭팟 성공"],
+    "999_clicks": ["🧱 한계돌파", "누적 박스알바 999회 달성"],
+    "suffer_master": ["🔥 고통에 익숙한 자", "50회 이상 시도 / 성공률 10% 이하"],
+    "perfect_day": ["🎯 마침표의 미학", "하루 5회 알바 성공 완료"],
+    "bomb_expert": ["💥 위기관리 전문가", "💣 4개 이상 포함된 화면에서 성공"]
+}
+
+# ✅ 파일이 없을 때만 생성
+if not os.path.exists(EASTER_EGG_FILE):
+    with open(EASTER_EGG_FILE, "w", encoding="utf-8") as f:
+        json.dump(default_easter_egg_data, f, indent=2, ensure_ascii=False)
+
+if not os.path.exists(EASTER_EGG_DEFS_FILE):
+    with open(EASTER_EGG_DEFS_FILE, "w", encoding="utf-8") as f:
+        json.dump(default_easter_egg_defs, f, indent=2, ensure_ascii=False)
+
+def initialize_easter_egg_files():
+    if not os.path.exists(EASTER_EGG_FILE):
+        with open(EASTER_EGG_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f, indent=2, ensure_ascii=False)
+
+    if not os.path.exists(EASTER_EGG_DEFS_FILE):
+        with open(EASTER_EGG_DEFS_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_easter_egg_defs, f, indent=2, ensure_ascii=False)
+
+# 봇 실행 시 한 번만 호출
+initialize_easter_egg_files()
+
+
+
+
 # ✅ 박스알바 버튼 정의
 # ✅ 박스알바 버튼 정의
 class BoxButton(discord.ui.Button):
@@ -5641,23 +5684,22 @@ class BoxButton(discord.ui.Button):
                 view=None
             )
 
+
         # ✅ 정답 처리
         reward = random.randint(500, 1500)
         is_jackpot = False
-
         if random.random() < 0.05:
             reward *= 2
             is_jackpot = True
 
-        # ✅ 알바 가능 횟수 확인
         success = update_job_record(user_id, reward, job_type="box")
         if not success:
-            update_job_record(user_id, reward, job_type="box", over_limit=True)  # ⛔ 초과근무 기록
+            update_job_record(user_id, reward, job_type="box", over_limit=True)
             add_oduk_pool(reward)
             pool_amount = get_oduk_pool_amount()
 
             if random.random() < 0.8:
-                compensation = int(reward * 0.8)  # 80% 보상
+                compensation = int(reward * 0.8)
                 add_balance(user_id, compensation)
                 return await interaction.response.edit_message(
                     content=(
@@ -5682,6 +5724,19 @@ class BoxButton(discord.ui.Button):
         # ✅ 정상 보상
         add_balance(user_id, reward)
 
+        # ✅ 이스터에그 체크
+        click_time = datetime.now(KST)
+        view_buttons = [btn.label for btn in view.children if isinstance(btn, BoxButton)]
+        easter_eggs = check_box_job_easter_eggs(
+            user_id=user_id,
+            is_jackpot=is_jackpot,
+            view_buttons=view_buttons,
+            reward=reward,
+            click_time=click_time,
+            start_time=getattr(view, "start_time", datetime.now(KST))  # 🔐 방어용            
+        )
+
+        # ✅ 메시지 구성
         today = datetime.now(KST).date().isoformat()
         record = load_job_records().get(user_id, {})
         today_used = record.get("daily", {}).get(today, 0)
@@ -5691,7 +5746,35 @@ class BoxButton(discord.ui.Button):
         if is_jackpot:
             msg += "\n🎉 **우수 알바생! 보너스 지급으로 2배 보상!** 🎉"
         msg += f"\n📌 오늘 남은 알바 가능 횟수: **{remaining}회** (총 5회 중)"
+
+        # ✅ 이스터에그 칭호 메시지 추가
+        if easter_eggs:
+            msg += "\n\n🥚 **이스터에그 발견!**"
+            for egg in easter_eggs:
+                match egg:
+                    case "reaction_god":
+                        msg += "\n⚡ 반사신경의 신: 1초 내 클릭!"
+                    case "slow_but_accurate":
+                        msg += "\n🐢 느림의 미학: 느리지만 정확한 클릭!"
+                    case "midnight_worker":
+                        msg += "\n🌙 자정근무자: 00시의 성실한 알바!"
+                    case "cat_finder":
+                        msg += "\n🐱 냥이탐지자: 고양이도 함께 일했습니다!"
+                    case "bomb_defuser":
+                        msg += "\n💣 폭탄처리반: 위험 속의 승리!"
+                    case "perfect_luck":
+                        msg += "\n🍀 행운의 신: 잭팟까지 터졌습니다!"
+                    case "999_clicks":
+                        msg += "\n🧱 한계돌파: 999회 도달!"
+                    case "suffer_master":
+                        msg += "\n🔥 고통에 익숙한 자: 실패 속의 성공!"
+                    case "perfect_day":
+                        msg += "\n🎯 마침표의 미학: 완벽한 하루 알바 마감!"
+                    case "bomb_expert":
+                        msg += "\n💥 위기관리 전문가: 💣 4개 속에서도 정답!"
+
         await interaction.response.edit_message(content=msg, view=None)
+
 
 
 # ✅ 박스알바 UI View 정의
@@ -5700,6 +5783,8 @@ class BoxJobView(discord.ui.View):
         super().__init__(timeout=10)
         self.already_clicked = False
         self.interaction = interaction  # ✅ 저장
+
+        self.start_time = datetime.now(KST)  # ✅ 클릭 타이밍 분석용 (반응속도 측정용)
 
         items = [
             ("📦", True),
@@ -5712,6 +5797,7 @@ class BoxJobView(discord.ui.View):
         random.shuffle(items)
         for emoji, correct in items[:5]:
             self.add_item(BoxButton(label=emoji, is_correct=correct))
+
 
     async def on_timeout(self):
         if not self.already_clicked:
