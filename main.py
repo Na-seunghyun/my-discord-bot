@@ -5703,16 +5703,7 @@ def check_box_job_easter_eggs(user_id, is_jackpot, view_buttons, reward, click_t
         earn("perfect_day")
 
     save_easter_egg_data(data)
-        # ✅ 디버깅 로그
-    print("🔍 [이스터에그 체크]")
-    print(f" - 클릭 시간: {click_time}")
-    print(f" - 시작 시간: {start_time}")
-    print(f" - 반응 시간: {(click_time - start_time).total_seconds():.3f}초")
-    print(f" - 버튼 목록: {view_buttons}")
-    print(f" - 잭팟 여부: {is_jackpot}")
-    print(f" - 현재 기록: {records}")
-    print(f" - 금일 성공: {records.get('daily_success', {}).get(today, 0)}회")
-    print(f" - 획득한 칭호: {earned}")
+
     
     return earned
 
