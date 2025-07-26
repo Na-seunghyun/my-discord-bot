@@ -5624,6 +5624,7 @@ async def 초대기록(interaction: discord.Interaction):
 EASTER_EGG_FILE = "easter_eggs.json"
 EASTER_EGG_DEFS_FILE = "easter_egg_defs.json"
 
+
 default_easter_egg_data = {}
 default_easter_egg_defs = {
     "reaction_god": ["⚡ 반사신경의 신", "1초 내 정답 클릭"],
@@ -5637,6 +5638,76 @@ default_easter_egg_defs = {
     "perfect_day": ["🎯 마침표의 미학", "하루 5회 알바 성공 완료"],
     "bomb_expert": ["💥 위기관리 전문가", "💣 4개 이상 포함된 화면에서 성공"]
 }
+
+def load_easter_egg_data():
+    if not os.path.exists(EASTER_EGG_FILE):
+        return {}
+    with open(EASTER_EGG_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_easter_egg_data(data):
+    with open(EASTER_EGG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+def check_box_job_easter_eggs(user_id, is_jackpot, view_buttons, reward, click_time, start_time):
+    earned = []
+    data = load_easter_egg_data()
+    user_data = data.setdefault(user_id, {"eggs": [], "current_title": None})
+
+    def earn(egg_id):
+        if egg_id not in user_data["eggs"]:
+            user_data["eggs"].append(egg_id)
+            earned.append(egg_id)
+
+    # ✅ 1초 이내 반응
+    if (click_time - start_time).total_seconds() <= 1:
+        earn("reaction_god")
+
+    # ✅ 7초 이상 반응
+    if (click_time - start_time).total_seconds() >= 7:
+        earn("slow_but_accurate")
+
+    # ✅ 자정 근무자
+    if click_time.hour == 0 and click_time.minute < 10:
+        earn("midnight_worker")
+
+    # ✅ 화면에 🐱 있고 성공
+    if "🐱" in view_buttons:
+        earn("cat_finder")
+
+    # ✅ 화면에 💣 있고 성공
+    if "💣" in view_buttons:
+        earn("bomb_defuser")
+
+    # ✅ 💣이 4개 이상이면 폭탄전문가
+    if view_buttons.count("💣") >= 4:
+        earn("bomb_expert")
+
+    # ✅ 잭팟 성공
+    if is_jackpot:
+        earn("perfect_luck")
+
+    # ✅ 누적 999회 시도
+    records = load_job_records().get(user_id, {})
+    if records.get("weekly", {}).get("box", {}).get("total", 0) >= 999:
+        earn("999_clicks")
+
+    # ✅ 50회 이상 시도, 성공률 10% 이하
+    job_data = records.get("weekly", {}).get("box", {})
+    if job_data.get("total", 0) >= 50 and job_data.get("success", 0) / job_data["total"] <= 0.1:
+        earn("suffer_master")
+
+    # ✅ 하루 5회 성공
+    today = datetime.now(KST).date().isoformat()
+    if records.get("daily_success", {}).get(today, 0) >= 5:
+        earn("perfect_day")
+
+    save_easter_egg_data(data)
+    return earned
+
+
+
+
 
 # ✅ 파일이 없을 때만 생성
 if not os.path.exists(EASTER_EGG_FILE):
