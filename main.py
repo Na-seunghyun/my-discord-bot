@@ -6359,7 +6359,7 @@ class RealEstateView(ui.View):
                 profit_rate = 300
                 rocket_up = True
             else:
-                profit_rate = random.randint(-100, 50)
+                profit_rate = random.randint(-100, 80)
                 if profit_rate < 0:
                     profit_rate = int(profit_rate * loss_multiplier)
                     profit_rate = max(profit_rate, -100)  # 🔧 이 줄 추가!
