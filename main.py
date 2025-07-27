@@ -7558,6 +7558,67 @@ async def 감가테스트(interaction: discord.Interaction):
 
 
 
+from discord import app_commands, Interaction, File
+from discord.ext import commands
+from discord.ui import View, button, Button
+import discord
+import os
+from draw import generate_pubg_card  # 👈 draw.py를 동일 디렉토리에 두어야 함
+
+
+class MatchView(View):
+    def __init__(self, nickname):
+        super().__init__(timeout=60)
+        self.nickname = nickname
+
+    @button(label="📘 일반 매치", style=discord.ButtonStyle.primary)
+    async def normal_button(self, interaction: Interaction, button: Button):
+        await self.show_card(interaction, mode="일반")
+
+    @button(label="📕 경쟁 매치", style=discord.ButtonStyle.danger)
+    async def ranked_button(self, interaction: Interaction, button: Button):
+        await self.show_card(interaction, mode="경쟁")
+
+    @button(label="📜 매치 히스토리", style=discord.ButtonStyle.secondary)
+    async def history_button(self, interaction: Interaction, button: Button):
+        await self.show_card(interaction, mode="히스토리")
+
+    async def show_card(self, interaction: Interaction, mode: str):
+        await interaction.response.defer()
+
+        # ✅ 이후 PUBG API 연동 예정
+        dummy_stats = {
+            "kd": 1.42,
+            "avg_damage": 201.5,
+            "win_rate": 10.8
+        }
+        dummy_matches = [
+            {"map": "에란겔", "mode": "스쿼드", "kills": 4, "deaths": 1, "revives": 2, "damage": 320, "rank": 2},
+            {"map": "미라마", "mode": "듀오", "kills": 2, "deaths": 2, "revives": 1, "damage": 180, "rank": 6},
+            {"map": "태이고", "mode": "스쿼드", "kills": 3, "deaths": 1, "revives": 0, "damage": 250, "rank": 4},
+        ]
+
+        path = generate_pubg_card(
+            nickname=self.nickname,
+            metrics=dummy_stats,
+            mode=mode,
+            tier="Gold",
+            sub_tier="3",
+            matches=dummy_matches
+        )
+
+        await interaction.followup.send(file=File(path))
+        os.remove(path)  # 사용 후 이미지 제거
+
+
+@tree.command(name="전적카드", description="PUBG 전적을 이미지 카드 형태로 출력합니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(닉네임="PUBG 닉네임 (대소문자 일치 필수)")
+async def 전적카드(interaction: discord.Interaction, 닉네임: str):
+    await interaction.response.send_message(
+        f"🎮 `{닉네임}`님의 PUBG 전적카드: 조회 모드를 선택하세요!",
+        view=MatchView(닉네임),
+        ephemeral=True
+    )
 
 
 
