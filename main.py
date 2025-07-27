@@ -7523,6 +7523,24 @@ async def detect_matching_pubg_users():
                 await text_channel.send(embed=embed)
                 log(f"🍗 치킨 알림 전송 (버퍼 종료): {[u.display_name for u in detected_users.values()]}")
 
+            # ✅ 감지된 유저에게 5만원 보상 지급
+            for user_id, member in detected_users.items():
+                add_balance(str(user_id), 50_000)
+                log(f"💰 치킨 보상 지급: {member.display_name} (5만원)")
+
+            # ✅ 오덕도박장 채널로 보상 안내 Embed 전송
+            dokdo_channel = bot.get_channel(DOKDO_CHANNEL_ID)
+            if dokdo_channel:
+                names = ', '.join(member.display_name for member in detected_users.values())
+                reward_embed = discord.Embed(
+                    title="💰 치킨 보상 지급!",
+                    description=f"🍗 **{ch_key}** 채널의 유저들에게 1인당 **5만원**이 지급되었습니다!\n\n"
+                                f"👑 수령자: {names}",
+                    color=discord.Color.green()
+                )
+                reward_embed.set_footer(text="오덕봇 보상 시스템")
+                await dokdo_channel.send(embed=reward_embed)
+                
             # ✅ 알림 발송 시간 저장
             chicken_alerts[ch_key] = now
             expired_channels.append(ch_key)
