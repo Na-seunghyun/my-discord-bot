@@ -7575,45 +7575,62 @@ def extract_metrics(stats: dict, mode: str):
     game_stats = stats.get("data", {}).get("attributes", {}).get("gameModeStats", {})
 
     if mode == "일반":
-        mode_key = "squad"
-    elif mode == "경쟁":
-        mode_key = "squad-fpp"
-    else:
-        return {}, []
-
-    m = game_stats.get(mode_key, {})
-    if not m:
-        return {}, []
-
-    rounds = m.get("roundsPlayed", 0)
-    kills = m.get("kills", 0)
-    deaths = m.get("losses", 0) or (rounds - m.get("wins", 0))
-    kd = round(kills / deaths, 2) if deaths else kills
-    avg_damage = round(m.get("damageDealt", 0) / rounds, 1) if rounds else 0
-    win_rate = round((m.get("wins", 0) / rounds) * 100, 1) if rounds else 0
-
-    metrics = {
-        "kd": kd,
-        "avg_damage": avg_damage,
-        "win_rate": win_rate
-    }
-
-    match_history = [
-        {
-            "map": "에란겔", "mode": "스쿼드", "kills": 3,
-            "deaths": 1, "revives": 1, "damage": 320, "rank": 2
-        },
-        {
-            "map": "미라마", "mode": "스쿼드", "kills": 1,
-            "deaths": 2, "revives": 0, "damage": 150, "rank": 9
-        },
-        {
-            "map": "태이고", "mode": "스쿼드", "kills": 2,
-            "deaths": 1, "revives": 1, "damage": 280, "rank": 5
+        modes = {
+            "솔로": "solo",
+            "듀오": "duo",
+            "스쿼드": "squad"
         }
-    ]
+        metrics = {}
+        for label, key in modes.items():
+            m = game_stats.get(key, {})
+            rounds = m.get("roundsPlayed", 0)
+            kills = m.get("kills", 0)
+            deaths = m.get("losses", 0) or (rounds - m.get("wins", 0))
+            kd = round(kills / deaths, 2) if deaths else kills
+            avg_damage = round(m.get("damageDealt", 0) / rounds, 1) if rounds else 0
+            win_rate = round((m.get("wins", 0) / rounds) * 100, 1) if rounds else 0
+            metrics[label] = {
+                "kd": kd,
+                "avg_damage": avg_damage,
+                "win_rate": win_rate
+            }
+        return metrics, []
 
-    return metrics, match_history
+    elif mode == "경쟁":
+        m = game_stats.get("squad-fpp", {})
+        rounds = m.get("roundsPlayed", 0)
+        kills = m.get("kills", 0)
+        deaths = m.get("losses", 0) or (rounds - m.get("wins", 0))
+        kd = round(kills / deaths, 2) if deaths else kills
+        avg_damage = round(m.get("damageDealt", 0) / rounds, 1) if rounds else 0
+        win_rate = round((m.get("wins", 0) / rounds) * 100, 1) if rounds else 0
+        metrics = {
+            "kd": kd,
+            "avg_damage": avg_damage,
+            "win_rate": win_rate
+        }
+        return metrics, []
+
+    elif mode == "히스토리":
+        # 🔶 예시 매치 데이터 반환
+        match_history = [
+            {
+                "map": "에란겔", "mode": "스쿼드", "kills": 3,
+                "deaths": 1, "revives": 1, "damage": 320, "rank": 2
+            },
+            {
+                "map": "미라마", "mode": "스쿼드", "kills": 1,
+                "deaths": 2, "revives": 0, "damage": 150, "rank": 9
+            },
+            {
+                "map": "태이고", "mode": "스쿼드", "kills": 2,
+                "deaths": 1, "revives": 1, "damage": 280, "rank": 5
+            }
+        ]
+        return {}, match_history
+
+    return {}, []
+
 
 
 class MatchView(View):
