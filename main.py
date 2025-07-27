@@ -7558,12 +7558,62 @@ async def 감가테스트(interaction: discord.Interaction):
 
 
 
+
+
+
 from discord import app_commands, Interaction, File
 from discord.ext import commands
 from discord.ui import View, button, Button
 import discord
 import os
-from draw import generate_pubg_card  # 👈 draw.py를 동일 디렉토리에 두어야 함
+from draw import generate_pubg_card
+from pubg_api import get_player_id, get_season_id, get_player_stats  # ✅ 기존 API 코드 모듈화했다고 가정
+
+# 🟡 주요 스탯 추출 함수
+
+def extract_metrics(stats: dict, mode: str):
+    game_stats = stats.get("data", {}).get("attributes", {}).get("gameModeStats", {})
+
+    if mode == "일반":
+        mode_key = "squad"
+    elif mode == "경쟁":
+        mode_key = "squad-fpp"
+    else:
+        return {}, []
+
+    m = game_stats.get(mode_key, {})
+    if not m:
+        return {}, []
+
+    rounds = m.get("roundsPlayed", 0)
+    kills = m.get("kills", 0)
+    deaths = m.get("losses", 0) or (rounds - m.get("wins", 0))
+    kd = round(kills / deaths, 2) if deaths else kills
+    avg_damage = round(m.get("damageDealt", 0) / rounds, 1) if rounds else 0
+    win_rate = round((m.get("wins", 0) / rounds) * 100, 1) if rounds else 0
+
+    metrics = {
+        "kd": kd,
+        "avg_damage": avg_damage,
+        "win_rate": win_rate
+    }
+
+    match_history = [
+        {
+            "map": "에란겔", "mode": "스쿼드", "kills": 3,
+            "deaths": 1, "revives": 1, "damage": 320, "rank": 2
+        },
+        {
+            "map": "미라마", "mode": "스쿼드", "kills": 1,
+            "deaths": 2, "revives": 0, "damage": 150, "rank": 9
+        },
+        {
+            "map": "태이고", "mode": "스쿼드", "kills": 2,
+            "deaths": 1, "revives": 1, "damage": 280, "rank": 5
+        }
+    ]
+
+    return metrics, match_history
 
 
 class MatchView(View):
@@ -7573,42 +7623,50 @@ class MatchView(View):
 
     @button(label="📘 일반 매치", style=discord.ButtonStyle.primary)
     async def normal_button(self, interaction: Interaction, button: Button):
-        await self.show_card(interaction, mode="일반")
+        await self.show_card(interaction, "일반")
 
     @button(label="📕 경쟁 매치", style=discord.ButtonStyle.danger)
     async def ranked_button(self, interaction: Interaction, button: Button):
-        await self.show_card(interaction, mode="경쟁")
+        await self.show_card(interaction, "경쟁")
 
     @button(label="📜 매치 히스토리", style=discord.ButtonStyle.secondary)
     async def history_button(self, interaction: Interaction, button: Button):
-        await self.show_card(interaction, mode="히스토리")
+        await self.show_card(interaction, "히스토리")
 
     async def show_card(self, interaction: Interaction, mode: str):
         await interaction.response.defer()
+        try:
+            player_id = get_player_id(self.nickname)
+            season_id = get_season_id()
+            stats = get_player_stats(player_id, season_id)
+        except Exception as e:
+            await interaction.followup.send(f"❌ API 요청 실패: {e}")
+            return
 
-        # ✅ 이후 PUBG API 연동 예정
-        dummy_stats = {
-            "kd": 1.42,
-            "avg_damage": 201.5,
-            "win_rate": 10.8
-        }
-        dummy_matches = [
-            {"map": "에란겔", "mode": "스쿼드", "kills": 4, "deaths": 1, "revives": 2, "damage": 320, "rank": 2},
-            {"map": "미라마", "mode": "듀오", "kills": 2, "deaths": 2, "revives": 1, "damage": 180, "rank": 6},
-            {"map": "태이고", "mode": "스쿼드", "kills": 3, "deaths": 1, "revives": 0, "damage": 250, "rank": 4},
-        ]
+        metrics, matches = extract_metrics(stats, mode)
+        tier, sub_tier = "Unranked", ""
 
-        path = generate_pubg_card(
+        if mode == "경쟁":
+            try:
+                ranked = stats.get("data", {}).get("attributes", {}).get("rankedGameModeStats", {})
+                ranked_squad = ranked.get("squad")
+                if ranked_squad:
+                    tier = ranked_squad.get("currentTier", {}).get("tier", "Unranked")
+                    sub_tier = ranked_squad.get("currentTier", {}).get("subTier", "")
+            except:
+                pass
+
+        image_path = generate_pubg_card(
             nickname=self.nickname,
-            metrics=dummy_stats,
+            metrics=metrics,
             mode=mode,
-            tier="Gold",
-            sub_tier="3",
-            matches=dummy_matches
+            tier=tier,
+            sub_tier=sub_tier,
+            matches=matches
         )
 
-        await interaction.followup.send(file=File(path))
-        os.remove(path)  # 사용 후 이미지 제거
+        await interaction.followup.send(file=File(image_path))
+        os.remove(image_path)
 
 
 @tree.command(name="전적카드", description="PUBG 전적을 이미지 카드 형태로 출력합니다.", guild=discord.Object(id=GUILD_ID))
