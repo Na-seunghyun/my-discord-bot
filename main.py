@@ -17,6 +17,21 @@ from supabase import create_client, Client
 import uuid  # uuid 추가
 
 from dotenv import load_dotenv
+from module.building_manager import (
+    get_building_choices,
+    buy_building_selected,
+    manage_building,
+    show_building_status,
+    clean_building,
+    advertise_building,
+    boost_satisfaction,
+    sell_user_building,
+)
+
+
+
+
+
 load_dotenv()
 
 
@@ -6849,6 +6864,82 @@ def get_user_credit_grade(user_id: str) -> str:
 
 
 GAMBLING_CHANNEL_ID = 1394331814642057418
+
+# ✅ 건물 구입
+@tree.command(name="건물구입", description="건물을 구매합니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(건물이름="구매할 건물 이름")
+@app_commands.autocomplete(건물이름=building_manager.get_building_choices)
+async def 건물구입(interaction: discord.Interaction, 건물이름: str):
+    if interaction.channel.id != GAMBLING_CHANNEL_ID:
+        return await interaction.response.send_message(
+            "❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.", ephemeral=True)
+
+    await building_manager.buy_building_selected(interaction, 건물이름)
+
+
+# ✅ 건물 관리
+@tree.command(name="건물관리", description="건물을 관리하여 수익을 얻습니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물관리(interaction: discord.Interaction):
+    if interaction.channel.id != GAMBLING_CHANNEL_ID:
+        return await interaction.response.send_message("❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.", ephemeral=True)
+    await manage_building(interaction)
+
+# ✅ 건물 청소
+@tree.command(name="건물청소", description="건물의 청결도를 회복합니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물청소(interaction: discord.Interaction):
+    if interaction.channel.id != GAMBLING_CHANNEL_ID:
+        return await interaction.response.send_message("❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.", ephemeral=True)
+    await clean_building(interaction)
+
+# ✅ 건물 광고
+@tree.command(name="건물광고", description="건물의 인기도를 회복합니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물광고(interaction: discord.Interaction):
+    if interaction.channel.id != GAMBLING_CHANNEL_ID:
+        return await interaction.response.send_message("❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.", ephemeral=True)
+    await advertise_building(interaction)
+
+# ✅ 건물 만족도
+@tree.command(name="건물만족도", description="건물의 만족도를 회복합니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물만족도(interaction: discord.Interaction):
+    if interaction.channel.id != GAMBLING_CHANNEL_ID:
+        return await interaction.response.send_message("❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.", ephemeral=True)
+    await boost_satisfaction(interaction)
+
+# ✅ 건물 현황 보기
+@tree.command(name="건물현황", description="현재 보유 중인 건물의 상태를 확인합니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물현황(interaction: discord.Interaction):
+    if interaction.channel.id != GAMBLING_CHANNEL_ID:
+        return await interaction.response.send_message("❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.", ephemeral=True)
+    await show_building_status(interaction)
+
+# ✅ 건물 판매
+@tree.command(name="건물판매", description="보유 중인 건물을 판매합니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물판매(interaction: discord.Interaction):
+    if interaction.channel.id != GAMBLING_CHANNEL_ID:
+        return await interaction.response.send_message("❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.", ephemeral=True)
+
+    user_id = str(interaction.user.id)
+    amount = sell_user_building(user_id)
+    if amount == 0:
+        return await interaction.response.send_message("🏚️ 판매할 건물이 없습니다.", ephemeral=True)
+
+    add_balance(user_id, amount)
+    await interaction.response.send_message(f"🏦 건물을 판매하고 {amount:,}원을 수령했습니다. (세금 포함)", ephemeral=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 @tree.command(name="대출", description="신용등급에 따라 돈을 대출받습니다.", guild=discord.Object(id=GUILD_ID))
