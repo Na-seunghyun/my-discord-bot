@@ -7708,10 +7708,16 @@ def apply_alba_bonus(user_id, base_reward):
     if not building:
         return base_reward
 
-    effect = BUILDING_EFFECTS.get(building["effect"])
+    building_id = building.get("building_id")
+    building_def = BUILDING_DEFS.get(building_id)
+    if not building_def:
+        return base_reward
+
+    effect = BUILDING_EFFECTS.get(building_def.get("effect"))
     if effect and effect["target"] == "alba":
         return int(base_reward * (1 + effect["value"]))
     return base_reward
+
 
 # ✅ 투자 수익 보정
 
@@ -7720,10 +7726,16 @@ def apply_investment_bonus(user_id, reward):
     if not building:
         return reward
 
-    effect = BUILDING_EFFECTS.get(building["effect"])
+    building_id = building.get("building_id")
+    building_def = BUILDING_DEFS.get(building_id)
+    if not building_def:
+        return reward
+
+    effect = BUILDING_EFFECTS.get(building_def.get("effect"))
     if effect and effect["target"] == "invest":
         return int(reward * (1 + effect["value"]))
     return reward
+
 
 # ✅ 은행 이자 보정
 
@@ -7732,7 +7744,12 @@ def apply_interest_bonus(user_id, interest):
     if not building:
         return interest
 
-    effect = BUILDING_EFFECTS.get(building["effect"])
+    building_id = building.get("building_id")
+    building_def = BUILDING_DEFS.get(building_id)
+    if not building_def:
+        return interest
+
+    effect = BUILDING_EFFECTS.get(building_def.get("effect"))
     if effect and effect["target"] == "bank_interest":
         return int(interest * (1 + effect["value"]))
     return interest
@@ -7744,7 +7761,12 @@ def apply_exp_boost(user_id, base_exp):
     if not building:
         return base_exp
 
-    effect = BUILDING_EFFECTS.get(building["effect"])
+    building_id = building.get("building_id")
+    building_def = BUILDING_DEFS.get(building_id)
+    if not building_def:
+        return base_exp
+
+    effect = BUILDING_EFFECTS.get(building_def.get("effect"))
     if effect and effect["target"] == "exp":
         return int(base_exp * (1 + effect["value"]))
     return base_exp
@@ -7888,7 +7910,6 @@ def clear_user_building(user_id):
     data = load_building_data()
     data.pop(str(user_id), None)
     save_building_data(data)
-
 
 
 def get_required_exp(level: int) -> int:
