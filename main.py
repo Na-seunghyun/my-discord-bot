@@ -17,17 +17,6 @@ from supabase import create_client, Client
 import uuid  # uuid 추가
 
 from dotenv import load_dotenv
-from module.building_manager import (
-    get_building_choices,
-    buy_building_selected,
-    manage_building,
-    show_building_status,
-    clean_building,
-    advertise_building,
-    boost_satisfaction,
-    sell_user_building,
-)
-
 
 
 
