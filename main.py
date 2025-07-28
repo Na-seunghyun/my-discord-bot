@@ -2725,6 +2725,8 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
 
 
 
+from module.building_manager import get_user_building  # 건물 보유 체크용 import 추가
+
 @tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 100원부터 도박 가능")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
@@ -2785,13 +2787,25 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         record_gamble_result(user_id, success=True)
         title = get_gamble_title(user_id, success=True)
 
+        # ✅ 상태치 확률 상승 처리 (건물 보유자만)
+        gained_stat_text = ""
+        if get_user_building(user_id):
+            stat_gains = []
+            for stat in ["stability", "risk", "labor", "tech"]:
+                if random.random() < 0.15:
+                    add_user_stat(user_id, stat, 1)
+                    stat_gains.append(stat)
+            if stat_gains:
+                gained_stat_text = f"\n📈 상태치 증가: {', '.join(stat_gains)}"
+
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
         embed = create_embed(
             "🎉 도박 성공!",
             f"{jackpot_msg}"
             f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
             f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n"
-            f"🏅 칭호: {title}",
+            f"🏅 칭호: {title}"
+            f"{gained_stat_text}",
             discord.Color.gold() if is_jackpot else discord.Color.green(),
             user_id
         )
@@ -2817,6 +2831,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
 
     await interaction.response.send_message(embed=embed)
+
 
 
 
@@ -5816,6 +5831,17 @@ class BoxButton(discord.ui.Button):
             msg = f"📦 박스를 정확히 치웠습니다! 💰 **{reward:,}원** 획득!"
             if is_jackpot:
                 msg += "\n🎉 **우수 알바생! 보너스 지급으로 2배 보상!** 🎉"
+
+            # ✅ 상태치 확률 상승 처리 (건물 보유자만)
+            from module.building_manager import get_user_building  # 건물 보유 체크
+            if get_user_building(user_id):
+                stat_gains = []
+                for stat in ["stability", "risk", "labor", "tech"]:
+                    if random.random() < 0.15:
+                        add_user_stat(user_id, stat, 1)
+                        stat_gains.append(stat)
+                if stat_gains:
+                    msg += f"\n📈 상태치 증가: {', '.join(stat_gains)}"
 
         # ✅ 공통 메시지: 알바 가능 횟수
         today = datetime.now(KST).date().isoformat()
