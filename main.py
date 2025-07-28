@@ -7840,7 +7840,7 @@ BUILDING_DEFS = {
         "traits": ["risk"],
         "effect": "jackpot_chance",
         "level_requirements": {
-            2: {"risk": 20}, 5: {"risk": 45}, 10: {"risk": 80}, 20: {"risk": 120}
+            2: {"risk": 20}, 5: {"risk": 45}, 10: {"risk": 100}, 20: {"risk": 160}
         },
         "description": "🎰 도박 잭팟 확률 증가"
     },
@@ -7855,7 +7855,7 @@ BUILDING_DEFS = {
         "traits": ["tech", "labor"],
         "effect": "exp_boost",
         "level_requirements": {
-            2: {"tech": 10, "labor": 10}, 5: {"tech": 30, "labor": 20}, 10: {"tech": 50, "labor": 50}
+            2: {"tech": 10, "labor": 10}, 5: {"tech": 40, "labor": 30}, 10: {"tech": 65, "labor": 60}
         },
         "description": "📖 경험치 획득량 증가"
     },
@@ -7870,7 +7870,7 @@ BUILDING_DEFS = {
         "traits": ["stability", "risk"],
         "effect": "real_estate_shield",
         "level_requirements": {
-            2: {"stability": 10}, 5: {"stability": 30}, 10: {"stability": 60}
+            2: {"stability": 10}, 5: {"stability": 35}, 10: {"stability": 70}
         },
         "description": "📉 부동산 손실률을 줄여주는 안정형 자산"
     },
@@ -7886,7 +7886,7 @@ BUILDING_DEFS = {
         "traits": ["stability", "tech"],
         "effect": "bank_bonus",
         "level_requirements": {
-            2: {"stability": 15, "tech": 10}, 5: {"stability": 35, "tech": 30}, 10: {"stability": 60, "tech": 60}
+            2: {"stability": 15, "tech": 10}, 5: {"stability": 45, "tech": 40}, 10: {"stability": 80, "tech": 80}
         },
         "description": "🏦 은행 이자 증가"
     }
@@ -7972,15 +7972,41 @@ def can_level_up(user_id: str, data: dict) -> tuple[bool, str]:
     next_lv = lv + 1
     if next_lv > b["max_level"]:
         return False, "🏁 최대 레벨 도달"
-    if data["exp"] < get_required_exp(lv):
-        return False, f"🧪 경험치 부족 ({data['exp']} / {get_required_exp(lv)})"
+
+    messages = []
+    ok = True
+
+    # 경험치 조건
+    current_exp = data["exp"]
+    required_exp = get_required_exp(lv)
+    if current_exp < required_exp:
+        messages.append(f"🧪 경험치 부족 ({current_exp} / {required_exp})")
+        ok = False
+    else:
+        messages.append(f"🧪 경험치 ✅ ({current_exp} / {required_exp})")
+
+    # 상태치 조건
     stat_req = b.get("level_requirements", {}).get(next_lv)
     if stat_req:
         stats = get_user_stats(user_id)
         for stat, req in stat_req.items():
-            if stats.get(stat, 0) < req:
-                return False, f"❌ {stat} {req} 필요 (보유 {stats.get(stat, 0)})"
-    return True, "레벨업 가능"
+            user_val = stats.get(stat, 0)
+            if user_val < req:
+                messages.append(f"🔧 {stat}: ❌ {user_val} / {req}")
+                ok = False
+            else:
+                messages.append(f"🔧 {stat}: ✅ {user_val} / {req}")
+
+    # 비용 조건
+    cost = get_level_up_cost(next_lv)
+    if get_balance(user_id) < cost:
+        messages.append(f"💸 비용 부족: ❌ 잔액 {get_balance(user_id):,} / 필요 {cost:,}")
+        ok = False
+    else:
+        messages.append(f"💸 비용 충분: ✅ 잔액 {get_balance(user_id):,} / 필요 {cost:,}")
+
+    return ok, "\n".join(messages)
+
 
 def perform_level_up(user_id: str):
     data = get_user_building(user_id)
