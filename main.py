@@ -5788,8 +5788,6 @@ class BoxButton(discord.ui.Button):
             reward *= 2
             is_jackpot = True
 
-        reward = apply_alba_bonus(user_id, reward)
-
         success = update_job_record(user_id, reward, job_type="box")
         click_time = datetime.now(KST)
         view_buttons = [btn.label for btn in view.children if isinstance(btn, BoxButton)]
@@ -5810,12 +5808,13 @@ class BoxButton(discord.ui.Button):
 
             if random.random() < 0.8:
                 compensation = int(reward * 0.8)
-                compensation = apply_alba_bonus(user_id, compensation)
-                bonus_amount = compensation - int(reward * 0.8)
-                add_balance(user_id, compensation)
+                compensation_with_bonus = apply_alba_bonus(user_id, compensation)
+                bonus_amount = compensation_with_bonus - compensation
+                add_balance(user_id, compensation_with_bonus)
+
                 msg = (
                     f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
-                    f"⚖️ 고용노동부 신고 성공! **{compensation:,}원**을 되찾았습니다!"
+                    f"⚖️ 고용노동부 신고 성공! **{compensation_with_bonus:,}원**을 되찾았습니다!"
                 )
                 if bonus_amount > 0:
                     msg += f"\n🏢 건물 효과로 추가 보너스 +**{bonus_amount:,}원**!"
@@ -5833,17 +5832,15 @@ class BoxButton(discord.ui.Button):
                 )
 
         else:
-            # ✅ 정상 보상
+            # ✅ 정상 보상 처리
             base_reward = reward
-            reward = apply_alba_bonus(user_id, reward)
-            bonus_amount = reward - base_reward
+            reward_with_bonus = apply_alba_bonus(user_id, reward)
+            bonus_amount = reward_with_bonus - base_reward
+            add_balance(user_id, reward_with_bonus)
 
-            add_balance(user_id, reward)
-            msg = f"📦 박스를 정확히 치웠습니다! 💰 **{reward:,}원** 획득!"
-            
+            msg = f"📦 박스를 정확히 치웠습니다! 💰 **{reward_with_bonus:,}원** 획득!"
             if bonus_amount > 0:
                 msg += f"\n🏢 건물 보유 효과로 추가 보너스 +**{bonus_amount:,}원**!"
-
             if is_jackpot:
                 msg += "\n🎉 **우수 알바생! 보너스 지급으로 2배 보상!** 🎉"
 
