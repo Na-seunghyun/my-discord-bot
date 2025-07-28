@@ -7901,21 +7901,18 @@ def perform_level_up(user_id: str):
     set_user_building(user_id, data)
     return f"🎉 Lv.{data['level']} 달성!"
 
-# ✅ 건물 자동완성 함수
-@app_commands.autocomplete("건물")
+# ✅ 자동완성 함수
 async def 건물_자동완성(interaction: discord.Interaction, current: str):
-    choices = [
+    return [
         app_commands.Choice(
             name=f"{v['name']} - {v['price']:,}원 ({v['description']})",
             value=k
         )
         for k, v in BUILDING_DEFS.items()
         if current.lower() in k.lower() or current in v["name"]
-    ][:25]  # Discord 제한: 최대 25개
+    ][:25]
 
-    return choices
-
-# ✅ 건물 구입 명령어
+# ✅ 명령어 정의
 @tree.command(name="건물구입", description="건물을 구입하여 매일 자동 보상을 받습니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(건물="구매할 건물")
 async def 건물구입(interaction: discord.Interaction, 건물: str):
@@ -7930,8 +7927,7 @@ async def 건물구입(interaction: discord.Interaction, 건물: str):
         return await interaction.response.send_message("❌ 존재하지 않는 건물입니다.", ephemeral=True)
 
     if balance < building["price"]:
-        return await interaction.response.send_message(
-            f"💰 잔액 부족: {balance:,}원 / 필요 {building['price']:,}원", ephemeral=True)
+        return await interaction.response.send_message(f"💰 잔액 부족: {balance:,}원 / 필요 {building['price']:,}원", ephemeral=True)
 
     # 건물 구매 처리
     set_user_building(user_id, {
@@ -7945,10 +7941,11 @@ async def 건물구입(interaction: discord.Interaction, 건물: str):
 
     await interaction.response.send_message(
         f"✅ {building['name']}를 구입했습니다! 매일 자동 보상이 누적됩니다.\n"
-        f"💰 가격: {building['price']:,}원\n"
-        f"🔧 특성: {', '.join(building['traits'])}\n"
-        f"🧱 효과: {building['description']}"
+        f"💰 가격: {building['price']:,}원\n🔧 특성: {', '.join(building['traits'])}\n🧱 효과: {building['description']}"
     )
+
+# ✅ 자동완성 연결
+건물구입.autocomplete("건물")(건물_자동완성)
 
 
 @tree.command(name="건물정보", description="현재 보유 중인 건물의 상태를 확인합니다.", guild=discord.Object(id=GUILD_ID))
