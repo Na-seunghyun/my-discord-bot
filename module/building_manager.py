@@ -1,4 +1,3 @@
-# building_manager.py
 import json, os, random
 from datetime import datetime
 from discord import Interaction, Embed, app_commands
@@ -63,8 +62,6 @@ BUILDING_DEFS = {
 
 BUILDING_FILE = "data/buildings.json"
 
-from main import get_balance, add_balance, add_oduk_pool
-
 # ---------------- 기본 입출력 ----------------
 def load_building_data():
     if not os.path.exists(BUILDING_FILE):
@@ -86,6 +83,10 @@ def set_user_building(user_id, building_info):
 
 def load_building_defs():
     return BUILDING_DEFS
+
+def get_building_choices():
+    defs = load_building_defs()
+    return [app_commands.Choice(name=f"{name} ({defs[name]['price']:,}원)", value=name) for name in defs]
 
 # ---------------- 상태치 회복 제한 ----------------
 def can_use_stat_action(building: dict, key: str) -> bool:
