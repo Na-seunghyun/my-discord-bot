@@ -7677,14 +7677,21 @@ def apply_gamble_bonus(user_id, base_reward):
     return base_reward
 
 def get_jackpot_chance(user_id, base_chance):
-    building = get_user_building(user_id)
-    if not building:
+    user_building = get_user_building(user_id)
+    if not user_building:
         return base_chance
 
-    effect = BUILDING_EFFECTS.get(building["effect"])
-    if effect and effect["target"] == "jackpot_chance":
-        return base_chance + effect["value"]
+    building_id = user_building.get("building_id")
+    building_def = BUILDING_DEFS.get(building_id)
+    if not building_def:
+        return base_chance
+
+    effect_key = building_def.get("effect")
+    effect = BUILDING_EFFECTS.get(effect_key)
+    if effect and effect.get("target") == "jackpot_chance":
+        return base_chance + effect.get("value", 0)
     return base_chance
+
 
 # ✅ 알바 보상에 건물 효과 적용
 
