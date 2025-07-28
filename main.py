@@ -6369,18 +6369,6 @@ class RealEstateView(ui.View):
             else:
                 loss_multiplier = 2.0
 
-            # ✅ 건물 효과 확인
-            user_building = get_user_building(user_id)
-            bonus_rate = 0
-            loss_shield = False
-            if user_building:
-                defs = load_building_defs()
-                b_id = user_building["building_id"]
-                effect = defs[b_id].get("bonus_effect")
-                if effect == "real_estate_bonus":
-                    bonus_rate = 10
-                elif effect == "real_estate_shield":
-                    loss_shield = True
 
             rocket_up = False
             bonus_boost = False
