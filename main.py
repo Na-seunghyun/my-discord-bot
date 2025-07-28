@@ -6396,7 +6396,7 @@ class RealEstateView(ui.View):
 
                     # ✅ 손실 완화 효과 적용
                     if loss_shield:
-                        profit_rate = int(profit_rate * 0.6)  # 예: -60% → -36%
+                        profit_rate = int(profit_rate * 0.6)
                         profit_rate = max(profit_rate, -100)
 
             if not rocket_up and random.random() < 0.03:
@@ -6405,7 +6405,12 @@ class RealEstateView(ui.View):
 
             profit_rate += bonus_rate
 
-            profit_amount = int(self.invest_amount * (profit_rate / 100))
+            # ✅ 기본 수익 계산
+            profit_amount_raw = int(self.invest_amount * (profit_rate / 100))
+
+            # ✅ 건물 효과 보정 적용
+            profit_amount = apply_investment_bonus(user_id, profit_amount_raw)
+
             tax = int(profit_amount * 0.1) if profit_amount > 0 else 0
             net_gain = profit_amount - tax
             receive = self.invest_amount + net_gain
@@ -6476,6 +6481,7 @@ class RealEstateView(ui.View):
             self.disabled_regions.add(region)
 
         return callback
+
 
 
 # ✅ 부동산투자 명령어
