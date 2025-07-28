@@ -7870,10 +7870,9 @@ def get_user_stats(user_id: str):
     return load_user_stats().get(user_id, {k: 0 for k in STAT_KEYS})
 
 def clear_user_building(user_id):
-    path = "building_data.json"
-    data = load_json(path)
+    data = load_building_data()
     data.pop(str(user_id), None)
-    save_json(path, data)
+    save_building_data(data)
 
 
 
