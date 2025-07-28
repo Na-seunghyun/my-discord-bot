@@ -7667,14 +7667,22 @@ def get_user_building(user_id):
 # ✅ 도박 보상 / 잭팟 확률에 건물 효과 적용
 
 def apply_gamble_bonus(user_id, base_reward):
-    building = get_user_building(user_id)
-    if not building:
+    user_building = get_user_building(user_id)
+    if not user_building:
         return base_reward
 
-    effect = BUILDING_EFFECTS.get(building["effect"])
-    if effect and effect["target"] == "gamble":
-        return int(base_reward * (1 + effect["value"]))
+    building_id = user_building.get("building_id")
+    building_def = BUILDING_DEFS.get(building_id)
+    if not building_def:
+        return base_reward
+
+    effect_key = building_def.get("effect")
+    effect = BUILDING_EFFECTS.get(effect_key)
+
+    if effect and effect.get("target") == "gamble_bonus":
+        return int(base_reward * (1 + effect.get("value", 0)))
     return base_reward
+
 
 def get_jackpot_chance(user_id, base_chance):
     user_building = get_user_building(user_id)
