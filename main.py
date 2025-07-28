@@ -5501,7 +5501,8 @@ async def 타자알바(interaction: discord.Interaction):
         base_reward = 1200
         penalty = int(elapsed * 60)
         reward = max(120, base_reward - penalty)
-        reward = apply_building_bonus(user_id, reward, job_type="alba")
+        reward = apply_alba_bonus(user_id, reward)
+
 
         if random.random() < 0.01:
             reward *= 3
@@ -5772,7 +5773,7 @@ class BoxButton(discord.ui.Button):
             reward *= 2
             is_jackpot = True
 
-        reward = apply_building_bonus(user_id, reward, job_type="alba")
+        reward = apply_alba_bonus(user_id, reward)
 
         success = update_job_record(user_id, reward, job_type="box")
         click_time = datetime.now(KST)
@@ -5972,15 +5973,6 @@ def process_bank_withdraw(user_id, amount):
 
     updated_deposits = []
 
-    # ✅ 건물 보너스 확인
-    user_building = get_user_building(user_id)
-    bonus_multiplier = 1.0
-    if user_building:
-        defs = load_building_defs()
-        b_id = user_building["building_id"]
-        if defs[b_id].get("bonus_effect") == "bank_bonus":
-            bonus_multiplier = 1.1  # 10% 보너스
-
     for d in deposits:
         available = d["amount"] - d.get("used", 0)
         if available <= 0:
@@ -5994,7 +5986,7 @@ def process_bank_withdraw(user_id, amount):
         deposit_time = datetime.fromisoformat(d["timestamp"])
         if now - deposit_time >= timedelta(hours=3):
             interest = int(take * 0.02)
-            interest = int(interest * bonus_multiplier)  # ✅ 건물 효과 반영
+            interest = apply_interest_bonus(user_id, base_interest)  # ✅ 건물 보정 적용
             interest_total += interest
 
         updated_deposits.append(d)
