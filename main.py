@@ -6369,6 +6369,8 @@ class RealEstateView(ui.View):
             else:
                 loss_multiplier = 2.0
 
+            # ✅ 건물 효과: 손실 완화 여부 확인
+            loss_shield = has_real_estate_shield(user_id)
 
             rocket_up = False
             bonus_boost = False
@@ -6382,7 +6384,6 @@ class RealEstateView(ui.View):
                     profit_rate = int(profit_rate * loss_multiplier)
                     profit_rate = max(profit_rate, -100)
 
-                    # ✅ 손실 완화 효과 적용
                     if loss_shield:
                         profit_rate = int(profit_rate * 0.6)
                         profit_rate = max(profit_rate, -100)
@@ -6390,8 +6391,6 @@ class RealEstateView(ui.View):
             if not rocket_up and random.random() < 0.03:
                 bonus_boost = True
                 profit_rate += 50
-
-         
 
             # ✅ 기본 수익 계산
             profit_amount_raw = int(self.invest_amount * (profit_rate / 100))
@@ -6405,6 +6404,7 @@ class RealEstateView(ui.View):
 
             add_balance(user_id, receive - self.invest_amount)
             final_balance = get_balance(user_id)
+
             if tax > 0:
                 add_oduk_pool(tax)
             elif profit_amount < 0:
@@ -7756,6 +7756,25 @@ def apply_exp_boost(user_id, base_exp):
     if effect and effect["target"] == "exp":
         return int(base_exp * (1 + effect["value"]))
     return base_exp
+
+
+def has_real_estate_shield(user_id: str) -> bool:
+    building = get_user_building(user_id)
+    if not building:
+        return False
+
+    building_id = building.get("building_id")
+    building_def = BUILDING_DEFS.get(building_id)
+    if not building_def:
+        return False
+
+    effect_key = building_def.get("effect")
+    effect = BUILDING_EFFECTS.get(effect_key)
+    return effect and effect.get("target") == "real_estate"
+
+
+
+
 
 
 import math
