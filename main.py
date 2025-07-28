@@ -7697,111 +7697,102 @@ def apply_gamble_bonus(user_id, base_reward):
         return base_reward
 
     building_id = user_building.get("building_id")
+    level = user_building.get("level", 1)
     building_def = BUILDING_DEFS.get(building_id)
     if not building_def:
         return base_reward
 
     effect_key = building_def.get("effect")
-    effect = BUILDING_EFFECTS.get(effect_key)
+    if effect_key != "gamble_bonus":
+        return base_reward
 
-    if effect and effect.get("target") == "gamble_bonus":
-        return int(base_reward * (1 + effect.get("value", 0)))
-    return base_reward
+    bonus = get_effective_building_value(building_id, level)
+    return int(base_reward * (1 + bonus))
 
-
+# ✅ 잭팟 확률 보정
 def get_jackpot_chance(user_id, base_chance):
     user_building = get_user_building(user_id)
     if not user_building:
         return base_chance
 
     building_id = user_building.get("building_id")
+    level = user_building.get("level", 1)
     building_def = BUILDING_DEFS.get(building_id)
     if not building_def:
         return base_chance
 
-    effect_key = building_def.get("effect")
-    effect = BUILDING_EFFECTS.get(effect_key)
-    
-    # ✅ target이 'jackpot'일 때만 적용
-    if effect and effect.get("target") == "jackpot":
-        return base_chance + effect.get("value", 0)
+    if building_def.get("effect") != "jackpot_chance":
+        return base_chance
 
-    return base_chance
+    bonus = get_effective_building_value(building_id, level)
+    return base_chance + bonus
 
 
 
-
-# ✅ 알바 보상에 건물 효과 적용
-
+# ✅ 알바 보상 보정
 def apply_alba_bonus(user_id, base_reward):
     building = get_user_building(user_id)
     if not building:
         return base_reward
 
     building_id = building.get("building_id")
+    level = building.get("level", 1)
     building_def = BUILDING_DEFS.get(building_id)
-    if not building_def:
+    if not building_def or building_def.get("effect") != "alba_bonus":
         return base_reward
 
-    effect = BUILDING_EFFECTS.get(building_def.get("effect"))
-    if effect and effect["target"] == "alba":
-        return int(base_reward * (1 + effect["value"]))
-    return base_reward
-
+    bonus = get_effective_building_value(building_id, level)
+    return int(base_reward * (1 + bonus))
 
 # ✅ 투자 수익 보정
-
 def apply_investment_bonus(user_id, reward):
     building = get_user_building(user_id)
     if not building:
         return reward
 
     building_id = building.get("building_id")
+    level = building.get("level", 1)
     building_def = BUILDING_DEFS.get(building_id)
-    if not building_def:
+    if not building_def or building_def.get("effect") != "invest_bonus":
         return reward
 
-    effect = BUILDING_EFFECTS.get(building_def.get("effect"))
-    if effect and effect["target"] == "invest":
-        return int(reward * (1 + effect["value"]))
-    return reward
+    bonus = get_effective_building_value(building_id, level)
+    return int(reward * (1 + bonus))
 
 
 # ✅ 은행 이자 보정
-
 def apply_interest_bonus(user_id, interest):
     building = get_user_building(user_id)
     if not building:
         return interest
 
     building_id = building.get("building_id")
+    level = building.get("level", 1)
     building_def = BUILDING_DEFS.get(building_id)
-    if not building_def:
+    if not building_def or building_def.get("effect") != "bank_bonus":
         return interest
 
-    effect = BUILDING_EFFECTS.get(building_def.get("effect"))
-    if effect and effect["target"] == "bank_interest":
-        return int(interest * (1 + effect["value"]))
-    return interest
+    bonus = get_effective_building_value(building_id, level)
+    return int(interest * (1 + bonus))
 
-# ✅ 경험치 보정 (건물 경험치 루프에 사용됨)
 
+# ✅ 경험치 보정
 def apply_exp_boost(user_id, base_exp):
     building = get_user_building(user_id)
     if not building:
         return base_exp
 
     building_id = building.get("building_id")
+    level = building.get("level", 1)
     building_def = BUILDING_DEFS.get(building_id)
-    if not building_def:
+    if not building_def or building_def.get("effect") != "exp_boost":
         return base_exp
 
-    effect = BUILDING_EFFECTS.get(building_def.get("effect"))
-    if effect and effect["target"] == "exp":
-        return int(base_exp * (1 + effect["value"]))
-    return base_exp
+    bonus = get_effective_building_value(building_id, level)
+    return int(base_exp * (1 + bonus))
 
 
+# ✅ 부동산 손실 보호 여부
 def has_real_estate_shield(user_id: str) -> bool:
     building = get_user_building(user_id)
     if not building:
@@ -7812,10 +7803,7 @@ def has_real_estate_shield(user_id: str) -> bool:
     if not building_def:
         return False
 
-    effect_key = building_def.get("effect")
-    effect = BUILDING_EFFECTS.get(effect_key)
-    return effect and effect.get("target") == "real_estate"
-
+    return building_def.get("effect") == "real_estate_shield"
 
 
 
@@ -7916,6 +7904,20 @@ BUILDING_EFFECTS = {
 BUILDING_DATA_FILE = "building_data.json"
 BUILDING_STATS_FILE = "building_stats.json"
 
+def get_levelup_cost(level: int) -> int:
+    return int(50_000 * (1.1 ** (level - 1)))
+
+def get_effective_building_value(building_id: str, level: int) -> float:
+    building_def = BUILDING_DEFS.get(building_id)
+    if not building_def:
+        return 0.0
+    effect_key = building_def.get("effect")
+    base = BUILDING_EFFECTS.get(effect_key, {}).get("value", 0.0)
+    factor = 1 + (level - 1) / 29
+    return base * factor
+
+
+
 def load_building_data():
     if not os.path.exists(BUILDING_DATA_FILE):
         with open(BUILDING_DATA_FILE, "w", encoding="utf-8") as f:
@@ -7984,13 +7986,33 @@ def perform_level_up(user_id: str):
     data = get_user_building(user_id)
     if not data:
         return "❌ 건물 없음"
-    
-    ok, msg = can_level_up(user_id, data)
-    if not ok:
-        return msg
 
+    building_def = BUILDING_DEFS.get(data["building_id"])
+    level = data["level"]
+    next_level = level + 1
+
+    if next_level > building_def["max_level"]:
+        return "🏁 최대 레벨에 도달했습니다."
+
+    required_exp = get_required_exp(level)
+    current_exp = data.get("exp", 0)
+    if current_exp < required_exp:
+        return f"🧪 경험치 부족: {current_exp} / {required_exp}"
+
+    stat_req = building_def.get("level_requirements", {}).get(next_level, {})
+    user_stats = get_user_stats(user_id)
+    for stat, required in stat_req.items():
+        if user_stats.get(stat, 0) < required:
+            return f"📊 상태치 부족: `{stat}` {user_stats.get(stat, 0)} / {required}"
+
+    cost = get_levelup_cost(level)
+    if get_balance(user_id) < cost:
+        return f"💸 잔액 부족: {get_balance(user_id):,} / 필요 {cost:,}원"
+
+    # ✅ 조건 충족: 레벨업 처리
+    add_balance(user_id, -cost)
     data["level"] += 1
-    data["exp"] -= get_required_exp(data["level"] - 1)
+    data["exp"] -= required_exp
     set_user_building(user_id, data)
 
     # ✅ 상태치 초기화
@@ -7998,7 +8020,68 @@ def perform_level_up(user_id: str):
     stats[user_id] = {k: 0 for k in STAT_KEYS}
     save_user_stats(stats)
 
-    return f"🎉 Lv.{data['level']} 달성! (🔧 상태치 초기화됨)"
+    return f"🎉 Lv.{data['level']} 달성! 💸 비용 {cost:,}원 지불됨 (🔧 상태치 초기화됨)"
+
+
+@tree.command(name="건물주", description="건물을 보유한 유저 목록을 확인합니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물주(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+
+    building_data = load_building_data()
+    if not building_data:
+        return await interaction.followup.send("🏚️ 현재 건물을 보유한 유저가 없습니다.")
+
+    lines = []
+    for user_id, data in building_data.items():
+        member = interaction.guild.get_member(int(user_id))
+        if member:
+            building_id = data.get("building_id", "unknown")
+            level = data.get("level", 1)
+            building_name = BUILDING_DEFS.get(building_id, {}).get("name", "❓알 수 없음")
+            lines.append(f"👤 {member.display_name} - {building_name} Lv.{level}")
+
+    if not lines:
+        return await interaction.followup.send("🏚️ 건물 보유자가 없습니다.")
+
+    # 🔹 한 번에 25명씩 잘라서 나눠서 응답
+    CHUNK_SIZE = 25
+    chunks = [lines[i:i+CHUNK_SIZE] for i in range(0, len(lines), CHUNK_SIZE)]
+
+    for i, chunk in enumerate(chunks):
+        desc = "\n".join(chunk)
+        embed = discord.Embed(
+            title="🏘️ 건물주 목록" + (f" (Page {i+1})" if len(chunks) > 1 else ""),
+            description=desc,
+            color=discord.Color.blue()
+        )
+        if i == 0:
+            await interaction.followup.send(embed=embed)
+        else:
+            await interaction.channel.send(embed=embed)
+
+
+
+
+
+
+
+@tree.command(name="건물레벨업", description="조건을 만족하면 건물의 레벨을 올립니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물레벨업(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+
+    data = get_user_building(user_id)
+    if not data:
+        return await interaction.response.send_message("🏚️ 건물을 보유하고 있지 않습니다.", ephemeral=True)
+
+    result = perform_level_up(user_id)
+
+    color = discord.Color.gold() if "달성" in result else discord.Color.red()
+    await interaction.response.send_message(embed=discord.Embed(
+        title="📈 건물 레벨업 결과",
+        description=result,
+        color=color
+    ))
+
 
 
 # ✅ 자동완성 함수
@@ -8069,18 +8152,22 @@ async def 건물정보(interaction: discord.Interaction):
 
     b = BUILDING_DEFS[data["building_id"]]
     stats = get_user_stats(user_id)
+
+    level = data["level"]
+    reward = get_building_reward(b["base_reward"], level)
     cap = b.get("daily_cap", 999_999)
-    reward = get_building_reward(b["base_reward"], data["level"])
+    today = data.get("today_reward", 0)
+    rate = int(today / cap * 100) if cap else 0
 
     embed = discord.Embed(
         title=f"{b['name']} 정보",
         description=b["description"],
         color=discord.Color.green()
     )
-    embed.add_field(name="📈 레벨", value=f"{data['level']} / {b['max_level']}")
-    embed.add_field(name="🧪 경험치", value=f"{data['exp']} / {get_required_exp(data['level'])}")
+    embed.add_field(name="📈 레벨", value=f"{level} / {b['max_level']}")
+    embed.add_field(name="🧪 경험치", value=f"{data['exp']} / {get_required_exp(level)}")
     embed.add_field(name="💰 예상 보상", value=f"{reward:,}원 (30분당)")
-    embed.add_field(name="💼 누적 보상", value=f"{data.get('pending_reward', 0):,}원 / {cap:,}원")
+    embed.add_field(name="💼 오늘 받은 보상", value=f"{today:,} / {cap:,}원 ({rate}%)")
     embed.add_field(
         name="🔧 상태치",
         value="\n".join([f"{k}: {stats.get(k, 0)}" for k in STAT_KEYS]),
@@ -8088,6 +8175,7 @@ async def 건물정보(interaction: discord.Interaction):
     )
 
     await interaction.response.send_message(embed=embed)
+
 
 
 @tree.command(name="건물판매", description="보유 중인 건물을 판매하여 일부 금액을 환불받습니다.", guild=discord.Object(id=GUILD_ID))
@@ -8152,37 +8240,35 @@ async def accumulate_building_rewards():
         if not building:
             continue
 
+        # ✅ 1. 최근 보상 시각 확인 (30분 미만이면 skip)
         last_updated = datetime.fromisoformat(info.get("last_updated", now.isoformat()))
         if (now - last_updated).total_seconds() < 1800:
-            continue  # 30분 미만이면 skip
+            continue
 
-        # ✅ 1. 보상 계산
+        # ✅ 2. 하루가 바뀌면 누적 보상 초기화
+        if last_updated.date() != now.date():
+            info["today_reward"] = 0
+
+        # ✅ 3. 보상 계산 및 잔고 지급
         reward = get_building_reward(building["base_reward"], info["level"])
         max_cap = building.get("daily_cap", 999_999)
-        current_reward = info.get("pending_reward", 0)
-        info["pending_reward"] = min(current_reward + reward, max_cap)
+        today_reward = info.get("today_reward", 0)
 
-        # ✅ 2. 경험치 계산
+        if today_reward < max_cap:
+            remaining = max_cap - today_reward
+            actual_reward = min(reward, remaining)
+            add_balance(user_id, actual_reward)  # 💸 직접 유저 지갑에 지급
+            info["today_reward"] = today_reward + actual_reward
+
+        # ✅ 4. 경험치 누적
         exp_gain = building["exp_gain"]
         effect = BUILDING_EFFECTS.get(building["effect"])
         if effect and effect["target"] == "exp":
             exp_gain = int(exp_gain * effect["value"])
         info["exp"] += exp_gain
 
-        # ✅ 3. 타임스탬프 갱신
+        # ✅ 5. 타임스탬프 갱신
         info["last_updated"] = now.isoformat()
-
-        # ✅ 4. 자동 레벨업 시도
-        if try_auto_level_up(user_id):
-            print(f"🌟 [자동 레벨업] {user_id} → Lv.{info['level']}")
-            
-            channel = bot.get_channel(GAMBLING_CHANNEL_ID)
-            if channel:
-                building_name = building.get("name", "건물")
-                await channel.send(
-                    f"📈 <@{user_id}>님의 **{building_name}** 건물이 Lv.{info['level']}로 자동 성장했습니다!\n"
-                    f"🔁 상태치는 초기화되었습니다."
-                )
 
     save_building_data(data)
 
