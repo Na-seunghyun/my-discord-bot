@@ -7786,7 +7786,6 @@ BUILDING_DEFS = {
         },
         "description": "📖 경험치 획득량 증가"
     },
-
     "apartment": {
         "name": "🏢 아파트",
         "type": "안정형",
@@ -7801,8 +7800,7 @@ BUILDING_DEFS = {
             2: {"stability": 10}, 5: {"stability": 30}, 10: {"stability": 60}
         },
         "description": "📉 부동산 손실률을 줄여주는 안정형 자산"
-    }
-},
+    },
     
     "mall": {
         "name": "🏬 백화점",
