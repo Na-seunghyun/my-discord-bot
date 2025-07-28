@@ -8025,22 +8025,36 @@ def perform_level_up(user_id: str):
     if next_level > building_def["max_level"]:
         return "🏁 최대 레벨에 도달했습니다."
 
+    messages = []
+    can_upgrade = True
+
+    # ✅ 경험치 체크
     required_exp = get_required_exp(level)
     current_exp = data.get("exp", 0)
     if current_exp < required_exp:
-        return f"🧪 경험치 부족: {current_exp} / {required_exp}"
+        messages.append(f"🧪 경험치 부족: {current_exp} / {required_exp}")
+        can_upgrade = False
 
+    # ✅ 상태치 체크
     stat_req = building_def.get("level_requirements", {}).get(next_level, {})
     user_stats = get_user_stats(user_id)
     for stat, required in stat_req.items():
-        if user_stats.get(stat, 0) < required:
-            return f"📊 상태치 부족: `{stat}` {user_stats.get(stat, 0)} / {required}"
+        user_value = user_stats.get(stat, 0)
+        if user_value < required:
+            messages.append(f"📊 상태치 부족: `{stat}` {user_value} / {required}")
+            can_upgrade = False
 
+    # ✅ 자금 체크
     cost = get_levelup_cost(level)
-    if get_balance(user_id) < cost:
-        return f"💸 잔액 부족: {get_balance(user_id):,} / 필요 {cost:,}원"
+    user_money = get_balance(user_id)
+    if user_money < cost:
+        messages.append(f"💸 잔액 부족: {user_money:,} / 필요 {cost:,}원")
+        can_upgrade = False
 
-    # ✅ 조건 충족: 레벨업 처리
+    if not can_upgrade:
+        return "\n".join(messages)
+
+    # ✅ 조건 충족 → 레벨업 진행
     add_balance(user_id, -cost)
     data["level"] += 1
     data["exp"] -= required_exp
@@ -8052,6 +8066,7 @@ def perform_level_up(user_id: str):
     save_user_stats(stats)
 
     return f"🎉 Lv.{data['level']} 달성! 💸 비용 {cost:,}원 지불됨 (🔧 상태치 초기화됨)"
+
 
 
 @tree.command(name="건물주", description="건물을 보유한 유저 목록을 확인합니다.", guild=discord.Object(id=GUILD_ID))
