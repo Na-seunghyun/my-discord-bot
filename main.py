@@ -7869,6 +7869,13 @@ def add_user_stat(user_id: str, stat: str, amount: int):
 def get_user_stats(user_id: str):
     return load_user_stats().get(user_id, {k: 0 for k in STAT_KEYS})
 
+def clear_user_building(user_id):
+    path = "building_data.json"
+    data = load_json(path)
+    data.pop(str(user_id), None)
+    save_json(path, data)
+
+
 
 def get_required_exp(level: int) -> int:
     return int(100 + (level - 1) ** 2.7 * 25)
@@ -7948,6 +7955,17 @@ async def 건물구입(interaction: discord.Interaction, 건물: str):
 건물구입.autocomplete("건물")(건물_자동완성)
 
 
+# 🧮 레벨에 따른 보상 계산 함수
+def get_building_reward(base_reward: int, level: int) -> int:
+    # 예: 레벨마다 보상 +5% 증가
+    multiplier = 1 + 0.05 * (level - 1)
+    return int(base_reward * multiplier)
+
+# 🧮 레벨업에 필요한 경험치 계산 (예시: 20 + 10 * (레벨^1.2))
+def get_required_exp(level: int) -> int:
+    return int(20 + 10 * (level ** 1.2))
+
+# ✅ /건물정보 명령어
 @tree.command(name="건물정보", description="현재 보유 중인 건물의 상태를 확인합니다.", guild=discord.Object(id=GUILD_ID))
 async def 건물정보(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -7970,9 +7988,53 @@ async def 건물정보(interaction: discord.Interaction):
     embed.add_field(name="🧪 경험치", value=f"{data['exp']} / {get_required_exp(data['level'])}")
     embed.add_field(name="💰 예상 보상", value=f"{reward:,}원 (30분당)")
     embed.add_field(name="💼 누적 보상", value=f"{data.get('pending_reward', 0):,}원 / {cap:,}원")
-    embed.add_field(name="🔧 상태치", value="\n".join([f"{k}: {stats.get(k, 0)}" for k in STAT_KEYS]), inline=False)
+    embed.add_field(
+        name="🔧 상태치",
+        value="\n".join([f"{k}: {stats.get(k, 0)}" for k in STAT_KEYS]),
+        inline=False
+    )
 
     await interaction.response.send_message(embed=embed)
+
+
+@tree.command(name="건물판매", description="보유 중인 건물을 판매하여 일부 금액을 환불받습니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물판매(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    building_data = get_user_building(user_id)
+
+    if not building_data:
+        return await interaction.response.send_message("🏚️ 보유 중인 건물이 없습니다.", ephemeral=True)
+
+    building_id = building_data["building_id"]
+    building_def = BUILDING_DEFS.get(building_id)
+
+    if not building_def:
+        return await interaction.response.send_message("❌ 건물 정보 오류가 발생했습니다.", ephemeral=True)
+
+    refund_rate = 0.5  # 💸 환불 비율: 50%
+    refund_amount = int(building_def["price"] * refund_rate)
+
+    # 💥 건물 데이터 삭제 및 금액 환불
+    clear_user_building(user_id)
+    add_balance(user_id, refund_amount)
+
+    await interaction.response.send_message(
+        embed=discord.Embed(
+            title="🏚️ 건물 판매 완료",
+            description=(
+                f"{building_def['name']} 건물을 판매하였습니다.\n"
+                f"💰 환불 금액: **{refund_amount:,}원**\n"
+                f"📉 누적 보상은 초기화되며, 건물 효과도 사라집니다."
+            ),
+            color=discord.Color.orange()
+        )
+    )
+
+
+
+
+
+
 
 
 from discord.ext import tasks
