@@ -6391,7 +6391,7 @@ class RealEstateView(ui.View):
                 bonus_boost = True
                 profit_rate += 50
 
-            profit_rate += bonus_rate
+         
 
             # ✅ 기본 수익 계산
             profit_amount_raw = int(self.invest_amount * (profit_rate / 100))
