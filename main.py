@@ -7976,26 +7976,31 @@ def can_level_up(user_id: str, data: dict) -> tuple[bool, str]:
     messages = []
     ok = True
 
-    # 경험치 조건
-    current_exp = data["exp"]
-    required_exp = get_required_exp(lv)
-    if current_exp < required_exp:
-        messages.append(f"🧪 경험치 부족 ({current_exp} / {required_exp})")
+    # 경험치 부족
+    req_exp = get_required_exp(lv)
+    if data["exp"] < req_exp:
+        messages.append(f"🧪 경험치 부족: {data['exp']} / {req_exp}")
         ok = False
-    else:
-        messages.append(f"🧪 경험치 ✅ ({current_exp} / {required_exp})")
 
-    # 상태치 조건
+    # 상태치 부족
     stat_req = b.get("level_requirements", {}).get(next_lv)
     if stat_req:
         stats = get_user_stats(user_id)
         for stat, req in stat_req.items():
-            user_val = stats.get(stat, 0)
-            if user_val < req:
-                messages.append(f"🔧 {stat}: ❌ {user_val} / {req}")
+            current = stats.get(stat, 0)
+            if current < req:
+                messages.append(f"🔧 상태치 부족: {stat} {current} / {req}")
                 ok = False
-            else:
-                messages.append(f"🔧 {stat}: ✅ {user_val} / {req}")
+
+    # 비용 부족
+    cost = get_level_up_cost(lv)
+    wallet = get_balance(user_id)
+    if wallet < cost:
+        messages.append(f"💸 자금 부족: {wallet:,} / {cost:,}")
+        ok = False
+
+    return ok, "\n".join(messages) if messages else "레벨업 가능"
+
 
     # 비용 조건
     cost = get_level_up_cost(next_lv)
