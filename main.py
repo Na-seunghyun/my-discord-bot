@@ -2724,7 +2724,6 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
 
 
 
-from module.building_effects import apply_gamble_bonus, get_jackpot_chance  # 🔁 실제 위치에 맞춰 경로 수정
 
 @tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 100원부터 도박 가능")
