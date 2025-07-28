@@ -7905,11 +7905,11 @@ BUILDING_DEFS = {
 }
 
 BUILDING_EFFECTS = {
-    "alba_bonus": {"target": "alba", "type": "multiplier", "value": 1.2},
+    "alba_bonus": {"target": "alba", "type": "multiplier", "value": 0.2},
     "jackpot_chance": {"target": "jackpot", "type": "chance", "value": 0.05},
-    "bank_bonus": {"target": "bank_interest", "type": "multiplier", "value": 1.3},
+    "bank_bonus": {"target": "bank_interest", "type": "multiplier", "value": 0.3},
     "exp_boost": {"target": "exp", "type": "multiplier", "value": 1.25},
-    "real_estate_shield": {"target": "real_estate", "type": "loss_reduction", "value": 0.6}
+    "real_estate_shield": {"target": "real_estate", "type": "loss_reduction", "value": 0.4}
 }
 
 
