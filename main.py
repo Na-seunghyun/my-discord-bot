@@ -7966,13 +7966,22 @@ def perform_level_up(user_id: str):
     data = get_user_building(user_id)
     if not data:
         return "❌ 건물 없음"
+    
     ok, msg = can_level_up(user_id, data)
     if not ok:
         return msg
+
     data["level"] += 1
     data["exp"] -= get_required_exp(data["level"] - 1)
     set_user_building(user_id, data)
-    return f"🎉 Lv.{data['level']} 달성!"
+
+    # ✅ 상태치 초기화
+    stats = load_user_stats()
+    stats[user_id] = {k: 0 for k in STAT_KEYS}
+    save_user_stats(stats)
+
+    return f"🎉 Lv.{data['level']} 달성! (🔧 상태치 초기화됨)"
+
 
 # ✅ 자동완성 함수
 async def 건물_자동완성(interaction: discord.Interaction, current: str):
@@ -8084,17 +8093,25 @@ async def 건물판매(interaction: discord.Interaction):
     clear_user_building(user_id)
     add_balance(user_id, refund_amount)
 
+    # 💥 상태치도 초기화
+    stats = load_user_stats()
+    if user_id in stats:
+        for stat in ["stability", "risk", "labor", "tech"]:
+            stats[user_id][stat] = 0
+        save_user_stats(stats)
+
     await interaction.response.send_message(
         embed=discord.Embed(
             title="🏚️ 건물 판매 완료",
             description=(
                 f"{building_def['name']} 건물을 판매하였습니다.\n"
                 f"💰 환불 금액: **{refund_amount:,}원**\n"
-                f"📉 누적 보상은 초기화되며, 건물 효과도 사라집니다."
+                f"📉 누적 보상 및 상태치가 초기화되었으며, 건물 효과도 사라집니다."
             ),
             color=discord.Color.orange()
         )
     )
+
 
 
 
@@ -8140,10 +8157,14 @@ async def accumulate_building_rewards():
         # ✅ 4. 자동 레벨업 시도
         if try_auto_level_up(user_id):
             print(f"🌟 [자동 레벨업] {user_id} → Lv.{info['level']}")
-            # 선택: 알림 채널로 레벨업 메시지 보내기
-            # channel = bot.get_channel(GAMBLING_CHANNEL_ID)
-            # if channel:
-            #     await channel.send(f"📈 <@{user_id}>님의 건물이 Lv.{info['level']}로 자동 성장했습니다!")
+            
+            channel = bot.get_channel(GAMBLING_CHANNEL_ID)
+            if channel:
+                building_name = building.get("name", "건물")
+                await channel.send(
+                    f"📈 <@{user_id}>님의 **{building_name}** 건물이 Lv.{info['level']}로 자동 성장했습니다!\n"
+                    f"🔁 상태치는 초기화되었습니다."
+                )
 
     save_building_data(data)
 
