@@ -2724,10 +2724,11 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
 
 
 
+from module.building_effects import apply_gamble_bonus, get_jackpot_chance  # 🔁 실제 위치에 맞춰 경로 수정
+
 @tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 100원부터 도박 가능")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
-    # ✅ 오덕도박장 채널 ID
     if interaction.channel.id != 1394331814642057418:
         return await interaction.response.send_message(
             "❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.",
@@ -2737,7 +2738,6 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     user_id = str(interaction.user.id)
     balance = get_balance(user_id)
 
-    # 최소 베팅, 잔액 부족 체크
     if 베팅액 < 100:
         return await interaction.response.send_message(
             embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **100원**입니다.", discord.Color.red()),
@@ -2749,14 +2749,13 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             ephemeral=True
         )
 
-    # 잔액 차감
+    # 💸 차감
     add_balance(user_id, -베팅액)
 
-    # 도박 실행
+    # 🎲 실행
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
-    # ✅ 시각화 막대 (width=20, 마커 포함)
     def create_graph_bar(chance: int, roll: int, width: int = 20) -> str:
         success_pos = round(chance / 100 * width)
         roll_pos = round(roll / 100 * width)
@@ -2770,15 +2769,20 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     bar = create_graph_bar(success_chance, roll)
 
-    # 성공
+    # ✅ 성공
     if roll <= success_chance:
-        is_jackpot = random.random() < 0.01
+        # ✅ 건물 효과로 잭팟 확률 적용
+        jackpot_chance = get_jackpot_chance(user_id, 0.01)
+        is_jackpot = random.random() < jackpot_chance
         multiplier = 4 if is_jackpot else 2
+
+        # ✅ 보상 계산 + 건물 효과 적용
         reward = 베팅액 * multiplier
+        reward = apply_gamble_bonus(user_id, reward)
+
         add_balance(user_id, reward)
         final_balance = get_balance(user_id)
 
-        # ✅ 기록 반영
         record_gamble_result(user_id, success=True)
         title = get_gamble_title(user_id, success=True)
 
@@ -2793,12 +2797,10 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             user_id
         )
 
-    # 실패
+    # ❌ 실패
     else:
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
-
-        # ✅ 기록 반영
         record_gamble_result(user_id, success=False)
         title = get_gamble_title(user_id, success=False)
 
@@ -2816,6 +2818,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
 
     await interaction.response.send_message(embed=embed)
+
 
 
 @도박.autocomplete("베팅액")
@@ -2912,6 +2915,7 @@ class LotteryButton(Button):
             if self.label == self.correct_slot:
                 # 성공 처리
                 reward = self.베팅액 * 3
+                reward = apply_gamble_bonus(self.user_id, reward)  # ✅ 건물 효과 적용
                 add_balance(self.user_id, reward)
                 record_gamble_result(self.user_id, True)
                 titles = get_gamble_title(self.user_id, True)
@@ -3034,7 +3038,6 @@ async def 복권_배팅액_자동완성(interaction: discord.Interaction, curren
 @tree.command(name="슬롯", description="애니메이션 슬롯머신 게임!", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 1000원 이상")
 async def 슬롯(interaction: discord.Interaction, 베팅액: int):
-    # ✅ 허용된 채널: 오덕도박장, 오덕코인
     if interaction.channel.id not in [1394331814642057418, 1394519744463245543]:
         return await interaction.response.send_message(
             "❌ 이 명령어는 **#오덕도박장** 또는 **#오덕코인** 채널에서만 사용할 수 있습니다.",
@@ -3053,10 +3056,8 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         return await interaction.response.send_message(
             embed=create_embed("💸 잔액 부족", f"현재 잔액: **{balance:,}원**", discord.Color.red()), ephemeral=False)
 
-    # 💸 잔액 차감
     add_balance(user_id, -베팅액)
 
-    # 🎰 슬롯머신 연출
     await interaction.response.defer()
     message = await interaction.followup.send("🎰 슬롯머신 작동 중...", wait=True)
 
@@ -3069,7 +3070,6 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
 
     result_str = " | ".join(result)
 
-    # 🎯 최대 연속 일치 계산
     max_streak = 1
     cur_streak = 1
     for i in range(1, len(result)):
@@ -3079,9 +3079,9 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         else:
             cur_streak = 1
 
-    # 🎉 성공
     if max_streak == 5:
         winnings = 베팅액 * 10
+        winnings = apply_gamble_bonus(user_id, winnings)  # ✅ 건물 효과 적용
         add_balance(user_id, winnings)
         record_gamble_result(user_id, True)
         titles = get_gamble_title(user_id, True)
@@ -3091,6 +3091,7 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
 
     elif max_streak >= 3:
         winnings = 베팅액 * 4
+        winnings = apply_gamble_bonus(user_id, winnings)  # ✅ 건물 효과 적용
         add_balance(user_id, winnings)
         record_gamble_result(user_id, True)
         titles = get_gamble_title(user_id, True)
@@ -3098,7 +3099,6 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         outcome = f"✨ **{max_streak}개 연속 일치! +{winnings:,}원 획득!**{title_str}"
         color = discord.Color.green()
 
-    # 💀 실패
     else:
         add_oduk_pool(베팅액)
         record_gamble_result(user_id, False)
@@ -3315,6 +3315,10 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
             total_bet = self.amount * 2
             tax = int(total_bet * 0.1)
             net_gain = total_bet - tax
+            
+            # ✅ 건물 효과 적용
+            net_gain = apply_gamble_bonus(str(winner.id), net_gain)
+            
             add_oduk_pool(tax)
 
             balances[str(winner.id)]["amount"] += net_gain
@@ -5498,6 +5502,7 @@ async def 타자알바(interaction: discord.Interaction):
         base_reward = 1200
         penalty = int(elapsed * 60)
         reward = max(120, base_reward - penalty)
+        reward = apply_building_bonus(user_id, reward, job_type="alba")
 
         if random.random() < 0.01:
             reward *= 3
@@ -5768,6 +5773,8 @@ class BoxButton(discord.ui.Button):
             reward *= 2
             is_jackpot = True
 
+        reward = apply_building_bonus(user_id, reward, job_type="alba")
+
         success = update_job_record(user_id, reward, job_type="box")
         click_time = datetime.now(KST)
         view_buttons = [btn.label for btn in view.children if isinstance(btn, BoxButton)]
@@ -5966,6 +5973,15 @@ def process_bank_withdraw(user_id, amount):
 
     updated_deposits = []
 
+    # ✅ 건물 보너스 확인
+    user_building = get_user_building(user_id)
+    bonus_multiplier = 1.0
+    if user_building:
+        defs = load_building_defs()
+        b_id = user_building["building_id"]
+        if defs[b_id].get("bonus_effect") == "bank_bonus":
+            bonus_multiplier = 1.1  # 10% 보너스
+
     for d in deposits:
         available = d["amount"] - d.get("used", 0)
         if available <= 0:
@@ -5979,12 +5995,13 @@ def process_bank_withdraw(user_id, amount):
         deposit_time = datetime.fromisoformat(d["timestamp"])
         if now - deposit_time >= timedelta(hours=3):
             interest = int(take * 0.02)
+            interest = int(interest * bonus_multiplier)  # ✅ 건물 효과 반영
             interest_total += interest
 
         updated_deposits.append(d)
 
         if remaining <= 0:
-            continue  # 🔄 기존 break → continue로 수정
+            continue  # 🔄 break → continue 유지
 
     # 사용되지 않은 예금만 유지
     bank[uid]["deposits"] = [
@@ -5997,6 +6014,7 @@ def process_bank_withdraw(user_id, amount):
     tax = int(interest_total * 0.1)
     net_interest = interest_total - tax
     return net_interest, tax
+
 
 # ✅ 대출 상환용 출금 처리 (이자 계산 없음)
 def withdraw_from_bank(user_id, amount):
@@ -6349,16 +6367,33 @@ class RealEstateView(ui.View):
             if balance < self.invest_amount:
                 return await interaction.response.send_message(f"❌ 잔액 부족\n현재 잔액: **{balance:,}원**", ephemeral=True)
 
-            # ✅ 투자 횟수 기반 손실 배율
             user_id = str(self.user.id)
             count = get_today_real_estate_count(user_id)
-            if count < 3: loss_multiplier = 1.0
-            elif count < 6: loss_multiplier = 1.2
-            elif count < 10: loss_multiplier = 1.5
-            else: loss_multiplier = 2.0
+            if count < 3:
+                loss_multiplier = 1.0
+            elif count < 6:
+                loss_multiplier = 1.2
+            elif count < 10:
+                loss_multiplier = 1.5
+            else:
+                loss_multiplier = 2.0
+
+            # ✅ 건물 효과 확인
+            user_building = get_user_building(user_id)
+            bonus_rate = 0
+            loss_shield = False
+            if user_building:
+                defs = load_building_defs()
+                b_id = user_building["building_id"]
+                effect = defs[b_id].get("bonus_effect")
+                if effect == "real_estate_bonus":
+                    bonus_rate = 10
+                elif effect == "real_estate_shield":
+                    loss_shield = True
 
             rocket_up = False
             bonus_boost = False
+
             if random.random() < 0.01:
                 profit_rate = 300
                 rocket_up = True
@@ -6366,11 +6401,18 @@ class RealEstateView(ui.View):
                 profit_rate = random.randint(-100, 80)
                 if profit_rate < 0:
                     profit_rate = int(profit_rate * loss_multiplier)
-                    profit_rate = max(profit_rate, -100)  # 🔧 이 줄 추가!
+                    profit_rate = max(profit_rate, -100)
+
+                    # ✅ 손실 완화 효과 적용
+                    if loss_shield:
+                        profit_rate = int(profit_rate * 0.6)  # 예: -60% → -36%
+                        profit_rate = max(profit_rate, -100)
 
             if not rocket_up and random.random() < 0.03:
                 bonus_boost = True
                 profit_rate += 50
+
+            profit_rate += bonus_rate
 
             profit_amount = int(self.invest_amount * (profit_rate / 100))
             tax = int(profit_amount * 0.1) if profit_amount > 0 else 0
@@ -6388,22 +6430,30 @@ class RealEstateView(ui.View):
             increment_real_estate_count(user_id)
 
             # 연출 메시지
-            if rocket_up: effect_text = "💥 지역 개발 대박! 재개발 호재!"
-            elif profit_rate >= 40: effect_text = "📊 재건축 발표로 급등!"
-            elif profit_rate > 10: effect_text = "📈 집값 상승세로 이익 발생"
-            elif profit_rate > 0: effect_text = "📦 소폭 수익 발생"
-            elif profit_rate == 0: effect_text = "😐 부동산 시장 조용함 (본전)"
-            elif profit_rate > -30: effect_text = "🏚️ 거래 침체로 손실..."
-            elif profit_rate > -70: effect_text = "🔥 하락장! 큰 손해 발생"
-            else: effect_text = "💀 부동산 사기! 전액 손실..."
+            if rocket_up:
+                effect_text = "💥 지역 개발 대박! 재개발 호재!"
+            elif profit_rate >= 40:
+                effect_text = "📊 재건축 발표로 급등!"
+            elif profit_rate > 10:
+                effect_text = "📈 집값 상승세로 이익 발생"
+            elif profit_rate > 0:
+                effect_text = "📦 소폭 수익 발생"
+            elif profit_rate == 0:
+                effect_text = "😐 부동산 시장 조용함 (본전)"
+            elif profit_rate > -30:
+                effect_text = "🏚️ 거래 침체로 손실..."
+            elif profit_rate > -70:
+                effect_text = "🔥 하락장! 큰 손해 발생"
+            else:
+                effect_text = "💀 부동산 사기! 전액 손실..."
 
             title_badge = "🚀 로켓 캐처" if rocket_up else \
                           "💼 투자 귀재" if profit_rate >= 40 else \
                           "💀 투기의 귀재" if profit_rate <= -70 else None
 
-            # 칭호/보너스 줄 문자열 미리 정의
             title_line = f"🎖️ 칭호: {title_badge}\n" if title_badge else ""
             bonus_line = "✨ 보너스 수익률 +50%\n" if bonus_boost else ""
+            loss_line = "🛡️ 손실 완화 적용됨 (건물 효과)\n" if loss_shield and profit_rate < 0 else ""
 
             embed = discord.Embed(
                 title="🚀 대박 투자 성공!" if profit_amount >= 0 else "📉 투자 실패...",
@@ -6412,6 +6462,7 @@ class RealEstateView(ui.View):
                     f"📍 투자 지역: **{region}**\n"
                     f"{title_line}"
                     f"{bonus_line}"
+                    f"{loss_line}"
                     f"💬 {effect_text}\n\n"
                     f"💵 투자금: {self.invest_amount:,}원\n"
                     f"📊 수익률: {profit_rate:+}%\n"
@@ -6432,7 +6483,9 @@ class RealEstateView(ui.View):
 
             await interaction.response.send_message(embed=embed)
             self.disabled_regions.add(region)
+
         return callback
+
 
 # ✅ 부동산투자 명령어
 @tree.command(name="부동산투자", description="전국 부동산 투자! 버튼을 눌러 수익을 확인해보세요.", guild=discord.Object(id=GUILD_ID))
@@ -7590,6 +7643,386 @@ async def 감가테스트(interaction: discord.Interaction):
     await decay_oduk_pool(bot)           # ✅ 오덕로또 감가
 
     await interaction.followup.send("✅ 감가 테스트가 완료되었습니다. 로그 또는 알림 채널을 확인하세요.")
+
+
+
+
+# ✅ 건물 효과 연동 통합 적용 코드
+
+# 🧱 건물 효과 정의
+BUILDING_EFFECTS = {
+    "alba_bonus": {"target": "alba", "type": "percent_increase", "value": 0.2},
+    "gamble_bonus": {"target": "gamble", "type": "percent_increase", "value": 0.15},
+    "jackpot_chance": {"target": "jackpot_chance", "type": "percent_increase", "value": 0.1},
+    "exp_boost": {"target": "exp", "type": "percent_increase", "value": 0.3},
+    "invest_bonus": {"target": "invest", "type": "percent_increase", "value": 0.1},
+    "bank_interest": {"target": "bank_interest", "type": "percent_increase", "value": 0.05},
+}
+
+# 🧩 공통 유틸
+
+def get_user_building(user_id):
+    data = load_building_data()
+    return data.get(str(user_id))
+
+# ✅ 도박 보상 / 잭팟 확률에 건물 효과 적용
+
+def apply_gamble_bonus(user_id, base_reward):
+    building = get_user_building(user_id)
+    if not building:
+        return base_reward
+
+    effect = BUILDING_EFFECTS.get(building["effect"])
+    if effect and effect["target"] == "gamble":
+        return int(base_reward * (1 + effect["value"]))
+    return base_reward
+
+def get_jackpot_chance(user_id, base_chance):
+    building = get_user_building(user_id)
+    if not building:
+        return base_chance
+
+    effect = BUILDING_EFFECTS.get(building["effect"])
+    if effect and effect["target"] == "jackpot_chance":
+        return base_chance + effect["value"]
+    return base_chance
+
+# ✅ 알바 보상에 건물 효과 적용
+
+def apply_alba_bonus(user_id, base_reward):
+    building = get_user_building(user_id)
+    if not building:
+        return base_reward
+
+    effect = BUILDING_EFFECTS.get(building["effect"])
+    if effect and effect["target"] == "alba":
+        return int(base_reward * (1 + effect["value"]))
+    return base_reward
+
+# ✅ 투자 수익 보정
+
+def apply_investment_bonus(user_id, reward):
+    building = get_user_building(user_id)
+    if not building:
+        return reward
+
+    effect = BUILDING_EFFECTS.get(building["effect"])
+    if effect and effect["target"] == "invest":
+        return int(reward * (1 + effect["value"]))
+    return reward
+
+# ✅ 은행 이자 보정
+
+def apply_interest_bonus(user_id, interest):
+    building = get_user_building(user_id)
+    if not building:
+        return interest
+
+    effect = BUILDING_EFFECTS.get(building["effect"])
+    if effect and effect["target"] == "bank_interest":
+        return int(interest * (1 + effect["value"]))
+    return interest
+
+# ✅ 경험치 보정 (건물 경험치 루프에 사용됨)
+
+def apply_exp_boost(user_id, base_exp):
+    building = get_user_building(user_id)
+    if not building:
+        return base_exp
+
+    effect = BUILDING_EFFECTS.get(building["effect"])
+    if effect and effect["target"] == "exp":
+        return int(base_exp * (1 + effect["value"]))
+    return base_exp
+
+
+import math
+
+STAT_KEYS = ["stability", "risk", "labor", "tech"]
+
+BUILDING_DEFS = {
+    "convenience_store": {
+        "name": "🏪 편의점",
+        "type": "안정형",
+        "price": 100_000,
+        "base_reward": 5_000,
+        "exp_gain": 3,
+        "max_level": 30,
+        "daily_cap": 100_000,
+        "traits": ["stability"],
+        "effect": "alba_bonus",
+        "level_requirements": {
+            2: {"stability": 10}, 5: {"stability": 25}, 10: {"stability": 50}, 20: {"stability": 80}
+        },
+        "description": "💼 알바 수익 증가 + 안정적 수익"
+    },
+    "casino": {
+        "name": "🎰 카지노",
+        "type": "고위험",
+        "price": 300_000,
+        "base_reward": 12_000,
+        "exp_gain": 4,
+        "max_level": 30,
+        "daily_cap": 150_000,
+        "traits": ["risk"],
+        "effect": "jackpot_chance",
+        "level_requirements": {
+            2: {"risk": 20}, 5: {"risk": 45}, 10: {"risk": 80}, 20: {"risk": 120}
+        },
+        "description": "🎰 도박 잭팟 확률 증가"
+    },
+    "academy": {
+        "name": "📚 학원",
+        "type": "성장형",
+        "price": 250_000,
+        "base_reward": 7_000,
+        "exp_gain": 5,
+        "max_level": 30,
+        "daily_cap": 90_000,
+        "traits": ["tech", "labor"],
+        "effect": "exp_boost",
+        "level_requirements": {
+            2: {"tech": 10, "labor": 10}, 5: {"tech": 30, "labor": 20}, 10: {"tech": 50, "labor": 50}
+        },
+        "description": "📖 경험치 획득량 증가"
+    },
+
+    "apartment": {
+        "name": "🏢 아파트",
+        "type": "안정형",
+        "price": 350_000,
+        "base_reward": 9_000,
+        "exp_gain": 3,
+        "max_level": 30,
+        "daily_cap": 100_000,
+        "traits": ["stability", "risk"],
+        "effect": "real_estate_shield",
+        "level_requirements": {
+            2: {"stability": 10}, 5: {"stability": 30}, 10: {"stability": 60}
+        },
+        "description": "📉 부동산 손실률을 줄여주는 안정형 자산"
+    }
+},
+    
+    "mall": {
+        "name": "🏬 백화점",
+        "type": "복합형",
+        "price": 500_000,
+        "base_reward": 15_000,
+        "exp_gain": 4,
+        "max_level": 30,
+        "daily_cap": 120_000,
+        "traits": ["stability", "tech"],
+        "effect": "bank_bonus",
+        "level_requirements": {
+            2: {"stability": 15, "tech": 10}, 5: {"stability": 35, "tech": 30}, 10: {"stability": 60, "tech": 60}
+        },
+        "description": "🏦 은행 이자 증가"
+    }
+}
+
+BUILDING_EFFECTS = {
+    "alba_bonus": {"target": "alba", "type": "multiplier", "value": 1.2},
+    "jackpot_chance": {"target": "jackpot", "type": "chance", "value": 0.05},
+    "bank_bonus": {"target": "bank_interest", "type": "multiplier", "value": 1.3},
+    "exp_boost": {"target": "exp", "type": "multiplier", "value": 1.25},
+    "real_estate_shield": {"target": "real_estate", "type": "loss_reduction", "value": 0.6}
+}
+
+
+BUILDING_DATA_FILE = "building_data.json"
+BUILDING_STATS_FILE = "building_stats.json"
+
+def load_building_data():
+    if not os.path.exists(BUILDING_DATA_FILE):
+        with open(BUILDING_DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+    with open(BUILDING_DATA_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_building_data(data):
+    with open(BUILDING_DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+def get_user_building(user_id):
+    return load_building_data().get(str(user_id))
+
+def set_user_building(user_id, building_info):
+    data = load_building_data()
+    data[str(user_id)] = building_info
+    save_building_data(data)
+
+def load_user_stats():
+    if not os.path.exists(BUILDING_STATS_FILE):
+        with open(BUILDING_STATS_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+    with open(BUILDING_STATS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_user_stats(stats):
+    with open(BUILDING_STATS_FILE, "w", encoding="utf-8") as f:
+        json.dump(stats, f, indent=4)
+
+def add_user_stat(user_id: str, stat: str, amount: int):
+    stats = load_user_stats()
+    u = stats.setdefault(user_id, {k: 0 for k in STAT_KEYS})
+    u[stat] += amount
+    save_user_stats(stats)
+
+def get_user_stats(user_id: str):
+    return load_user_stats().get(user_id, {k: 0 for k in STAT_KEYS})
+
+
+def get_required_exp(level: int) -> int:
+    return int(100 + (level - 1) ** 2.7 * 25)
+
+def can_level_up(user_id: str, data: dict) -> tuple[bool, str]:
+    b = BUILDING_DEFS.get(data["building_id"])
+    lv = data["level"]
+    next_lv = lv + 1
+    if next_lv > b["max_level"]:
+        return False, "🏁 최대 레벨 도달"
+    if data["exp"] < get_required_exp(lv):
+        return False, f"🧪 경험치 부족 ({data['exp']} / {get_required_exp(lv)})"
+    stat_req = b.get("level_requirements", {}).get(next_lv)
+    if stat_req:
+        stats = get_user_stats(user_id)
+        for stat, req in stat_req.items():
+            if stats.get(stat, 0) < req:
+                return False, f"❌ {stat} {req} 필요 (보유 {stats.get(stat, 0)})"
+    return True, "레벨업 가능"
+
+def perform_level_up(user_id: str):
+    data = get_user_building(user_id)
+    if not data:
+        return "❌ 건물 없음"
+    ok, msg = can_level_up(user_id, data)
+    if not ok:
+        return msg
+    data["level"] += 1
+    data["exp"] -= get_required_exp(data["level"] - 1)
+    set_user_building(user_id, data)
+    return f"🎉 Lv.{data['level']} 달성!"
+
+@tree.command(name="건물구입", description="건물을 구입하여 매일 자동 보상을 받습니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(건물="구매할 건물")
+@app_commands.autocomplete(건물=lambda interaction, current: [
+    app_commands.Choice(
+        name=f"{v['name']} - {v['price']:,}원 ({v['description']})",
+        value=k
+    )
+    for k, v in BUILDING_DEFS.items() if current.lower() in k.lower() or current in v["name"]
+])
+async def 건물구입(interaction: discord.Interaction, 건물: str):
+    user_id = str(interaction.user.id)
+    balance = get_balance(user_id)
+
+    if get_user_building(user_id):
+        return await interaction.response.send_message("❌ 이미 건물을 보유 중입니다. `/건물정보`를 확인하세요.", ephemeral=True)
+
+    building = BUILDING_DEFS.get(건물)
+    if not building:
+        return await interaction.response.send_message("❌ 존재하지 않는 건물입니다.", ephemeral=True)
+
+    if balance < building["price"]:
+        return await interaction.response.send_message(f"💰 잔액 부족: {balance:,}원 / 필요 {building['price']:,}원", ephemeral=True)
+
+    # 건물 구매 처리
+    set_user_building(user_id, {
+        "building_id": 건물,
+        "level": 1,
+        "exp": 0,
+        "pending_reward": 0,
+        "last_updated": datetime.now(KST).isoformat()
+    })
+    add_balance(user_id, -building["price"])
+
+    await interaction.response.send_message(
+        f"✅ {building['name']}를 구입했습니다! 매일 자동 보상이 누적됩니다.\n💰 가격: {building['price']:,}원\n🔧 특성: {', '.join(building['traits'])}\n🧱 효과: {building['description']}"
+    )
+
+
+@tree.command(name="건물정보", description="현재 보유 중인 건물의 상태를 확인합니다.", guild=discord.Object(id=GUILD_ID))
+async def 건물정보(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    data = get_user_building(user_id)
+
+    if not data:
+        return await interaction.response.send_message("🏚️ 아직 건물을 보유하고 있지 않습니다.", ephemeral=True)
+
+    b = BUILDING_DEFS[data["building_id"]]
+    stats = get_user_stats(user_id)
+    cap = b.get("daily_cap", 999_999)
+    reward = get_building_reward(b["base_reward"], data["level"])
+
+    embed = discord.Embed(
+        title=f"{b['name']} 정보",
+        description=b["description"],
+        color=discord.Color.green()
+    )
+    embed.add_field(name="📈 레벨", value=f"{data['level']} / {b['max_level']}")
+    embed.add_field(name="🧪 경험치", value=f"{data['exp']} / {get_required_exp(data['level'])}")
+    embed.add_field(name="💰 예상 보상", value=f"{reward:,}원 (30분당)")
+    embed.add_field(name="💼 누적 보상", value=f"{data.get('pending_reward', 0):,}원 / {cap:,}원")
+    embed.add_field(name="🔧 상태치", value="\n".join([f"{k}: {stats.get(k, 0)}" for k in STAT_KEYS]), inline=False)
+
+    await interaction.response.send_message(embed=embed)
+
+
+from discord.ext import tasks
+from datetime import datetime
+import math
+
+@tasks.loop(minutes=30)
+async def accumulate_building_rewards():
+    data = load_building_data()
+    now = datetime.now(KST)
+
+    for user_id, info in data.items():
+        building = BUILDING_DEFS.get(info["building_id"])
+        if not building:
+            continue
+
+        last_updated = datetime.fromisoformat(info.get("last_updated", now.isoformat()))
+        if (now - last_updated).total_seconds() < 1800:
+            continue  # 30분 미만이면 skip
+
+        # ✅ 1. 보상 계산
+        reward = get_building_reward(building["base_reward"], info["level"])
+        max_cap = building.get("daily_cap", 999_999)
+        current_reward = info.get("pending_reward", 0)
+        info["pending_reward"] = min(current_reward + reward, max_cap)
+
+        # ✅ 2. 경험치 계산
+        exp_gain = building["exp_gain"]
+        effect = BUILDING_EFFECTS.get(building["effect"])
+        if effect and effect["target"] == "exp":
+            exp_gain = int(exp_gain * effect["value"])
+        info["exp"] += exp_gain
+
+        # ✅ 3. 타임스탬프 갱신
+        info["last_updated"] = now.isoformat()
+
+        # ✅ 4. 자동 레벨업 시도
+        if try_auto_level_up(user_id):
+            print(f"🌟 [자동 레벨업] {user_id} → Lv.{info['level']}")
+            # 선택: 알림 채널로 레벨업 메시지 보내기
+            # channel = bot.get_channel(GAMBLING_CHANNEL_ID)
+            # if channel:
+            #     await channel.send(f"📈 <@{user_id}>님의 건물이 Lv.{info['level']}로 자동 성장했습니다!")
+
+    save_building_data(data)
+
+
+
+
+
+
+
+
+
+
+
 
 
 
