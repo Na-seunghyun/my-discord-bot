@@ -5810,13 +5810,20 @@ class BoxButton(discord.ui.Button):
 
             if random.random() < 0.8:
                 compensation = int(reward * 0.8)
+                compensation = apply_alba_bonus(user_id, compensation)
+                bonus_amount = compensation - int(reward * 0.8)
                 add_balance(user_id, compensation)
                 msg = (
                     f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
-                    f"⚖️ 고용노동부 신고 성공! **{compensation:,}원**을 되찾았습니다!\n"
-                    f"🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
+                    f"⚖️ 고용노동부 신고 성공! **{compensation:,}원**을 되찾았습니다!"
+                )
+                if bonus_amount > 0:
+                    msg += f"\n🏢 건물 효과로 추가 보너스 +**{bonus_amount:,}원**!"
+                msg += (
+                    f"\n🏦 현재 오덕잔고: **{pool_amount:,}원**\n"
                     f"🎟️ `/오덕로또참여`로 복수의 기회를 노려보세요!"
                 )
+
             else:
                 msg = (
                     f"💢 초과근무를 했지만 악덕 오덕사장이 알바비 **{reward:,}원**을 가로챘습니다...\n"
@@ -5827,13 +5834,21 @@ class BoxButton(discord.ui.Button):
 
         else:
             # ✅ 정상 보상
+            base_reward = reward
+            reward = apply_alba_bonus(user_id, reward)
+            bonus_amount = reward - base_reward
+
             add_balance(user_id, reward)
             msg = f"📦 박스를 정확히 치웠습니다! 💰 **{reward:,}원** 획득!"
+            
+            if bonus_amount > 0:
+                msg += f"\n🏢 건물 보유 효과로 추가 보너스 +**{bonus_amount:,}원**!"
+
             if is_jackpot:
                 msg += "\n🎉 **우수 알바생! 보너스 지급으로 2배 보상!** 🎉"
 
             # ✅ 상태치 확률 상승 처리 (건물 보유자만)
-            from module.building_manager import get_user_building  # 건물 보유 체크
+            from module.building_manager import get_user_building
             if get_user_building(user_id):
                 stat_gains = []
                 for stat in ["stability", "risk", "labor", "tech"]:
@@ -5842,6 +5857,7 @@ class BoxButton(discord.ui.Button):
                         stat_gains.append(stat)
                 if stat_gains:
                     msg += f"\n📈 상태치 증가: {', '.join(stat_gains)}"
+
 
         # ✅ 공통 메시지: 알바 가능 횟수
         today = datetime.now(KST).date().isoformat()
