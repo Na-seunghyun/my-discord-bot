@@ -62,7 +62,39 @@ BUILDING_DEFS = {
 
 BUILDING_FILE = "data/buildings.json"
 
-# ---------------- 기본 입출력 ----------------
+# ✅ 필요한 함수 직접 정의
+def get_balance(user_id):
+    if not os.path.exists("balance.json"):
+        return 0
+    with open("balance.json", "r", encoding="utf-8") as f:
+        balances = json.load(f)
+    return balances.get(str(user_id), {}).get("amount", 0)
+
+def add_balance(user_id, amount):
+    user_id = str(user_id)
+    if not os.path.exists("balance.json"):
+        with open("balance.json", "w", encoding="utf-8") as f:
+            json.dump({}, f)
+    with open("balance.json", "r", encoding="utf-8") as f:
+        balances = json.load(f)
+    if user_id not in balances:
+        balances[user_id] = {"amount": 0}
+    balances[user_id]["amount"] = balances[user_id].get("amount", 0) + amount
+    with open("balance.json", "w", encoding="utf-8") as f:
+        json.dump(balances, f, indent=2)
+
+def add_oduk_pool(amount):
+    if not os.path.exists("oduk_pool.json"):
+        pool = {"amount": 0, "last_lotto_date": "", "last_winner": ""}
+    else:
+        with open("oduk_pool.json", "r", encoding="utf-8") as f:
+            pool = json.load(f)
+    pool["amount"] += amount
+    with open("oduk_pool.json", "w", encoding="utf-8") as f:
+        json.dump(pool, f, indent=2, ensure_ascii=False)
+
+# ✅ 건물 데이터 입출력 및 선택
+
 def load_building_data():
     if not os.path.exists(BUILDING_FILE):
         return {}
@@ -84,9 +116,10 @@ def set_user_building(user_id, building_info):
 def load_building_defs():
     return BUILDING_DEFS
 
-def get_building_choices():
+def get_building_choices(interaction: Interaction, current: str):
     defs = load_building_defs()
-    return [app_commands.Choice(name=f"{name} ({defs[name]['price']:,}원)", value=name) for name in defs]
+    return [app_commands.Choice(name=f"{name} ({defs[name]['price']:,}원)", value=name) for name in defs if current in name]
+
 
 # ---------------- 상태치 회복 제한 ----------------
 def can_use_stat_action(building: dict, key: str) -> bool:
