@@ -7708,9 +7708,14 @@ def get_jackpot_chance(user_id, base_chance):
 
     effect_key = building_def.get("effect")
     effect = BUILDING_EFFECTS.get(effect_key)
-    if effect and effect.get("target") == "jackpot_chance":
+    
+    # ✅ target이 'jackpot'일 때만 적용
+    if effect and effect.get("target") == "jackpot":
         return base_chance + effect.get("value", 0)
+
     return base_chance
+
+
 
 
 # ✅ 알바 보상에 건물 효과 적용
