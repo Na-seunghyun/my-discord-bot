@@ -8287,34 +8287,36 @@ async def accumulate_building_rewards():
         if not building:
             continue
 
-        # ✅ 1. 최근 보상 시각 확인 (30분 미만이면 skip)
-        last_updated = datetime.fromisoformat(info.get("last_updated", now.isoformat()))
+        # ⏱️ 보상 시간 확인
+        last_updated = datetime.fromisoformat(info.get("last_updated")) if info.get("last_updated") else now - timedelta(minutes=31)
         if (now - last_updated).total_seconds() < 1800:
             continue
 
-        # ✅ 2. 하루가 바뀌면 누적 보상 초기화
+        # 🗓️ 하루 경과 시 리셋
         if last_updated.date() != now.date():
             info["today_reward"] = 0
 
-        # ✅ 3. 보상 계산 및 잔고 지급
+        # 💸 보상
         reward = get_building_reward(building["base_reward"], info["level"])
         max_cap = building.get("daily_cap", 999_999)
         today_reward = info.get("today_reward", 0)
+        info.setdefault("today_reward", 0)
 
         if today_reward < max_cap:
             remaining = max_cap - today_reward
             actual_reward = min(reward, remaining)
-            add_balance(user_id, actual_reward)  # 💸 직접 유저 지갑에 지급
-            info["today_reward"] = today_reward + actual_reward
+            add_balance(user_id, actual_reward)
+            info["today_reward"] += actual_reward
 
-        # ✅ 4. 경험치 누적
+        # 🧪 경험치
         exp_gain = building["exp_gain"]
         effect = BUILDING_EFFECTS.get(building["effect"])
         if effect and effect["target"] == "exp":
             exp_gain = int(exp_gain * effect["value"])
+        info.setdefault("exp", 0)
         info["exp"] += exp_gain
 
-        # ✅ 5. 타임스탬프 갱신
+        # ⏰ 타임스탬프 갱신
         info["last_updated"] = now.isoformat()
 
     save_building_data(data)
@@ -8352,6 +8354,7 @@ async def on_ready():
 
     await process_overdue_loans_on_startup(bot)
     auto_repay_check.start()
+    accumulate_building_rewards.start()  # ✅ 반드시 루프 시작 필요
     
     print(f"🤖 봇 로그인됨: {bot.user}")
 
