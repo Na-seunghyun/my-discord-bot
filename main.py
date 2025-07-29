@@ -6024,7 +6024,7 @@ def process_bank_withdraw(user_id, amount):
 
         deposit_time = datetime.fromisoformat(d["timestamp"])
         if now - deposit_time >= timedelta(hours=3):
-            interest = int(take * 0.02)
+            base_interest = int(take * 0.02)
             interest = apply_interest_bonus(user_id, base_interest)  # ✅ 건물 보정 적용
             interest_total += interest
 
@@ -6044,6 +6044,7 @@ def process_bank_withdraw(user_id, amount):
     tax = int(interest_total * 0.1)
     net_interest = interest_total - tax
     return net_interest, tax
+
 
 
 # ✅ 대출 상환용 출금 처리 (이자 계산 없음)
