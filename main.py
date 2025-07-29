@@ -7173,18 +7173,27 @@ async def try_repay(user_id, member, *, force=False):
     if not loan:
         return None
 
-    if not force and not is_due_for_repayment(loan):
+    # ✅ created_at 방어 처리
+    raw_created_at = loan.get("created_at")
+    raw_last_checked = loan.get("last_checked")
+
+    if not raw_created_at or not isinstance(raw_created_at, str) or raw_created_at.strip() == "":
+        print(f"❌ 자동상환 오류 - 유저 {user_id}: 잘못된 created_at 값: {raw_created_at}")
+        return None
+
+    try:
+        created_at = datetime.fromisoformat(raw_created_at)
+        last_checked = datetime.fromisoformat(raw_last_checked) if raw_last_checked else created_at
+    except ValueError as e:
+        print(f"❌ 자동상환 오류 - 유저 {user_id}: 날짜 파싱 실패 → {e}")
         return None
 
     now = datetime.now(KST)
-    last_checked = datetime.fromisoformat(loan.get("last_checked", loan["created_at"]))
     if (now - last_checked).total_seconds() < 1740 and not force:
         return None
 
     rate = loan.get("interest_rate", 0.05)
-    total_due = calculate_loan_due(
-        loan["amount"], loan["created_at"], rate, force_future_30min=False
-    )
+    total_due = calculate_loan_due(loan["amount"], raw_created_at, rate, force_future_30min=False)
 
     if total_due <= 0:
         return None
@@ -7210,31 +7219,28 @@ async def try_repay(user_id, member, *, force=False):
         data["consecutive_successes"] += 1
         data["consecutive_failures"] = 0
 
-        # ✅ 등급 회복 메시지 (단, 반환된 success 값은 사용 안함!)
         grade_message, updated_credit_grade, _ = get_grade_recovery_message(data)
 
-        # ✅ created_at 백업
-        created_at_backup = loan["created_at"]
+        # ✅ 대출 초기화 전 정보 백업
+        created_at_backup = raw_created_at
 
-        # ✅ 대출 초기화
         clear_loan(user_id)
 
-        # ✅ 최신 상태 복구 (등급은 get_grade_recovery_message에서 갱신됨)
+        # ✅ 최신 상태 복구
         loans = load_loans()
         loans[user_id] = {
             "amount": 0,
             "credit_grade": updated_credit_grade,
-            "consecutive_successes": data["consecutive_successes"],  # 누적된 값 유지
+            "consecutive_successes": data["consecutive_successes"],
             "consecutive_failures": 0,
             "created_at": created_at_backup,
             "last_checked": now.isoformat(),
+            "unpaid_days": 0,
         }
         save_loans(loans)
 
         print(f"[DEBUG] 상환 성공 → 등급={updated_credit_grade}, success={data['consecutive_successes']}")
         return format_repay_message(member, created_at_backup, total_due, "✅ 결과: 상환 성공!", grade_change=grade_message)
-
-
 
     # ❌ 상환 실패
     data["consecutive_failures"] += 1
@@ -7244,21 +7250,20 @@ async def try_repay(user_id, member, *, force=False):
     if data["consecutive_failures"] >= 5:
         clear_loan(user_id)
 
-        # 🧨 파산 처리: 모든 자산 초기화
         set_balance(user_id, 0)
         reset_bank_deposits(user_id)
         reset_investments(user_id)
         add_to_bankrupt_log(user_id)
 
-        # ✅ 파산 상태로 명확히 설정
+        now_str = now.isoformat()
         loans = load_loans()
         loans[user_id] = {
             "amount": 0,
-            "credit_grade": "F",              # 강제 F 등급
-            "consecutive_successes": 0,       # 성공 횟수 초기화
+            "credit_grade": "F",
+            "consecutive_successes": 0,
             "consecutive_failures": 0,
-            "created_at": "",                 # 완전 초기화
-            "last_checked": "",
+            "created_at": now_str,
+            "last_checked": now_str,
             "unpaid_days": 0,
         }
         save_loans(loans)
@@ -7267,7 +7272,6 @@ async def try_repay(user_id, member, *, force=False):
             f"☠️ **{member.display_name}**님은 **연체 5회 초과**로 자동 파산 처리되었습니다.\n"
             f"💥 모든 자산과 채무가 초기화되며, 신용등급은 `F`로 기록됩니다."
         )
-
 
     if data["consecutive_failures"] >= 3:
         data["credit_grade"] = "F"
@@ -7280,10 +7284,11 @@ async def try_repay(user_id, member, *, force=False):
 
     return format_repay_message(
         member,
-        loan["created_at"],
+        raw_created_at,
         total_due,
         f"❌ 결과: 상환 실패! {get_failure_message(data['credit_grade'], data['consecutive_failures'])}\n💣 누적 연체: {data['consecutive_failures']}회"
     )
+
 
 
 
