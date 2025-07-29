@@ -6496,8 +6496,7 @@ class RealEstateView(ui.View):
             loss_line = "🛡️ 손실 완화 적용됨 (건물 효과)\n" if loss_shield and profit_rate < 0 else ""
 
             # 📈 상태치 증가 (건물 보유자만)
-            from module.stat_manager import add_user_stat
-            from module.building_manager import get_user_building
+
             stat_line = ""
             if get_user_building(user_id):
                 gained_stats = []
