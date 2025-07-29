@@ -2775,8 +2775,6 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     bar = create_graph_bar(success_chance, roll)
 
     building = get_user_building(user_id)
-    stats = load_user_stats()
-    user_stats = stats.get(user_id, {})
     stat_gain_text = ""
 
     if roll <= success_chance:
@@ -2790,16 +2788,15 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         balance += reward
 
         # 📈 상태치 증가
-        gained_stats = []
         if building:
+            user_stats = get_user_stats(user_id)
+            gained_stats = []
             for stat in ["stability", "risk", "labor", "tech"]:
                 if random.random() < 0.15:
-                    user_stats[stat] = user_stats.get(stat, 0) + 1
+                    add_user_stat(user_id, stat, 1)
                     gained_stats.append(stat)
             if gained_stats:
                 stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
-                stats[user_id] = user_stats
-                save_user_stats(stats)
 
         record_gamble_result(user_id, success=True)
         title = get_gamble_title(user_id, success=True)
@@ -2845,6 +2842,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     await interaction.response.send_message(embed=embed)
 
     print(f"⏱️ /도박 실행 완료 ({interaction.user.name}): {time.time() - start_time:.2f}초")
+
 
 
 
@@ -5526,7 +5524,7 @@ async def 타자알바(interaction: discord.Interaction):
         end_time = datetime.now(KST)
 
         if msg.content.strip() != phrase:
-            update_job_record(user_id, 0, job_type="default", success=False)  # ✅ 실패 기록
+            update_job_record(user_id, 0, job_type="default", success=False)
             await msg.reply("❌ 문장이 틀렸습니다. 알바 실패!", mention_author=False)
             return
 
@@ -5536,18 +5534,15 @@ async def 타자알바(interaction: discord.Interaction):
         reward = max(120, base_reward - penalty)
         reward = apply_alba_bonus(user_id, reward)
 
-
-        if random.random() < 0.01:
+        # 🎉 잭팟 확률 1%
+        is_jackpot = random.random() < 0.01
+        if is_jackpot:
             reward *= 3
-            is_jackpot = True
-        else:
-            is_jackpot = False
 
-        # ✅ 초과근무 여부 기록
+        # ✅ 초과근무 여부
         success = update_job_record(user_id, reward, job_type="default")
         if not success:
             update_job_record(user_id, reward, job_type="default", over_limit=True)
-
             add_oduk_pool(reward)
             pool_amount = get_oduk_pool_amount()
 
@@ -5569,7 +5564,14 @@ async def 타자알바(interaction: discord.Interaction):
                 mention_author=False
             )
 
+        # 💸 정상 보상
         add_balance(user_id, reward)
+
+        # ✅ 상태치 증가 확률 적용
+        stat_gain_text = ""
+        if random.random() < 0.4:
+            add_user_stat(user_id, "labor", 1)
+            stat_gain_text = "\n📈 상태치 증가: labor +1"
 
         record = load_job_records().get(user_id, {})
         today_used = record.get("daily", {}).get(today, 0)
@@ -5581,13 +5583,15 @@ async def 타자알바(interaction: discord.Interaction):
         )
         if is_jackpot:
             message += "\n🎉 **성실 알바생 임명! 사장님의 은혜로 알바비를 3배 지급합니다.** 🎉"
+        message += stat_gain_text
         message += f"\n📌 오늘 남은 알바 가능 횟수: **{remaining}회** (총 5회 중)"
 
         await msg.reply(message, mention_author=False)
 
     except asyncio.TimeoutError:
-        update_job_record(user_id, 0, job_type="default", success=False)  # ✅ 시간 초과 실패 기록
+        update_job_record(user_id, 0, job_type="default", success=False)
         await interaction.followup.send("⌛️ 시간이 초과되었습니다. 알바 실패!", ephemeral=True)
+
 
 
 
@@ -6427,9 +6431,7 @@ class RealEstateView(ui.View):
             else:
                 loss_multiplier = 2.0
 
-            # ✅ 건물 효과: 손실 완화 여부 확인
             loss_shield = has_real_estate_shield(user_id)
-
             rocket_up = False
             bonus_boost = False
 
@@ -6441,7 +6443,6 @@ class RealEstateView(ui.View):
                 if profit_rate < 0:
                     profit_rate = int(profit_rate * loss_multiplier)
                     profit_rate = max(profit_rate, -100)
-
                     if loss_shield:
                         profit_rate = int(profit_rate * 0.6)
                         profit_rate = max(profit_rate, -100)
@@ -6450,10 +6451,7 @@ class RealEstateView(ui.View):
                 bonus_boost = True
                 profit_rate += 50
 
-            # ✅ 기본 수익 계산
             profit_amount_raw = int(self.invest_amount * (profit_rate / 100))
-
-            # ✅ 건물 효과 보정 적용
             profit_amount = apply_investment_bonus(user_id, profit_amount_raw)
 
             tax = int(profit_amount * 0.1) if profit_amount > 0 else 0
@@ -6471,7 +6469,7 @@ class RealEstateView(ui.View):
             add_real_estate_profit(user_id, net_gain)
             increment_real_estate_count(user_id)
 
-            # 연출 메시지
+            effect_text = ""
             if rocket_up:
                 effect_text = "💥 지역 개발 대박! 재개발 호재!"
             elif profit_rate >= 40:
@@ -6497,6 +6495,21 @@ class RealEstateView(ui.View):
             bonus_line = "✨ 보너스 수익률 +50%\n" if bonus_boost else ""
             loss_line = "🛡️ 손실 완화 적용됨 (건물 효과)\n" if loss_shield and profit_rate < 0 else ""
 
+            # 📈 상태치 증가 (건물 보유자만)
+            from module.stat_manager import add_user_stat
+            from module.building_manager import get_user_building
+            stat_line = ""
+            if get_user_building(user_id):
+                gained_stats = []
+                if profit_rate >= 30 and random.random() < 0.3:
+                    add_user_stat(user_id, "stability", 1)
+                    gained_stats.append("stability")
+                if profit_rate <= -50 and random.random() < 0.3:
+                    add_user_stat(user_id, "tech", 1)
+                    gained_stats.append("tech")
+                if gained_stats:
+                    stat_line = f"📈 상태치 증가: {', '.join(gained_stats)}\n"
+
             embed = discord.Embed(
                 title="🚀 대박 투자 성공!" if profit_amount >= 0 else "📉 투자 실패...",
                 description=(
@@ -6505,6 +6518,7 @@ class RealEstateView(ui.View):
                     f"{title_line}"
                     f"{bonus_line}"
                     f"{loss_line}"
+                    f"{stat_line}"
                     f"💬 {effect_text}\n\n"
                     f"💵 투자금: {self.invest_amount:,}원\n"
                     f"📊 수익률: {profit_rate:+}%\n"
@@ -6527,6 +6541,7 @@ class RealEstateView(ui.View):
             self.disabled_regions.add(region)
 
         return callback
+
 
 
 
