@@ -2725,7 +2725,6 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
 
 
 
-from module.building_manager import get_user_building  # 건물 보유 체크용 import 추가
 
 @tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 100원부터 도박 가능")
@@ -2741,7 +2740,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     user_id = str(interaction.user.id)
 
-    # ✅ 잔액 캐싱 처리
+    # ✅ balance 캐싱
     balances = load_balances()
     user_data = balances.get(user_id, {})
     balance = user_data.get("amount", 0)
@@ -2757,7 +2756,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             ephemeral=True
         )
 
-    # 💸 베팅금 차감
+    # 💸 베팅 차감
     balance -= 베팅액
 
     # 🎲 도박 시도
@@ -2777,9 +2776,10 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     bar = create_graph_bar(success_chance, roll)
 
+    # 🎯 보정 정보
+    building = get_user_building(user_id)
     stats = load_user_stats()
     user_stats = stats.get(user_id, {})
-    building = get_user_building(user_id)
     stat_gain_text = ""
 
     if roll <= success_chance:
@@ -2788,21 +2788,23 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         is_jackpot = random.random() < jackpot_chance
         multiplier = 4 if is_jackpot else 2
 
-        # 💰 보상금 계산
+        # 💰 보상 계산
         reward = 베팅액 * multiplier
         reward = apply_gamble_bonus(user_id, reward)
-
         balance += reward
 
-        # 🧠 상태치 증가 (건물 있을 때만)
+        # 📈 상태치 증가 (성공 시에만)
         gained_stats = []
         if building:
             for stat in ["stability", "risk", "labor", "tech"]:
                 if random.random() < 0.15:
                     user_stats[stat] = user_stats.get(stat, 0) + 1
                     gained_stats.append(stat)
+
             if gained_stats:
                 stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
+                stats[user_id] = user_stats
+                save_user_stats(stats)  # ✅ 성공 시에만 저장
 
         # ✅ 기록 및 칭호
         record_gamble_result(user_id, success=True)
@@ -2840,21 +2842,17 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             user_id
         )
 
-    # 💾 저장 한 번씩만
+    # 💾 balance 저장
     balances[user_id] = {
         "amount": balance,
         "last_updated": datetime.now().isoformat()
     }
     save_balances(balances)
 
-    if building and gained_stats:
-        stats[user_id] = user_stats
-        save_user_stats(stats)
-
     await interaction.response.send_message(embed=embed)
 
-    # ✅ 처리 시간 로그
     print(f"⏱️ /도박 실행 완료 ({interaction.user.name}): {time.time() - start_time:.2f}초")
+
 
 
 
