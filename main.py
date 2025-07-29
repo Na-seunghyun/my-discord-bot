@@ -2730,6 +2730,9 @@ from module.building_manager import get_user_building  # 건물 보유 체크용
 @tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 100원부터 도박 가능")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
+    import time
+    start_time = time.time()
+
     if interaction.channel.id != 1394331814642057418:
         return await interaction.response.send_message(
             "❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.",
@@ -2737,7 +2740,11 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
 
     user_id = str(interaction.user.id)
-    balance = get_balance(user_id)
+
+    # ✅ 잔액 캐싱 처리
+    balances = load_balances()
+    user_data = balances.get(user_id, {})
+    balance = user_data.get("amount", 0)
 
     if 베팅액 < 100:
         return await interaction.response.send_message(
@@ -2750,10 +2757,10 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             ephemeral=True
         )
 
-    # 💸 차감
-    add_balance(user_id, -베팅액)
+    # 💸 베팅금 차감
+    balance -= 베팅액
 
-    # 🎲 실행
+    # 🎲 도박 시도
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
@@ -2770,50 +2777,53 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     bar = create_graph_bar(success_chance, roll)
 
-    # ✅ 성공
+    stats = load_user_stats()
+    user_stats = stats.get(user_id, {})
+    building = get_user_building(user_id)
+    stat_gain_text = ""
+
     if roll <= success_chance:
-        # ✅ 건물 효과로 잭팟 확률 적용
+        # 🎰 잭팟 여부
         jackpot_chance = get_jackpot_chance(user_id, 0.01)
         is_jackpot = random.random() < jackpot_chance
         multiplier = 4 if is_jackpot else 2
 
-        # ✅ 보상 계산 + 건물 효과 적용
+        # 💰 보상금 계산
         reward = 베팅액 * multiplier
         reward = apply_gamble_bonus(user_id, reward)
 
-        add_balance(user_id, reward)
-        final_balance = get_balance(user_id)
+        balance += reward
 
-        record_gamble_result(user_id, success=True)
-        title = get_gamble_title(user_id, success=True)
-
-        # ✅ 상태치 확률 상승 처리 (건물 보유자만)
-        gained_stat_text = ""
-        if get_user_building(user_id):
-            stat_gains = []
+        # 🧠 상태치 증가 (건물 있을 때만)
+        gained_stats = []
+        if building:
             for stat in ["stability", "risk", "labor", "tech"]:
                 if random.random() < 0.15:
-                    add_user_stat(user_id, stat, 1)
-                    stat_gains.append(stat)
-            if stat_gains:
-                gained_stat_text = f"\n📈 상태치 증가: {', '.join(stat_gains)}"
+                    user_stats[stat] = user_stats.get(stat, 0) + 1
+                    gained_stats.append(stat)
+            if gained_stats:
+                stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
+
+        # ✅ 기록 및 칭호
+        record_gamble_result(user_id, success=True)
+        title = get_gamble_title(user_id, success=True)
 
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
         embed = create_embed(
             "🎉 도박 성공!",
             f"{jackpot_msg}"
             f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n"
-            f"🏅 칭호: {title}"
-            f"{gained_stat_text}",
+            f"+{reward:,}원 획득!\n💰 잔액: {balance:,}원\n\n"
+            f"🏅 칭호: {title}{stat_gain_text}",
             discord.Color.gold() if is_jackpot else discord.Color.green(),
             user_id
         )
 
-    # ❌ 실패
     else:
+        # ❌ 실패 시 오덕로또로 이동
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
+
         record_gamble_result(user_id, success=False)
         title = get_gamble_title(user_id, success=False)
 
@@ -2830,7 +2840,22 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             user_id
         )
 
+    # 💾 저장 한 번씩만
+    balances[user_id] = {
+        "amount": balance,
+        "last_updated": datetime.now().isoformat()
+    }
+    save_balances(balances)
+
+    if building and gained_stats:
+        stats[user_id] = user_stats
+        save_user_stats(stats)
+
     await interaction.response.send_message(embed=embed)
+
+    # ✅ 처리 시간 로그
+    print(f"⏱️ /도박 실행 완료 ({interaction.user.name}): {time.time() - start_time:.2f}초")
+
 
 
 
