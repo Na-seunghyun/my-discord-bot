@@ -7693,8 +7693,18 @@ async def 감가테스트(interaction: discord.Interaction):
     await interaction.followup.send("✅ 감가 테스트가 완료되었습니다. 로그 또는 알림 채널을 확인하세요.")
 
 
+import sqlite3
+import os
+from datetime import datetime
 
+DB_PATH = "buildings.db"
 
+STAT_KEYS = ["stability", "risk", "labor", "tech"]
+
+def get_db_connection():
+    return sqlite3.connect(DB_PATH)
+
+    
 # ✅ 건물 효과 연동 통합 적용 코드
 
 # 🧱 건물 효과 정의
@@ -7707,11 +7717,6 @@ BUILDING_EFFECTS = {
     "bank_interest": {"target": "bank_interest", "type": "percent_increase", "value": 0.05},
 }
 
-# 🧩 공통 유틸
-
-def get_user_building(user_id):
-    data = load_building_data()
-    return data.get(str(user_id))
 
 # ✅ 도박 보상 / 잭팟 확률에 건물 효과 적용
 
@@ -7924,10 +7929,6 @@ BUILDING_EFFECTS = {
     "real_estate_shield": {"target": "real_estate", "type": "loss_reduction", "value": 0.4}
 }
 
-
-BUILDING_DATA_FILE = "building_data.json"
-BUILDING_STATS_FILE = "building_stats.json"
-
 def get_levelup_cost(level: int) -> int:
     return int(50_000 * (1.1 ** (level - 1)))
 
@@ -7940,52 +7941,108 @@ def get_effective_building_value(building_id: str, level: int) -> float:
     factor = 1 + (level - 1) / 29
     return base * factor
 
-
-
-def load_building_data():
-    if not os.path.exists(BUILDING_DATA_FILE):
-        with open(BUILDING_DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump({}, f)
-    with open(BUILDING_DATA_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_building_data(data):
-    with open(BUILDING_DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4)
-
 def get_user_building(user_id):
-    return load_building_data().get(str(user_id))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM buildings WHERE user_id = ?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        return {
+            "building_id": row[1],
+            "level": row[2],
+            "exp": row[3],
+            "today_reward": row[4],
+            "last_updated": row[5]
+        }
+    return None
 
-def set_user_building(user_id, building_info):
-    data = load_building_data()
-    data[str(user_id)] = building_info
-    save_building_data(data)
-
-def load_user_stats():
-    if not os.path.exists(BUILDING_STATS_FILE):
-        with open(BUILDING_STATS_FILE, "w", encoding="utf-8") as f:
-            json.dump({}, f)
-    with open(BUILDING_STATS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_user_stats(stats):
-    with open(BUILDING_STATS_FILE, "w", encoding="utf-8") as f:
-        json.dump(stats, f, indent=4)
-
-def add_user_stat(user_id: str, stat: str, amount: int):
-    stats = load_user_stats()
-    u = stats.setdefault(user_id, {k: 0 for k in STAT_KEYS})
-    u[stat] += amount
-    save_user_stats(stats)
-
-def get_user_stats(user_id: str):
-    return load_user_stats().get(user_id, {k: 0 for k in STAT_KEYS})
+def set_user_building(user_id, data):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT OR REPLACE INTO buildings
+        (user_id, building_id, level, exp, today_reward, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        user_id,
+        data.get("building_id"),
+        data.get("level", 1),
+        data.get("exp", 0),
+        data.get("today_reward", 0),
+        data.get("last_updated")
+    ))
+    conn.commit()
+    conn.close()
 
 def clear_user_building(user_id):
-    data = load_building_data()
-    data.pop(str(user_id), None)
-    save_building_data(data)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM buildings WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
 
+def get_user_stats(user_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM building_stats WHERE user_id = ?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        return {
+            "stability": row[1],
+            "risk": row[2],
+            "labor": row[3],
+            "tech": row[4]
+        }
+    return {k: 0 for k in STAT_KEYS}
+
+def add_user_stat(user_id: str, stat: str, amount: int):
+    stats = get_user_stats(user_id)
+    stats[stat] = stats.get(stat, 0) + amount
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT OR REPLACE INTO building_stats
+        (user_id, stability, risk, labor, tech)
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        user_id,
+        stats["stability"],
+        stats["risk"],
+        stats["labor"],
+        stats["tech"]
+    ))
+    conn.commit()
+    conn.close()
+
+def reset_user_stats(user_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE building_stats SET
+        stability = 0, risk = 0, labor = 0, tech = 0
+        WHERE user_id = ?
+    """, (user_id,))
+    conn.commit()
+    conn.close()
+
+def get_all_buildings():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM buildings")
+    rows = cur.fetchall()
+    conn.close()
+    result = {}
+    for row in rows:
+        result[row[0]] = {
+            "building_id": row[1],
+            "level": row[2],
+            "exp": row[3],
+            "today_reward": row[4],
+            "last_updated": row[5]
+        }
+    return result
 
 def get_required_exp(level: int) -> int:
     return int(100 + (level - 1) ** 2.7 * 25)
@@ -8000,13 +8057,13 @@ def can_level_up(user_id: str, data: dict) -> tuple[bool, str]:
     messages = []
     ok = True
 
-    # 경험치 부족
+    # 경험치 조건
     req_exp = get_required_exp(lv)
     if data["exp"] < req_exp:
         messages.append(f"🧪 경험치 부족: {data['exp']} / {req_exp}")
         ok = False
 
-    # 상태치 부족
+    # 상태치 조건
     stat_req = b.get("level_requirements", {}).get(next_lv)
     if stat_req:
         stats = get_user_stats(user_id)
@@ -8016,26 +8073,14 @@ def can_level_up(user_id: str, data: dict) -> tuple[bool, str]:
                 messages.append(f"🔧 상태치 부족: {stat} {current} / {req}")
                 ok = False
 
-    # 비용 부족
-    cost = get_level_up_cost(lv)
+    # 자금 조건
+    cost = get_levelup_cost(lv)
     wallet = get_balance(user_id)
     if wallet < cost:
         messages.append(f"💸 자금 부족: {wallet:,} / {cost:,}")
         ok = False
 
     return ok, "\n".join(messages) if messages else "레벨업 가능"
-
-
-    # 비용 조건
-    cost = get_level_up_cost(next_lv)
-    if get_balance(user_id) < cost:
-        messages.append(f"💸 비용 부족: ❌ 잔액 {get_balance(user_id):,} / 필요 {cost:,}")
-        ok = False
-    else:
-        messages.append(f"💸 비용 충분: ✅ 잔액 {get_balance(user_id):,} / 필요 {cost:,}")
-
-    return ok, "\n".join(messages)
-
 
 def perform_level_up(user_id: str):
     data = get_user_building(user_id)
@@ -8085,11 +8130,10 @@ def perform_level_up(user_id: str):
     set_user_building(user_id, data)
 
     # ✅ 상태치 초기화
-    stats = load_user_stats()
-    stats[user_id] = {k: 0 for k in STAT_KEYS}
-    save_user_stats(stats)
+    reset_user_stats(user_id)
 
     return f"🎉 Lv.{data['level']} 달성! 💸 비용 {cost:,}원 지불됨 (🔧 상태치 초기화됨)"
+
 
 
 
@@ -8097,7 +8141,7 @@ def perform_level_up(user_id: str):
 async def 건물주(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
 
-    building_data = load_building_data()
+    building_data = get_all_buildings()
     if not building_data:
         return await interaction.followup.send("🏚️ 현재 건물을 보유한 유저가 없습니다.")
 
@@ -8113,7 +8157,7 @@ async def 건물주(interaction: discord.Interaction):
     if not lines:
         return await interaction.followup.send("🏚️ 건물 보유자가 없습니다.")
 
-    # 🔹 한 번에 25명씩 잘라서 나눠서 응답
+    # 🔹 한 번에 25명씩 나눠서 출력
     CHUNK_SIZE = 25
     chunks = [lines[i:i+CHUNK_SIZE] for i in range(0, len(lines), CHUNK_SIZE)]
 
@@ -8187,7 +8231,7 @@ async def 건물구입(interaction: discord.Interaction, 건물: str):
         "building_id": 건물,
         "level": 1,
         "exp": 0,
-        "pending_reward": 0,
+        "today_reward": 0,  # ✅ 기존 pending_reward → today_reward 로 통일
         "last_updated": datetime.now(KST).isoformat()
     })
     add_balance(user_id, -building["price"])
@@ -8246,8 +8290,6 @@ async def 건물정보(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-
-
 @tree.command(name="건물판매", description="보유 중인 건물을 판매하여 일부 금액을 환불받습니다.", guild=discord.Object(id=GUILD_ID))
 async def 건물판매(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -8265,16 +8307,12 @@ async def 건물판매(interaction: discord.Interaction):
     refund_rate = 0.5  # 💸 환불 비율: 50%
     refund_amount = int(building_def["price"] * refund_rate)
 
-    # 💥 건물 데이터 삭제 및 금액 환불
+    # 💥 건물 삭제 및 금액 환불
     clear_user_building(user_id)
     add_balance(user_id, refund_amount)
 
-    # 💥 상태치도 초기화
-    stats = load_user_stats()
-    if user_id in stats:
-        for stat in ["stability", "risk", "labor", "tech"]:
-            stats[user_id][stat] = 0
-        save_user_stats(stats)
+    # 💥 상태치 초기화
+    reset_user_stats(user_id)
 
     await interaction.response.send_message(
         embed=discord.Embed(
@@ -8289,64 +8327,58 @@ async def 건물판매(interaction: discord.Interaction):
     )
 
 
-
-
-
-
-
-
-
+# ✅ 자동 보상 적립 루프
 from discord.ext import tasks
-from datetime import datetime
-import math
+from datetime import datetime, timedelta
 
 @tasks.loop(minutes=30)
 async def accumulate_building_rewards():
-    data = load_building_data()
+    buildings = get_all_buildings()
     now = datetime.now(KST)
 
-    for user_id, info in data.items():
-        building = BUILDING_DEFS.get(info["building_id"])
-        if not building:
+    for user_id, info in buildings.items():
+        building_def = BUILDING_DEFS.get(info["building_id"])
+        if not building_def:
             continue
 
-        # ⏱️ 보상 시간 확인
-        last_updated = datetime.fromisoformat(info.get("last_updated")) if info.get("last_updated") else now - timedelta(minutes=31)
+        # ⏱️ 마지막 보상 시각 확인
+        last_updated_str = info.get("last_updated")
+        last_updated = datetime.fromisoformat(last_updated_str) if last_updated_str else now - timedelta(minutes=31)
+
+        # 30분 미만 경과 시 스킵
         if (now - last_updated).total_seconds() < 1800:
             continue
 
-        # 🗓️ 하루 경과 시 리셋
+        # 🗓️ 하루 지나면 리셋
         if last_updated.date() != now.date():
             info["today_reward"] = 0
 
-        # 💸 보상
-        reward = get_building_reward(building["base_reward"], info["level"])
-        max_cap = building.get("daily_cap", 999_999)
-        today_reward = info.get("today_reward", 0)
-        info.setdefault("today_reward", 0)
+        # 💸 보상 계산
+        base_reward = building_def["base_reward"]
+        reward = get_building_reward(base_reward, info["level"])
+        max_cap = building_def.get("daily_cap", 999_999)
 
-        if today_reward < max_cap:
-            remaining = max_cap - today_reward
-            actual_reward = min(reward, remaining)
+        today_reward = info.get("today_reward", 0)
+        remaining = max_cap - today_reward
+        actual_reward = min(reward, remaining)
+
+        if actual_reward > 0:
             add_balance(user_id, actual_reward)
             info["today_reward"] += actual_reward
 
-        # 🧪 경험치
-        exp_gain = building["exp_gain"]
-        effect = BUILDING_EFFECTS.get(building["effect"])
+        # 🧪 경험치 적립
+        exp_gain = building_def["exp_gain"]
+        effect = BUILDING_EFFECTS.get(building_def["effect"])
         if effect and effect["target"] == "exp":
             exp_gain = int(exp_gain * effect["value"])
-        info.setdefault("exp", 0)
+
         info["exp"] += exp_gain
 
         # ⏰ 타임스탬프 갱신
         info["last_updated"] = now.isoformat()
 
-    save_building_data(data)
-
-
-
-
+        # 🔄 업데이트 저장
+        set_user_building(user_id, info)
 
 
 
