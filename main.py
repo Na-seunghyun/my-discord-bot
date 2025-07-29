@@ -2789,39 +2789,48 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         # 💰 보상 반영
         balance += reward
 
-        # 📈 상태치 증가 (성공 시)
+        # 📈 상태치 증가
         gained_stats = []
         if building:
             for stat in ["stability", "risk", "labor", "tech"]:
                 if random.random() < 0.15:
                     user_stats[stat] = user_stats.get(stat, 0) + 1
                     gained_stats.append(stat)
-
             if gained_stats:
                 stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
                 stats[user_id] = user_stats
                 save_user_stats(stats)
 
-        # ✅ 기록 저장
         record_gamble_result(user_id, success=True)
         title = get_gamble_title(user_id, success=True)
-
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
-        embed = create_embed(
-            "🎉 도박 성공!",
-            f"{jackpot_msg}(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-            f"+{reward:,}원 획득!\n💰 잔액: {balance:,}원\n\n🏅 칭호: {title}{stat_gain_text}",
-            discord.Color.gold() if is_jackpot else discord.Color.green(),
-            user_id
-        )
     else:
         # ❌ 실패 → 오덕로또 적립
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
-
         record_gamble_result(user_id, success=False)
         title = get_gamble_title(user_id, success=False)
 
+    # 💾 잔액 저장
+    balances[user_id] = {
+        "amount": balance,
+        "last_updated": datetime.now().isoformat()
+    }
+    save_balances(balances)
+
+    # 📥 최신 잔액 반영
+    final_balance = get_balance(user_id)
+
+    # 📤 응답 메시지
+    if roll <= success_chance:
+        embed = create_embed(
+            "🎉 도박 성공!",
+            f"{jackpot_msg}(확률: {success_chance}%, 값: {roll})\n{bar}\n"
+            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n🏅 칭호: {title}{stat_gain_text}",
+            discord.Color.gold() if is_jackpot else discord.Color.green(),
+            user_id
+        )
+    else:
         embed = create_embed(
             "💀 도박 실패!",
             f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
@@ -2833,16 +2842,10 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             user_id
         )
 
-    # 💾 최종 잔액 반영 및 저장
-    balances[user_id] = {
-        "amount": balance,
-        "last_updated": datetime.now().isoformat()
-    }
-    save_balances(balances)
-
     await interaction.response.send_message(embed=embed)
 
     print(f"⏱️ /도박 실행 완료 ({interaction.user.name}): {time.time() - start_time:.2f}초")
+
 
 
 
