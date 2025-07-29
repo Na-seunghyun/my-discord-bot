@@ -5867,7 +5867,7 @@ class BoxButton(discord.ui.Button):
                 msg += "\n🎉 **우수 알바생! 보너스 지급으로 2배 보상!** 🎉"
 
             # ✅ 상태치 확률 상승 처리 (건물 보유자만)
-            from module.building_manager import get_user_building
+
             if get_user_building(user_id):
                 stat_gains = []
                 for stat in ["stability", "risk", "labor", "tech"]:
