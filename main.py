@@ -8332,7 +8332,6 @@ def get_building_reward(base_reward: int, level: int) -> int:
 def get_required_exp(level: int) -> int:
     return int(20 + 10 * (level ** 1.2))
 
-# ✅ /건물정보 명령어
 @tree.command(name="건물정보", description="현재 보유 중인 건물의 상태를 확인합니다.", guild=discord.Object(id=GUILD_ID))
 async def 건물정보(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -8355,6 +8354,8 @@ async def 건물정보(interaction: discord.Interaction):
         description=b["description"],
         color=discord.Color.green()
     )
+
+    # 기본 정보
     embed.add_field(name="📈 레벨", value=f"{level} / {b['max_level']}")
     embed.add_field(name="🧪 경험치", value=f"{data['exp']} / {get_required_exp(level)}")
     embed.add_field(name="💰 예상 보상", value=f"{reward:,}원 (30분당)")
@@ -8365,7 +8366,35 @@ async def 건물정보(interaction: discord.Interaction):
         inline=False
     )
 
+    # ✅ 효과 상세 계산
+    effect_key = b.get("effect")
+    if effect_key:
+        current_val = get_effective_building_value(data["building_id"], level)
+        next_val = get_effective_building_value(data["building_id"], min(level+1, b["max_level"]))
+        effect_name = {
+            "alba_bonus": "알바 수익 증가율",
+            "jackpot_chance": "잭팟 확률 증가",
+            "bank_bonus": "은행 이자 증가율",
+            "exp_boost": "경험치 획득량 증가",
+            "real_estate_shield": "부동산 손실 감소율"
+        }.get(effect_key, effect_key)
+
+        # % 변환 여부 결정
+        if BUILDING_EFFECTS.get(effect_key, {}).get("type") in ["multiplier", "chance", "loss_reduction"]:
+            current_val *= 100
+            next_val *= 100
+            unit = "%"
+        else:
+            unit = ""
+
+        embed.add_field(
+            name="📊 효과 증가",
+            value=f"{effect_name}: **{current_val:.2f}{unit} → {next_val:.2f}{unit}** (다음 레벨)",
+            inline=False
+        )
+
     await interaction.response.send_message(embed=embed)
+
 
 @tree.command(name="건물판매", description="보유 중인 건물을 판매하여 일부 금액을 환불받습니다.", guild=discord.Object(id=GUILD_ID))
 async def 건물판매(interaction: discord.Interaction):
