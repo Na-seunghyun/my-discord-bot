@@ -201,35 +201,19 @@ def ensure_balance_file():
 def load_balances():
     ensure_balance_file()
     with open(BALANCE_FILE, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except:
-            return {}
+        return json.load(f)
 
 def save_balances(data):
-    existing = {}
-    if os.path.exists(BALANCE_FILE):
-        with open(BALANCE_FILE, "r", encoding="utf-8") as f:
-            try:
-                existing = json.load(f)
-            except:
-                existing = {}
-
-    # 기존 데이터와 병합
-    for uid, info in data.items():
-        existing[uid] = info
-
-    # 1,000명 초과 시 오래된 데이터 삭제
-    if len(existing) > 1000:
-        existing = dict(sorted(existing.items(), key=lambda x: x[1].get("last_updated", ""), reverse=True)[:1000])
-
+    # 1,000명 이상 시 가장 오래된 데이터 제거 (최대 1000명 유지)
+    if len(data) > 1000:
+        data = dict(sorted(data.items(), key=lambda x: x[1].get("last_updated", ""), reverse=True)[:1000])
     with open(BALANCE_FILE, "w", encoding="utf-8") as f:
-        json.dump(existing, f, indent=4)
-
+        json.dump(data, f, indent=4)
 
 def get_balance(user_id):
     data = load_balances()
     return data.get(str(user_id), {}).get("amount", 0)
+
 
 def set_balance(user_id, amount):
     data = load_balances()
@@ -2724,65 +2708,6 @@ async def 돈줘통계(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
-# ---- 모듈 상단에 추가 ----
-BALANCES_CACHE = None
-CACHE_LOCK = asyncio.Lock()
-BALANCE_LOCK = asyncio.Lock()
-
-def load_balances_cached():
-    global BALANCES_CACHE
-    if BALANCES_CACHE is None:
-        BALANCES_CACHE = load_balances()
-    return BALANCES_CACHE
-
-def save_balances_cached():
-    global BALANCES_CACHE
-    if BALANCES_CACHE is not None:
-        save_balances(BALANCES_CACHE)
-        
-async def save_balances_safe(data):
-    async with BALANCE_LOCK:
-        existing = {}
-        if os.path.exists(BALANCE_FILE):
-            with open(BALANCE_FILE, "r", encoding="utf-8") as f:
-                try:
-                    existing = json.load(f)
-                except:
-                    existing = {}
-
-        # 병합
-        existing.update(data)
-
-        # 1000명 초과 시 오래된 데이터 제거
-        if len(existing) > 1000:
-            existing = dict(sorted(existing.items(), key=lambda x: x[1].get("last_updated", ""), reverse=True)[:1000])
-
-        with open(BALANCE_FILE, "w", encoding="utf-8") as f:
-            json.dump(existing, f, indent=4)
-
-        # 캐시도 동기화
-        global BALANCES_CACHE
-        BALANCES_CACHE = existing
-
-
-
-def get_balance_cached(user_id):
-    balances = load_balances_cached()
-    return balances.get(str(user_id), {}).get("amount", 0)
-
-async def set_balance_safe(user_id, amount):
-    balances = load_balances_cached()
-    balances[str(user_id)] = {
-        **balances.get(str(user_id), {}),
-        "amount": amount,
-        "last_updated": datetime.now().isoformat()
-    }
-    await save_balances_safe(balances)
-
-
-
-
-
 
 
 # ✅ 잔액
@@ -2790,7 +2715,7 @@ async def set_balance_safe(user_id, amount):
 @app_commands.describe(대상="조회할 유저 (선택사항)")
 async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     user = 대상 or interaction.user
-    balance = get_balance_cached(user.id)
+    balance = get_balance(user.id)
 
     embed = discord.Embed(
         title="💵 잔액 확인",
@@ -2802,14 +2727,10 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
 
 
 
-
-
 @tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 100원부터 도박 가능")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
-    import time
-    start_time = time.time()
-
+    # ✅ 오덕도박장 채널 ID
     if interaction.channel.id != 1394331814642057418:
         return await interaction.response.send_message(
             "❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.",
@@ -2817,10 +2738,9 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
 
     user_id = str(interaction.user.id)
-    balances = load_balances_cached()  # ✅ 캐시 사용
-    user_data = balances.get(user_id, {"amount": 0, "last_updated": datetime.utcnow().isoformat()})
-    balance = user_data.get("amount", 0)
+    balance = get_balance(user_id)
 
+    # 최소 베팅, 잔액 부족 체크
     if 베팅액 < 100:
         return await interaction.response.send_message(
             embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **100원**입니다.", discord.Color.red()),
@@ -2832,13 +2752,14 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             ephemeral=True
         )
 
-    # 💸 베팅 차감
-    balance -= 베팅액
+    # 잔액 차감
+    add_balance(user_id, -베팅액)
 
-    # 🎲 확률 생성
+    # 도박 실행
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
+    # ✅ 시각화 막대 (width=20, 마커 포함)
     def create_graph_bar(chance: int, roll: int, width: int = 20) -> str:
         success_pos = round(chance / 100 * width)
         roll_pos = round(roll / 100 * width)
@@ -2852,80 +2773,53 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     bar = create_graph_bar(success_chance, roll)
 
-    building = get_user_building(user_id)
-    stat_gain_text = ""
-    title = ""
-    jackpot_msg = ""
-    success = False
-    reward = 0
-    pool_amt = 0
-
+    # 성공
     if roll <= success_chance:
-        success = True
-        # 🎰 잭팟 체크
-        jackpot_chance = get_jackpot_chance(user_id, 0.01)
-        is_jackpot = random.random() < jackpot_chance
+        is_jackpot = random.random() < 0.01
         multiplier = 4 if is_jackpot else 2
-        reward = apply_gamble_bonus(user_id, 베팅액 * multiplier)
+        reward = 베팅액 * multiplier
+        add_balance(user_id, reward)
+        final_balance = get_balance(user_id)
 
-        # 💰 보상 반영
-        balance += reward
-
-        # 📈 상태치 증가
-        if building:
-            user_stats = get_user_stats(user_id)
-            gained_stats = []
-            for stat in ["stability", "risk", "labor", "tech"]:
-                if random.random() < 0.15:
-                    add_user_stat(user_id, stat, 1)
-                    gained_stats.append(stat)
-            if gained_stats:
-                stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
+        # ✅ 기록 반영
+        record_gamble_result(user_id, success=True)
+        title = get_gamble_title(user_id, success=True)
 
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
+        embed = create_embed(
+            "🎉 도박 성공!",
+            f"{jackpot_msg}"
+            f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
+            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n"
+            f"🏅 칭호: {title}",
+            discord.Color.gold() if is_jackpot else discord.Color.green(),
+            user_id
+        )
+
+    # 실패
     else:
-        # ❌ 실패 → 오덕로또 적립
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
 
-    # ✅ 캐시 갱신 (승패 기록 포함)
-    balances[user_id] = {
-        **balances.get(user_id, {}),
-        "amount": balance,
-        "last_updated": datetime.now().isoformat()
-    }
-    record_gamble_result(balances, user_id, success)
-    title = get_gamble_title(balances[user_id], success)
+        # ✅ 기록 반영
+        record_gamble_result(user_id, success=False)
+        title = get_gamble_title(user_id, success=False)
 
-    # ✅ 파일에 즉시 저장 (데이터 일관성 보장)
-    save_balances_cached()
-
-    final_balance = balance
-
-    # 📤 결과 메시지 즉시 전송
-    if success:
-        embed = create_embed(
-            "🎉 도박 성공!",
-            f"{jackpot_msg}(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n🏅 칭호: {title}{stat_gain_text}",
-            discord.Color.gold() if multiplier == 4 else discord.Color.green(),
-            user_id
-        )
-    else:
         embed = create_embed(
             "💀 도박 실패!",
-            f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-            f"-{베팅액:,}원 손실...\n"
-            f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
-            f"🎟️ `/오덕로또참여`로 도전하세요!\n\n"
-            f"🏅 칭호: {title}",
+            (
+                f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
+                f"-{베팅액:,}원 손실...\n"
+                f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
+                f"🎟️ `/오덕로또참여`로 도전하세요!\n\n"
+                f"🏅 칭호: {title}"
+            ),
             discord.Color.red(),
             user_id
         )
 
     await interaction.response.send_message(embed=embed)
 
-    print(f"⏱️ /도박 실행 완료 ({interaction.user.name}): {time.time() - start_time:.2f}초")
 
 
 
@@ -6377,49 +6271,37 @@ async def 출금(interaction: discord.Interaction, 금액: int):
     net_interest, tax = process_bank_withdraw(user_id, 금액)
     original_interest = net_interest + tax  # 세전 이자
 
-    # ✅ 캐시에서 잔액 업데이트
-    balances = load_balances_cached()
-    current_balance = balances.get(user_id, {}).get("amount", 0)
-    new_balance = current_balance + 금액 + net_interest
+    add_balance(user_id, 금액 + net_interest)
 
-    balances[user_id] = {
-        **balances.get(user_id, {}),
-        "amount": new_balance,
-        "last_updated": datetime.now().isoformat()
-    }
-
-    # ✅ 오덕로또 세금 반영
     if tax > 0:
         add_oduk_pool(tax)
+
     pool_amt = get_oduk_pool_amount()
 
-    # ✅ 안전 저장
-    await save_balances_safe(balances)
-
-    # ✅ 이자 한도 안내
+    # ✅ 이자 한도 초과 안내 (500,000원 이상 → 컷팅됨)
     if original_interest > 500_000:
         await interaction.channel.send(
             f"⚠️ **이자 지급 한도 초과 안내**\n"
             f"원래 계산된 이자는 **{original_interest:,}원**이었지만,\n"
             f"시스템 상 하루 최대 이자 지급 한도는 **500,000원**입니다.\n"
-            f"따라서 실제 지급된 이자는 세금 차감 후 **{net_interest:,}원**입니다."
+            f"따라서 실제 지급된 이자는 세금 차감 후 **{net_interest:,}원**입니다.",
+            ephemeral=True
         )
 
-    # ✅ 최종 메시지
-    embed = create_embed(
+    await interaction.response.send_message(embed=create_embed(
         "🏧 출금 완료",
         (
             f"🏛️ 은행 → 지갑: **{금액:,}원** 출금됨\n"
             f"💵 순이자 지급: **{net_interest:,}원** (세금 {tax:,}원 → 오덕로또 적립)\n"
-            f"💰 현재 지갑 잔액: **{new_balance:,}원**\n"
+            f"💰 현재 지갑 잔액: **{get_balance(user_id):,}원**\n"
             f"🏦 남은 은행 잔고: **{get_total_bank_balance(user_id):,}원**\n\n"
             f"🎯 현재 오덕로또 상금: **{pool_amt:,}원**\n"
             f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
         ),
         discord.Color.green(),
         user_id
-    )
-    await interaction.response.send_message(embed=embed)
+    ))
+
 
 
 
