@@ -1670,6 +1670,12 @@ async def 닉네임_자동완성(interaction: discord.Interaction, current: str)
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
 
+    # -----------------------------
+    # 설정값
+    # -----------------------------
+    M_CONFIDENCE = 350  # 판수 보정 기준값 (높을수록 적은 경기수의 점수 하락폭 증가)
+    weights = {"dmg": 0.4, "kd": 0.35, "win": 0.25}
+
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
         await interaction.followup.send("❌ 아직 저장된 전적 데이터가 없습니다.", ephemeral=True)
@@ -1685,7 +1691,9 @@ async def 시즌랭킹(interaction: discord.Interaction):
         await interaction.followup.send("❌ 현재 시즌에 저장된 유저 데이터가 없습니다.", ephemeral=True)
         return
 
-    # 항목별 리스트
+    # -----------------------------
+    # 항목별 TOP5 리스트 생성
+    # -----------------------------
     damage_list = []
     kd_list = []
     winrate_list = []
@@ -1708,7 +1716,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         if ranked:
             rankpoint_list.append((name, ranked.get("points", 0), ranked.get("tier", ""), ranked.get("subTier", "")))
 
-    # 상위 5명 정렬
+    # 상위 5명
     damage_top5 = sorted(damage_list, key=lambda x: x[1], reverse=True)[:5]
     kd_top5 = sorted(kd_list, key=lambda x: x[1], reverse=True)[:5]
     win_top5 = sorted(winrate_list, key=lambda x: x[1], reverse=True)[:5]
@@ -1717,7 +1725,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     kills_top5 = sorted(kills_list, key=lambda x: x[1], reverse=True)[:5]
 
     # -----------------------------
-    # ✅ 베이지안 + 가중치 + Z-Score 계산
+    # 통계 기반 종합 점수 계산
     # -----------------------------
     import statistics, math
 
@@ -1728,17 +1736,10 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
     mean_dmg = statistics.mean(avg_dmg_values) if avg_dmg_values else 0
     std_dmg = statistics.pstdev(avg_dmg_values) or 1
-
     mean_kd = statistics.mean(kd_values) if kd_values else 0
     std_kd = statistics.pstdev(kd_values) or 1
-
     mean_win = statistics.mean(win_values) if win_values else 0
     std_win = statistics.pstdev(win_values) or 1
-
-    max_games = max(games_values) if games_values else 1
-    m = 350  # 신뢰도 보정 기준값
-
-    weights = {"dmg": 0.4, "kd": 0.35, "win": 0.25}
 
     weighted_list = []
     for p in players:
@@ -1750,13 +1751,13 @@ async def 시즌랭킹(interaction: discord.Interaction):
         win = p["squad"].get("win_rate", 0)
         games = p["squad"].get("rounds_played", 0)
 
-        # 표준화
+        # Z-Score 계산
         z_dmg = (dmg - mean_dmg) / std_dmg
         z_kd = (kd - mean_kd) / std_kd
         z_win = (win - mean_win) / std_win
 
         # 베이지안 보정
-        bayesian_factor = games / (games + m)
+        bayesian_factor = games / (games + M_CONFIDENCE)
         adj_dmg = z_dmg * bayesian_factor
         adj_kd = z_kd * bayesian_factor
         adj_win = z_win * bayesian_factor
@@ -1772,33 +1773,24 @@ async def 시즌랭킹(interaction: discord.Interaction):
     # -----------------------------
     def format_top5_codeblock(entries, is_percentage=False):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
-        lines = []
-        for i, entry in enumerate(entries):
-            val = f"{entry[1]:.2f}%" if is_percentage else f"{entry[1]:.2f}"
-            name = entry[0][:10].ljust(10)
-            val_str = val.rjust(7)
-            lines.append(f"{medals[i]} {i+1}. {name} {val_str}")
-        return "```\n" + "\n".join(lines) + "\n```"
+        return "```\n" + "\n".join(
+            f"{medals[i]} {i+1}. {entry[0][:10].ljust(10)} {f'{entry[1]:.2f}%' if is_percentage else f'{entry[1]:.2f}'}"
+            for i, entry in enumerate(entries)
+        ) + "\n```"
 
     def format_top5_int_codeblock(entries):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
-        lines = []
-        for i, entry in enumerate(entries):
-            name = entry[0][:10].ljust(10)
-            val_str = str(entry[1]).rjust(7)
-            lines.append(f"{medals[i]} {i+1}. {name} {val_str}")
-        return "```\n" + "\n".join(lines) + "\n```"
+        return "```\n" + "\n".join(
+            f"{medals[i]} {i+1}. {entry[0][:10].ljust(10)} {str(entry[1]).rjust(7)}"
+            for i, entry in enumerate(entries)
+        ) + "\n```"
 
     def format_top5_score_codeblock(entries):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
-        lines = []
-        for i, entry in enumerate(entries):
-            name = entry[0][:10].ljust(10)
-            val_str = f"{entry[1]:.3f}".rjust(7)
-            # 상세 breakdown 추가
-            detail = f"(D:{entry[2]:.2f}, K:{entry[3]:.2f}, W:{entry[4]:.2f}, C:{entry[5]:.2f})"
-            lines.append(f"{medals[i]} {i+1}. {name} {val_str} {detail}")
-        return "```\n" + "\n".join(lines) + "\n```"
+        return "```\n" + "\n".join(
+            f"{medals[i]} {i+1}. {entry[0][:10].ljust(10)} {entry[1]:.3f} | D:{entry[2]:.2f} K:{entry[3]:.2f} W:{entry[4]:.2f} C:{entry[5]:.2f}"
+            for i, entry in enumerate(entries)
+        ) + "\n```"
 
     # -----------------------------
     # Embed 생성
@@ -1823,7 +1815,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
     if weighted_top5:
         embed.add_field(
-            name="💯 종합 점수 TOP 5 (신뢰도+형평성 보정)",
+            name="💯 종합 점수 TOP 5",
             value=format_top5_score_codeblock(weighted_top5),
             inline=False
         )
@@ -1831,25 +1823,24 @@ async def 시즌랭킹(interaction: discord.Interaction):
             name="📌 계산식 안내",
             value=(
                 "```\n"
-                "점수 = Σ(가중치 × Z-Score) × (게임수/(게임수+200))\n"
-                "- 가중치: 데미지0.4, K/D0.35, 승률0.25\n"
-                "- 350판 미만은 리그 평균에 더 근접하게 보정됨\n"
+                "점수 = (데미지Z*0.4 + K/DZ*0.35 + 승률Z*0.25)\n"
+                "       × (게임수 / (게임수+350))\n"
+                "- 판 수가 적으면 평균 실력에 가까워짐(점수 하향)\n"
+                "- 350판 이상이면 실력 점수 100% 반영\n"
                 "```"
             ),
             inline=False
         )
 
-    # footer 내용
     try:
         with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
             valid_members = json.load(f)
-        embed.set_footer(
-            text=f"※ 기준: 저장된 유저 {len(players)}명 / 총 적합 인원 {len(valid_members)}명"
-        )
+        embed.set_footer(text=f"※ 기준: 저장된 유저 {len(players)}명 / 총 적합 인원 {len(valid_members)}명")
     except:
         embed.set_footer(text="※ 기준: 저장된 유저 전적")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
