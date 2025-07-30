@@ -229,7 +229,8 @@ def set_balance(user_id, amount):
     data[uid] = user_data
     save_balances(data)
 
-def record_gamble_result(data: dict, user_id: str, success: bool):
+def record_gamble_result(user_id: str, success: bool):
+    data = load_balances()
     uid = str(user_id)
     if uid not in data:
         data[uid] = {"amount": 0, "last_updated": datetime.utcnow().isoformat()}
@@ -239,6 +240,9 @@ def record_gamble_result(data: dict, user_id: str, success: bool):
         data[uid]["gamble"]["win"] += 1
     else:
         data[uid]["gamble"]["lose"] += 1
+
+    save_balances(data)
+
 
 def get_gamble_title(user_data: dict, success: bool) -> str:
     stats = user_data.get("gamble", {})
