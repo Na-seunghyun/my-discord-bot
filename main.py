@@ -397,9 +397,9 @@ else:
 
 # ✅ 자산 구간별 유지비율 설정 (필요시 수정)
 MAINTENANCE_TIERS = [
-    (500_0000, 0.15),   #  오백만 원 이상 → 10%
-    (1000_0000, 0.50),   # 천 만 원 이상 → 25%
-    (3000_0000, 0.70),   # 삼천 만 원 이상 → 50%
+    (500_0000, 0.15),   # 오백만 원 이상 → 15%
+    (1000_0000, 0.50),  # 천만 원 이상 → 50%
+    (3000_0000, 0.70),  # 삼천만 원 이상 → 70%
 ]
 
 # 예시로 채널 ID 설정 (실제 사용 중인 ID로 교체하세요)
@@ -411,32 +411,37 @@ async def apply_maintenance_costs(bot):
     now = datetime.now(KST).isoformat()
     changed_users = []
 
+    # ✅ 티어는 큰 기준부터 적용되도록 내림차순 정렬
+    tiers_desc = sorted(MAINTENANCE_TIERS, key=lambda x: x[0], reverse=True)
+
     for user_id, info in balances.items():
         amount = info.get("amount", 0)
 
-        if amount < 10_000_000:
-            continue  # 1억 미만은 감가 대상 아님
+        if amount < 1_000_000:
+            continue  # 1백만 원 미만은 감가 대상 아님
 
-        # ✅ MAINTENANCE_TIERS 기준 감가율 결정
+        # ✅ MAINTENANCE_TIERS 기준 감가율 결정(가장 높은 티어 우선)
         rate = 0
-        for threshold, r in MAINTENANCE_TIERS:
+        applied_threshold = 0
+        for threshold, r in tiers_desc:
             if amount >= threshold:
                 rate = r
+                applied_threshold = threshold
                 break
 
         deduction = int(amount * rate)
         new_amount = amount - deduction
 
-        # ✅ 최소 1억 보장
-        if new_amount < 10_000_000:
-            deduction = amount - 10_000_000
-            new_amount = 10_000_000
+        # ✅ 최소 100만 원 보장
+        if new_amount < 1_000_000:
+            deduction = amount - 1_000_000
+            new_amount = 1_000_000
 
         if deduction > 0:
             balances[user_id]["amount"] = new_amount
             balances[user_id]["last_updated"] = now
-            changed_users.append((user_id, amount, new_amount))
-            print(f"💸 유지비 차감: {user_id} → {deduction:,}원")
+            changed_users.append((user_id, amount, new_amount, rate, applied_threshold, deduction))
+            print(f"💸 유지비 차감: {user_id} → {deduction:,}원 (율 {int(rate*100)}%, 기준 ≥{applied_threshold:,}원)")
 
     save_balances(balances)
 
@@ -445,22 +450,32 @@ async def apply_maintenance_costs(bot):
         channel = bot.get_channel(DOKDO_CHANNEL_ID)
         if channel:
             msg_lines = ["💸 **자산 유지비 감가 정산 결과**"]
-            for uid, before, after in changed_users:
+            for uid, before, after, rate, th, cut in changed_users:
                 member = await fetch_user_safe(uid)
                 name = member.display_name if member else f"ID:{uid}"
-                msg_lines.append(f"• {name} → **{before:,}원 → {after:,}원**")
-            msg_lines.append("\n📉 자산이 오백 만 원 이상일 경우 6시간 마다 감가가 적용됩니다.")
+                msg_lines.append(
+                    f"• {name} → **{before:,}원 → {after:,}원** "
+                    f"(이번 회차 {cut:,}원 차감, 적용율 {int(rate*100)}%, 티어 ≥{th:,}원)"
+                )
+
+            # 정책 안내(주기/티어/최소 보장) — 실제 루프 주기와 맞춰 문구 조정
+            tier_desc = " / ".join([f"≥{t:,}원 {int(r*100)}%" for t, r in tiers_desc])
+            msg_lines.append(
+                "\n📉 자산이 **100만 원 이상**일 경우 **3시간마다** 감가가 적용됩니다.\n"
+                f"🧮 적용 티어: {tier_desc}\n"
+                f"🛡️ 감가 후 최소 보장: **1,000,000원**"
+            )
+
             await channel.send("\n".join(msg_lines))
 
 
 
 
-
-@tasks.loop(hours=6)
+@tasks.loop(hours=3)
 async def auto_apply_maintenance():
     print("🕓 자산 유지비 정산 시작")
     await apply_maintenance_costs(bot)     # ✅ await + bot 전달
-    await apply_bank_depreciation(bot)     # ✅ 비동기 메시지 포함
+    
     print("✅ 자산 유지비 정산 완료")
 
 
@@ -496,16 +511,13 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
         print("✅ 오덕로또 상금이 100만 원 이하라 감가되지 않음")
 
 
-@tasks.loop(hours=6)
+@tasks.loop(hours=2)
 async def auto_decay_oduk_pool():
     print("🕓 오덕로또 감가 시작")
     await decay_oduk_pool(bot)
     print("✅ 오덕로또 감가 완료")
 
-@auto_decay_oduk_pool.before_loop
-async def before_auto_decay():
-    print("🕓 봇 시작 후 첫 감가까지 6시간 대기...")
-    await asyncio.sleep(6 * 3600)  # 6시간 대기
+
 
 
 
@@ -6122,34 +6134,49 @@ async def apply_bank_depreciation(bot):
     affected_users = []
 
     for user_id, user_data in bank.items():
-        total_balance = sum(d["amount"] - d.get("used", 0) for d in user_data.get("deposits", []))
+        deposits = list(user_data.get("deposits", []))
+        if not deposits:
+            continue
+
+        total_balance = sum(d.get("amount", 0) - d.get("used", 0) for d in deposits)
 
         if total_balance > 5_000_000:
-            # ✅ 초과분의 절반만 감가, 최소 5백 만 원 보장
+            # ✅ 초과분의 20% 감가, 최소 500만 원 보장
             excess = total_balance - 5_000_000
-            to_cut = int(excess * 0.2)  # ✅ 20% 감가
-            target_after_cut = total_balance - to_cut
-
+            to_cut = int(excess * 0.2)  # 20%
             remaining_cut = to_cut
+
+            # 오래된 순서부터 차감
+            sorted_deposits = sorted(deposits, key=lambda d: d.get("timestamp", 0))
             updated_deposits = []
 
-            for deposit in sorted(user_data["deposits"], key=lambda d: d["timestamp"]):
-                available = deposit["amount"] - deposit.get("used", 0)
+            for idx, deposit in enumerate(sorted_deposits):
+                amount = int(deposit.get("amount", 0))
+                used = int(deposit.get("used", 0))
+                available = amount - used
+
                 if available <= 0:
                     updated_deposits.append(deposit)
                     continue
 
                 reduce = min(available, remaining_cut)
-                deposit["used"] = deposit.get("used", 0) + reduce
-                remaining_cut -= reduce
+                if reduce > 0:
+                    deposit["used"] = used + reduce
+                    remaining_cut -= reduce
 
                 updated_deposits.append(deposit)
-                if remaining_cut <= 0:
-                    break
 
+                if remaining_cut <= 0:
+                    # ✅ 남은 예치금들 유지(리스트 잘림 방지)
+                    updated_deposits.extend(sorted_deposits[idx + 1:])
+                    break
+            # for가 자연 종료된 경우(updated_deposits에 이미 전부 들어있음) 별도 처리 불필요
+
+            # 사용 완료된(남은 금액 0) deposit 제거
             bank[user_id]["deposits"] = [
-                d for d in updated_deposits if (d["amount"] - d.get("used", 0)) > 0
+                d for d in updated_deposits if (int(d.get("amount", 0)) - int(d.get("used", 0))) > 0
             ]
+
             updated = True
             total_cut += to_cut
             affected_users.append((user_id, to_cut))
@@ -6167,14 +6194,36 @@ async def apply_bank_depreciation(bot):
                 name = user.display_name if user else f"ID:{uid}"
                 lines.append(f"- {name}님: **{cut:,}원** 차감됨")
             lines.append(f"\n📉 총 차감액: **{total_cut:,}원**")
+
+            # ── 감가 정책 안내 (정책/주기/최소보장/예시) ─────────────────────────
+            APPLY_MIN   = 5_000_000   # 적용 기준: 500만 원 초과
+            RATE        = 0.20        # 초과분의 20% 감가
+            LOOP_HOURS  = 6           # 몇 시간마다 적용되는지 (decorator와 일치시켜주세요)
+
+            lines.append("\n📊 **은행 감가 안내**")
+            lines.append(f"- 적용 기준: 총 예치금 **{APPLY_MIN:,}원 초과**")
+            lines.append(f"- 주기: **{LOOP_HOURS}시간마다** 적용")
+            lines.append(f"- 차감 방식: 초과분의 **{int(RATE * 100)}%** 차감")
+            lines.append(f"- 최소 보장: **{APPLY_MIN:,}원** (이 금액 이하는 감가되지 않음)")
+
+            # 금액별 예시 (이번 회차 기준, 가독용)
+            examples = [6_000_000, 10_000_000, 20_000_000, 50_000_000]
+            example_lines = []
+            for ex in examples:
+                if ex > APPLY_MIN:
+                    excess = ex - APPLY_MIN
+                    cut = int(excess * RATE)
+                    after = ex - cut
+                    example_lines.append(f"  · {ex:,}원 → {after:,}원 (이번 회차 {cut:,}원 차감)")
+                else:
+                    example_lines.append(f"  · {ex:,}원 → 변동 없음 (감가 기준 미만)")
+
+            lines.append("\n🔎 **예시(이번 회차 기준)**")
+            lines.extend(example_lines)
+            # ────────────────────────────────────────────────────────────────
+
             await channel.send("\n".join(lines))
 
-@tasks.loop(hours=6)
-async def auto_apply_maintenance():
-    print("🕓 자산 유지비 정산 시작")
-    await apply_maintenance_costs(bot)           # ✅ await 추가!
-    await apply_bank_depreciation(bot)           # 이미 정상 처리
-    print("✅ 자산 유지비 정산 완료")
 
 
 
