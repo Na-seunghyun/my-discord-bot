@@ -204,11 +204,25 @@ def load_balances():
         return json.load(f)
 
 def save_balances(data):
-    # 1,000명 이상 시 가장 오래된 데이터 제거 (최대 1000명 유지)
-    if len(data) > 1000:
-        data = dict(sorted(data.items(), key=lambda x: x[1].get("last_updated", ""), reverse=True)[:1000])
+    existing = {}
+    if os.path.exists(BALANCE_FILE):
+        with open(BALANCE_FILE, "r", encoding="utf-8") as f:
+            try:
+                existing = json.load(f)
+            except:
+                existing = {}
+
+    # 기존 데이터와 병합
+    for uid, info in data.items():
+        existing[uid] = info
+
+    # 1,000명 초과 시 오래된 데이터 삭제
+    if len(existing) > 1000:
+        existing = dict(sorted(existing.items(), key=lambda x: x[1].get("last_updated", ""), reverse=True)[:1000])
+
     with open(BALANCE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4)
+        json.dump(existing, f, indent=4)
+
 
 def get_balance(user_id):
     data = load_balances()
