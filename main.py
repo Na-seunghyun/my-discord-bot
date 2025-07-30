@@ -1666,7 +1666,6 @@ async def 닉네임_자동완성(interaction: discord.Interaction, current: str)
     return choices[:25]
 
 
-
 @tree.command(name="시즌랭킹", description="현재 시즌의 항목별 TOP5을 확인합니다.", guild=discord.Object(id=GUILD_ID))
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
@@ -1686,7 +1685,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         await interaction.followup.send("❌ 현재 시즌에 저장된 유저 데이터가 없습니다.", ephemeral=True)
         return
 
-    # 항목별 리스트 만들기
+    # 항목별 리스트
     damage_list = []
     kd_list = []
     winrate_list = []
@@ -1718,7 +1717,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     kills_top5 = sorted(kills_list, key=lambda x: x[1], reverse=True)[:5]
 
     # -----------------------------
-    # ✅ Z-Score 기반 종합 점수 계산
+    # ✅ 베이지안 + 가중치 + Z-Score 계산
     # -----------------------------
     import statistics, math
 
@@ -1737,6 +1736,9 @@ async def 시즌랭킹(interaction: discord.Interaction):
     std_win = statistics.pstdev(win_values) or 1
 
     max_games = max(games_values) if games_values else 1
+    m = 350  # 신뢰도 보정 기준값
+
+    weights = {"dmg": 0.4, "kd": 0.35, "win": 0.25}
 
     weighted_list = []
     for p in players:
@@ -1753,12 +1755,15 @@ async def 시즌랭킹(interaction: discord.Interaction):
         z_kd = (kd - mean_kd) / std_kd
         z_win = (win - mean_win) / std_win
 
-        # 신뢰도 보정
-        confidence = math.log(games+1) / math.log(max_games+1)
+        # 베이지안 보정
+        bayesian_factor = games / (games + m)
+        adj_dmg = z_dmg * bayesian_factor
+        adj_kd = z_kd * bayesian_factor
+        adj_win = z_win * bayesian_factor
 
         # 최종 점수
-        score = (z_dmg + z_kd + z_win) * confidence
-        weighted_list.append((name, score))
+        score = (adj_dmg * weights["dmg"]) + (adj_kd * weights["kd"]) + (adj_win * weights["win"])
+        weighted_list.append((name, score, adj_dmg, adj_kd, adj_win, bayesian_factor))
 
     weighted_top5 = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:5]
 
@@ -1790,7 +1795,9 @@ async def 시즌랭킹(interaction: discord.Interaction):
         for i, entry in enumerate(entries):
             name = entry[0][:10].ljust(10)
             val_str = f"{entry[1]:.3f}".rjust(7)
-            lines.append(f"{medals[i]} {i+1}. {name} {val_str}")
+            # 상세 breakdown 추가
+            detail = f"(D:{entry[2]:.2f}, K:{entry[3]:.2f}, W:{entry[4]:.2f}, C:{entry[5]:.2f})"
+            lines.append(f"{medals[i]} {i+1}. {name} {val_str} {detail}")
         return "```\n" + "\n".join(lines) + "\n```"
 
     # -----------------------------
@@ -1816,7 +1823,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
     if weighted_top5:
         embed.add_field(
-            name="💯 종합 점수 TOP 5 (통계 기반)",
+            name="💯 종합 점수 TOP 5 (신뢰도+형평성 보정)",
             value=format_top5_score_codeblock(weighted_top5),
             inline=False
         )
@@ -1824,9 +1831,9 @@ async def 시즌랭킹(interaction: discord.Interaction):
             name="📌 계산식 안내",
             value=(
                 "```\n"
-                "점수 = (Z_데미지 + Z_K/D + Z_승률)\n"
-                "       × log(게임수+1) / log(최대게임수)\n"
-                "※ 50판 미만은 낮은 신뢰도로 계산됩니다.\n"
+                "점수 = Σ(가중치 × Z-Score) × (게임수/(게임수+200))\n"
+                "- 가중치: 데미지0.4, K/D0.35, 승률0.25\n"
+                "- 350판 미만은 리그 평균에 더 근접하게 보정됨\n"
                 "```"
             ),
             inline=False
@@ -1840,9 +1847,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
             text=f"※ 기준: 저장된 유저 {len(players)}명 / 총 적합 인원 {len(valid_members)}명"
         )
     except:
-        embed.set_footer(
-            text="※ 기준: 저장된 유저 전적"
-        )
+        embed.set_footer(text="※ 기준: 저장된 유저 전적")
 
     await interaction.followup.send(embed=embed)
 
