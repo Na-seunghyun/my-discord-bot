@@ -2848,7 +2848,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     await interaction.response.send_message(embed=embed)
 
-    print(f"⏱️ /도박 실행 완료 ({interaction.user.name}): {time.time() - start_time:.2f}초")
+  
 
 
 
@@ -7250,7 +7250,7 @@ async def try_repay(user_id, member, *, force=False):
     raw_last_checked = loan.get("last_checked")
 
     if not raw_created_at or not isinstance(raw_created_at, str) or raw_created_at.strip() == "":
-        print(f"❌ 자동상환 오류 - 유저 {user_id}: 잘못된 created_at 값: {raw_created_at}")
+        
         return None
 
     try:
