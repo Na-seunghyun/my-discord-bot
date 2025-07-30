@@ -2841,8 +2841,8 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         "amount": balance,
         "last_updated": datetime.now().isoformat()
     }
-   #record_gamble_result(balances, user_id, success)
-   #title = get_gamble_title(balances[user_id], success)
+    record_gamble_result(balances, user_id, success)
+    title = get_gamble_title(balances[user_id], success)
 
     # ✅ 파일에 즉시 저장 (데이터 일관성 보장)
     save_balances_cached()
