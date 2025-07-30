@@ -1718,7 +1718,34 @@ async def 시즌랭킹(interaction: discord.Interaction):
     rounds_top5 = sorted(rounds_list, key=lambda x: x[1], reverse=True)[:5]
     kills_top5 = sorted(kills_list, key=lambda x: x[1], reverse=True)[:5]
 
-    # 고정폭 글꼴(코드블록)으로 예쁘게 보여주기 함수
+    # -----------------------------
+    # ✅ 가중치 기반 종합 점수 계산
+    # -----------------------------
+    def calculate_weighted_score(avg_damage, kd, win_rate, games):
+        import math
+        if games < 50:
+            return 0  # 표본 부족 제외
+        g_factor = math.log(games+1) / math.log(1000)
+        return (avg_damage * 1.2 + kd * 40 + win_rate * 250) * g_factor
+
+    weighted_list = []
+    for player in players:
+        squad = player.get("squad", {})
+        if squad:
+            name = player["nickname"]
+            score = calculate_weighted_score(
+                squad.get("avg_damage", 0),
+                squad.get("kd", 0),
+                squad.get("win_rate", 0),
+                squad.get("rounds_played", 0)
+            )
+            weighted_list.append((name, score))
+
+    weighted_top5 = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:5]
+
+    # -----------------------------
+    # 포맷 함수들
+    # -----------------------------
     def format_top5_codeblock(entries, is_percentage=False):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
         lines = []
@@ -1738,7 +1765,22 @@ async def 시즌랭킹(interaction: discord.Interaction):
             lines.append(f"{medals[i]} {i+1}. {name} {val_str}")
         return "```\n" + "\n".join(lines) + "\n```"
 
-    embed = discord.Embed(title=f"🏆 현재 시즌 항목별 TOP 5 (시즌 ID: {stored_season_id})", color=discord.Color.gold())
+    def format_top5_score_codeblock(entries):
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+        lines = []
+        for i, entry in enumerate(entries):
+            name = entry[0][:10].ljust(10)
+            val_str = f"{entry[1]:.1f}".rjust(7)
+            lines.append(f"{medals[i]} {i+1}. {name} {val_str}")
+        return "```\n" + "\n".join(lines) + "\n```"
+
+    # -----------------------------
+    # Embed 생성
+    # -----------------------------
+    embed = discord.Embed(
+        title=f"🏆 현재 시즌 항목별 TOP 5 (시즌 ID: {stored_season_id})",
+        color=discord.Color.gold()
+    )
 
     embed.add_field(name="🔫 평균 데미지", value=format_top5_codeblock(damage_top5), inline=True)
     embed.add_field(name="⚔️ K/D", value=format_top5_codeblock(kd_top5), inline=True)
@@ -1752,6 +1794,24 @@ async def 시즌랭킹(interaction: discord.Interaction):
         for i, (name, points, tier, sub) in enumerate(rank_top5):
             rank_msg.append(f"{medals[i]} {i+1}. {name[:10].ljust(10)} - {tier} {sub} ({points})")
         embed.add_field(name="🥇 랭크 포인트", value="```\n" + "\n".join(rank_msg) + "\n```", inline=False)
+
+    if weighted_top5:
+        embed.add_field(
+            name="💯 종합 점수 TOP 5 (가중치 포함)",
+            value=format_top5_score_codeblock(weighted_top5),
+            inline=False
+        )
+        embed.add_field(
+            name="📌 계산식 안내",
+            value=(
+                "```\n"
+                "점수 = (데미지×1.2 + K/D×40 + 승률×250)\n"
+                "       × log(게임수+1) / log(1000)\n"
+                "※ 50판 이상 플레이한 유저만 포함됩니다.\n"
+                "```"
+            ),
+            inline=False
+        )
 
     # footer 내용 (저장 유저 수 / 적합 유저 수)
     try:
