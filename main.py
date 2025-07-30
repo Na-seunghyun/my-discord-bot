@@ -1769,26 +1769,26 @@ async def 시즌랭킹(interaction: discord.Interaction):
     weighted_top = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:7]
 
     # -----------------------------
-    # 강조 스타일 포맷 함수 (diff 스타일)
+    # 포맷 함수 (TOP3 Bold + 고정폭 정렬)
     # -----------------------------
     def format_top_score(entries):
-        medals = ["+ ", "! ", "- ", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
-        return "```diff\n" + "\n".join(
-            f"{medals[i]} {'**'+entry[0]+'**' if i < 3 else entry[0]} {entry[1]:.3f} | D{entry[2]:.2f}/K{entry[3]:.2f}/W{entry[4]:.2f}/C{entry[5]:.2f}"
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
+        return "```\n" + "\n".join(
+            f"{medals[i]} {'**'+entry[0]+'**' if i<3 else entry[0]:20} {entry[1]:.3f} | D{entry[2]:.2f}/K{entry[3]:.2f}/W{entry[4]:.2f}/C{entry[5]:.2f}"
             for i, entry in enumerate(entries)
         ) + "\n```"
 
     def format_top(entries, is_percentage=False):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
         return "```\n" + "\n".join(
-            f"{medals[i]} {'**'+entry[0]+'**' if i<3 else entry[0]} {f'{entry[1]:.2f}%' if is_percentage else f'{entry[1]:.2f}'}"
+            f"{medals[i]} {'**'+entry[0]+'**' if i<3 else entry[0]:20} {f'{entry[1]:.2f}%' if is_percentage else f'{entry[1]:.2f}'}"
             for i, entry in enumerate(entries)
         ) + "\n```"
 
     def format_top_int(entries):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
         return "```\n" + "\n".join(
-            f"{medals[i]} {'**'+entry[0]+'**' if i<3 else entry[0]} {str(entry[1]).rjust(7)}"
+            f"{medals[i]} {'**'+entry[0]+'**' if i<3 else entry[0]:20} {str(entry[1]).rjust(7)}"
             for i, entry in enumerate(entries)
         ) + "\n```"
 
@@ -1839,6 +1839,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         embed.set_footer(text="※ 기준: 저장된 유저 전적")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
