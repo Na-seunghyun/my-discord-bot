@@ -2732,6 +2732,21 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
+# ---- 모듈 상단에 추가 ----
+BALANCES_CACHE = None
+CACHE_LOCK = asyncio.Lock()
+
+def load_balances_cached():
+    global BALANCES_CACHE
+    if BALANCES_CACHE is None:
+        BALANCES_CACHE = load_balances()
+    return BALANCES_CACHE
+
+async def save_balances_async():
+    global BALANCES_CACHE
+    async with CACHE_LOCK:
+        data_copy = BALANCES_CACHE.copy()
+    await asyncio.to_thread(save_balances, data_copy)
 
 
 
@@ -2749,7 +2764,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
 
     user_id = str(interaction.user.id)
-    balances = load_balances()  # ✅ 1회만 로드
+    balances = load_balances_cached()  # ✅ 캐시에서 로드
     user_data = balances.get(user_id, {"amount": 0, "last_updated": datetime.utcnow().isoformat()})
     balance = user_data.get("amount", 0)
 
@@ -2820,27 +2835,23 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
 
-    # 💾 메모리에서 즉시 잔액 반영
+    # 💾 캐시에 잔액 반영
     balances[user_id] = {
         **balances.get(user_id, {}),
         "amount": balance,
         "last_updated": datetime.now().isoformat()
     }
-    final_balance = balance
 
-    # ✅ 칭호 즉시 계산 (현재 balances 데이터 사용)
+    # ✅ 승패 기록 & 칭호
     record_gamble_result(balances, user_id, success)
     title = get_gamble_title(balances[user_id], success)
 
-    # ✅ 빠른 응답 예약
-    await interaction.response.defer(thinking=True)
-
-    # 📤 결과 메시지
+    # 📤 결과 메시지 즉시 전송
     if success:
         embed = create_embed(
             "🎉 도박 성공!",
             f"{jackpot_msg}(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n🏅 칭호: {title}{stat_gain_text}",
+            f"+{reward:,}원 획득!\n💰 잔액: {balance:,}원\n\n🏅 칭호: {title}{stat_gain_text}",
             discord.Color.gold() if multiplier == 4 else discord.Color.green(),
             user_id
         )
@@ -2856,14 +2867,13 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             user_id
         )
 
-    await interaction.followup.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-    # ✅ 느린 저장 작업은 백그라운드에서 처리
-    async def post_save():
-        await asyncio.to_thread(save_balances, balances)
-    asyncio.create_task(post_save())
+    # ✅ 저장은 백그라운드에서 실행
+    asyncio.create_task(save_balances_async())
 
     print(f"⏱️ /도박 실행 완료 ({interaction.user.name}): {time.time() - start_time:.2f}초")
+
 
 
 
