@@ -3498,15 +3498,16 @@ async def 배팅금액_자동완성(
 @tree.command(name="청소", description="채널의 이전 메시지를 삭제합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(개수="삭제할 메시지 개수 (최대 100개)")
 async def 청소(interaction: discord.Interaction, 개수: int):
-    # 권한 확인
     if not interaction.user.guild_permissions.manage_messages:
         return await interaction.response.send_message("🚫 메시지를 삭제할 권한이 없습니다.", ephemeral=True)
 
     if 개수 < 1 or 개수 > 100:
         return await interaction.response.send_message("❌ 1~100 사이의 숫자를 입력하세요.", ephemeral=True)
 
+    await interaction.response.defer(ephemeral=True)  # ✅ 먼저 응답 예약
+
     deleted = await interaction.channel.purge(limit=개수)
-    await interaction.response.send_message(f"🧹 {len(deleted)}개의 메시지를 삭제했습니다.", ephemeral=True)
+    await interaction.followup.send(f"🧹 {len(deleted)}개의 메시지를 삭제했습니다.", ephemeral=True)
 
 
 
