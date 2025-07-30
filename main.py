@@ -228,23 +228,19 @@ def set_balance(user_id, amount):
     data[uid] = user_data
     save_balances(data)
 
-def record_gamble_result(user_id, success: bool):
-    data = load_balances()
+def record_gamble_result(data: dict, user_id: str, success: bool):
     uid = str(user_id)
     if uid not in data:
         data[uid] = {"amount": 0, "last_updated": datetime.utcnow().isoformat()}
-    
+
     data[uid].setdefault("gamble", {"win": 0, "lose": 0})
     if success:
         data[uid]["gamble"]["win"] += 1
     else:
         data[uid]["gamble"]["lose"] += 1
 
-    save_balances(data)
-
-def get_gamble_title(user_id: str, success: bool) -> str:
-    data = load_balances().get(str(user_id), {})
-    stats = data.get("gamble", {})
+def get_gamble_title(user_data: dict, success: bool) -> str:
+    stats = user_data.get("gamble", {})
     win = stats.get("win", 0)
     lose = stats.get("lose", 0)
     total = win + lose
@@ -295,7 +291,7 @@ def get_gamble_title(user_id: str, success: bool) -> str:
         elif rate <= 0.35:
             winrate_titles.append("🪦 계속 해도 괜찮은가요?")
 
-    # 🗂️ D. 누적 시도 칭호 (추가)
+    # 🗂️ D. 누적 시도 칭호
     if total >= 1000:
         winrate_titles.append("🕹️ 역사적인 갬블러")
     elif total >= 500:
@@ -2791,6 +2787,9 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     building = get_user_building(user_id)
     stat_gain_text = ""
 
+    balances = load_balances()
+    user_data = balances.get(user_id, {"amount": balance, "last_updated": datetime.utcnow().isoformat()})
+
     if roll <= success_chance:
         # 🎰 잭팟 체크
         jackpot_chance = get_jackpot_chance(user_id, 0.01)
@@ -2812,25 +2811,31 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             if gained_stats:
                 stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
 
-        record_gamble_result(user_id, success=True)
-        title = get_gamble_title(user_id, success=True)
+        # ✅ 기록 및 칭호 처리 (I/O 1회만)
+        record_gamble_result(balances, user_id, success=True)
+        title = get_gamble_title(balances[user_id], success=True)
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
+
     else:
         # ❌ 실패 → 오덕로또 적립
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
-        record_gamble_result(user_id, success=False)
-        title = get_gamble_title(user_id, success=False)
 
-    # 💾 잔액 저장
+        # ✅ 기록 및 칭호 처리 (I/O 1회만)
+        record_gamble_result(balances, user_id, success=False)
+        title = get_gamble_title(balances[user_id], success=False)
+
+    # 💾 잔액 저장 (기존 gamble 기록 유지)
     balances[user_id] = {
+        **balances.get(user_id, {}),
         "amount": balance,
         "last_updated": datetime.now().isoformat()
     }
     save_balances(balances)
 
     # 📥 최신 잔액 반영
-    final_balance = get_balance(user_id)
+    final_balance = balances[user_id]["amount"]
+
 
     # 📤 응답 메시지
     if roll <= success_chance:
