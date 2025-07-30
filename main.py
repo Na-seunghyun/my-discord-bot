@@ -1679,7 +1679,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
     with open(leaderboard_path, "r", encoding="utf-8") as f:
         file_data = json.load(f)
         all_players = file_data.get("players", [])
-        # (게스트) 닉네임 가진 유저 제외
         players = [p for p in all_players if "(게스트)" not in p.get("nickname", "")]
         stored_season_id = file_data.get("season_id", "알 수 없음")
 
@@ -1719,40 +1718,60 @@ async def 시즌랭킹(interaction: discord.Interaction):
     kills_top5 = sorted(kills_list, key=lambda x: x[1], reverse=True)[:5]
 
     # -----------------------------
-    # ✅ 가중치 기반 종합 점수 계산
+    # ✅ Z-Score 기반 종합 점수 계산
     # -----------------------------
-    def calculate_weighted_score(avg_damage, kd, win_rate, games):
-        import math
-        if games < 50:
-            return 0  # 표본 부족 제외
-        g_factor = math.log(games+1) / math.log(1000)
-        return (avg_damage * 1.2 + kd * 40 + win_rate * 250) * g_factor
+    import statistics, math
+
+    avg_dmg_values = [p["squad"]["avg_damage"] for p in players if "squad" in p]
+    kd_values = [p["squad"]["kd"] for p in players if "squad" in p]
+    win_values = [p["squad"]["win_rate"] for p in players if "squad" in p]
+    games_values = [p["squad"]["rounds_played"] for p in players if "squad" in p]
+
+    mean_dmg = statistics.mean(avg_dmg_values) if avg_dmg_values else 0
+    std_dmg = statistics.pstdev(avg_dmg_values) or 1
+
+    mean_kd = statistics.mean(kd_values) if kd_values else 0
+    std_kd = statistics.pstdev(kd_values) or 1
+
+    mean_win = statistics.mean(win_values) if win_values else 0
+    std_win = statistics.pstdev(win_values) or 1
+
+    max_games = max(games_values) if games_values else 1
 
     weighted_list = []
-    for player in players:
-        squad = player.get("squad", {})
-        if squad:
-            name = player["nickname"]
-            score = calculate_weighted_score(
-                squad.get("avg_damage", 0),
-                squad.get("kd", 0),
-                squad.get("win_rate", 0),
-                squad.get("rounds_played", 0)
-            )
-            weighted_list.append((name, score))
+    for p in players:
+        if "squad" not in p:
+            continue
+        name = p["nickname"]
+        dmg = p["squad"].get("avg_damage", 0)
+        kd = p["squad"].get("kd", 0)
+        win = p["squad"].get("win_rate", 0)
+        games = p["squad"].get("rounds_played", 0)
+
+        # 표준화
+        z_dmg = (dmg - mean_dmg) / std_dmg
+        z_kd = (kd - mean_kd) / std_kd
+        z_win = (win - mean_win) / std_win
+
+        # 신뢰도 보정
+        confidence = math.log(games+1) / math.log(max_games+1)
+
+        # 최종 점수
+        score = (z_dmg + z_kd + z_win) * confidence
+        weighted_list.append((name, score))
 
     weighted_top5 = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:5]
 
     # -----------------------------
-    # 포맷 함수들
+    # 포맷 함수
     # -----------------------------
     def format_top5_codeblock(entries, is_percentage=False):
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
         lines = []
         for i, entry in enumerate(entries):
             val = f"{entry[1]:.2f}%" if is_percentage else f"{entry[1]:.2f}"
-            name = entry[0][:10].ljust(10)  # 닉네임 최대 10자, 좌측정렬
-            val_str = val.rjust(7)           # 값 우측정렬
+            name = entry[0][:10].ljust(10)
+            val_str = val.rjust(7)
             lines.append(f"{medals[i]} {i+1}. {name} {val_str}")
         return "```\n" + "\n".join(lines) + "\n```"
 
@@ -1770,7 +1789,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         lines = []
         for i, entry in enumerate(entries):
             name = entry[0][:10].ljust(10)
-            val_str = f"{entry[1]:.1f}".rjust(7)
+            val_str = f"{entry[1]:.3f}".rjust(7)
             lines.append(f"{medals[i]} {i+1}. {name} {val_str}")
         return "```\n" + "\n".join(lines) + "\n```"
 
@@ -1797,7 +1816,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
     if weighted_top5:
         embed.add_field(
-            name="💯 종합 점수 TOP 5 (가중치 포함)",
+            name="💯 종합 점수 TOP 5 (통계 기반)",
             value=format_top5_score_codeblock(weighted_top5),
             inline=False
         )
@@ -1805,15 +1824,15 @@ async def 시즌랭킹(interaction: discord.Interaction):
             name="📌 계산식 안내",
             value=(
                 "```\n"
-                "점수 = (데미지×1.2 + K/D×40 + 승률×250)\n"
-                "       × log(게임수+1) / log(1000)\n"
-                "※ 50판 이상 플레이한 유저만 포함됩니다.\n"
+                "점수 = (Z_데미지 + Z_K/D + Z_승률)\n"
+                "       × log(게임수+1) / log(최대게임수)\n"
+                "※ 50판 미만은 낮은 신뢰도로 계산됩니다.\n"
                 "```"
             ),
             inline=False
         )
 
-    # footer 내용 (저장 유저 수 / 적합 유저 수)
+    # footer 내용
     try:
         with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
             valid_members = json.load(f)
@@ -1826,6 +1845,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         )
 
     await interaction.followup.send(embed=embed)
+
 
 
 
