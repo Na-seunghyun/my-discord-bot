@@ -1673,7 +1673,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     # -----------------------------
     # 설정값
     # -----------------------------
-    M_CONFIDENCE = 350  # 판수 보정 기준값 (높을수록 적은 경기수의 점수 하락폭 증가)
+    M_CONFIDENCE = 350  # 판수 보정 기준값
     weights = {"dmg": 0.4, "kd": 0.35, "win": 0.25}
 
     leaderboard_path = "season_leaderboard.json"
@@ -1793,12 +1793,19 @@ async def 시즌랭킹(interaction: discord.Interaction):
         ) + "\n```"
 
     # -----------------------------
-    # Embed 생성
+    # Embed 생성 (종합점수 먼저 표시)
     # -----------------------------
     embed = discord.Embed(
-        title=f"🏆 현재 시즌 항목별 TOP 5 (시즌 ID: {stored_season_id})",
+        title=f"🏆 현재 시즌 랭킹 (시즌 ID: {stored_season_id})",
         color=discord.Color.gold()
     )
+
+    if weighted_top5:
+        embed.add_field(
+            name="💯 종합 점수 TOP 5",
+            value=format_top5_score_codeblock(weighted_top5),
+            inline=False
+        )
 
     embed.add_field(name="🔫 평균 데미지", value=format_top5_codeblock(damage_top5), inline=True)
     embed.add_field(name="⚔️ K/D", value=format_top5_codeblock(kd_top5), inline=True)
@@ -1813,24 +1820,17 @@ async def 시즌랭킹(interaction: discord.Interaction):
             rank_msg.append(f"{medals[i]} {i+1}. {name[:10].ljust(10)} - {tier} {sub} ({points})")
         embed.add_field(name="🥇 랭크 포인트", value="```\n" + "\n".join(rank_msg) + "\n```", inline=False)
 
-    if weighted_top5:
-        embed.add_field(
-            name="💯 종합 점수 TOP 5",
-            value=format_top5_score_codeblock(weighted_top5),
-            inline=False
-        )
-        embed.add_field(
-            name="📌 계산식 안내",
-            value=(
-                "```\n"
-                "점수 = (데미지Z*0.4 + K/DZ*0.35 + 승률Z*0.25)\n"
-                "       × (게임수 / (게임수+350))\n"
-                "- 판 수가 적으면 평균 실력에 가까워짐(점수 하향)\n"
-                "- 350판 이상이면 실력 점수 100% 반영\n"
-                "```"
-            ),
-            inline=False
-        )
+    embed.add_field(
+        name="📌 점수 계산 안내",
+        value=(
+            "1️⃣ 종합점수는 **데미지(40%) + K/D(35%) + 승률(25%)**을 기반으로 계산됩니다.\n"
+            "2️⃣ 경기 수가 적으면 평균값에 가까워지도록 자동 보정됩니다.\n"
+            "3️⃣ 보정 기준은 350판이며, 판 수가 많을수록 실력 점수가 더 정확히 반영됩니다.\n"
+            "4️⃣ 최종 점수 = (각 항목 점수 × 가중치) × (게임수 ÷ (게임수+350))\n"
+            "5️⃣ 공정하고 안정적인 랭킹을 위해 적용된 시스템입니다."
+        ),
+        inline=False
+    )
 
     try:
         with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
@@ -1840,6 +1840,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         embed.set_footer(text="※ 기준: 저장된 유저 전적")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
