@@ -201,7 +201,10 @@ def ensure_balance_file():
 def load_balances():
     ensure_balance_file()
     with open(BALANCE_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        try:
+            return json.load(f)
+        except:
+            return {}
 
 def save_balances(data):
     existing = {}
@@ -2721,9 +2724,60 @@ async def 돈줘통계(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
+# ---- 모듈 상단에 추가 ----
+BALANCES_CACHE = None
+CACHE_LOCK = asyncio.Lock()
+BALANCE_LOCK = asyncio.Lock()
+
+def load_balances_cached():
+    global BALANCES_CACHE
+    if BALANCES_CACHE is None:
+        BALANCES_CACHE = load_balances()
+    return BALANCES_CACHE
+
+def save_balances_cached():
+    global BALANCES_CACHE
+    if BALANCES_CACHE is not None:
+        save_balances(BALANCES_CACHE)
+        
+async def save_balances_safe(data):
+    async with BALANCE_LOCK:
+        existing = {}
+        if os.path.exists(BALANCE_FILE):
+            with open(BALANCE_FILE, "r", encoding="utf-8") as f:
+                try:
+                    existing = json.load(f)
+                except:
+                    existing = {}
+
+        # 병합
+        existing.update(data)
+
+        # 1000명 초과 시 오래된 데이터 제거
+        if len(existing) > 1000:
+            existing = dict(sorted(existing.items(), key=lambda x: x[1].get("last_updated", ""), reverse=True)[:1000])
+
+        with open(BALANCE_FILE, "w", encoding="utf-8") as f:
+            json.dump(existing, f, indent=4)
+
+        # 캐시도 동기화
+        global BALANCES_CACHE
+        BALANCES_CACHE = existing
 
 
 
+def get_balance_cached(user_id):
+    balances = load_balances_cached()
+    return balances.get(str(user_id), {}).get("amount", 0)
+
+async def set_balance_safe(user_id, amount):
+    balances = load_balances_cached()
+    balances[str(user_id)] = {
+        **balances.get(str(user_id), {}),
+        "amount": amount,
+        "last_updated": datetime.now().isoformat()
+    }
+    await save_balances_safe(balances)
 
 
 
@@ -2736,7 +2790,7 @@ async def 돈줘통계(interaction: discord.Interaction):
 @app_commands.describe(대상="조회할 유저 (선택사항)")
 async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     user = 대상 or interaction.user
-    balance = get_balance(user.id)
+    balance = get_balance_cached(user.id)
 
     embed = discord.Embed(
         title="💵 잔액 확인",
@@ -2745,21 +2799,6 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     )
     await interaction.response.send_message(embed=embed, ephemeral=False)
 
-
-# ---- 모듈 상단에 추가 ----
-BALANCES_CACHE = None
-CACHE_LOCK = asyncio.Lock()
-
-def load_balances_cached():
-    global BALANCES_CACHE
-    if BALANCES_CACHE is None:
-        BALANCES_CACHE = load_balances()
-    return BALANCES_CACHE
-
-def save_balances_cached():
-    global BALANCES_CACHE
-    if BALANCES_CACHE is not None:
-        save_balances(BALANCES_CACHE)
 
 
 
@@ -6338,36 +6377,50 @@ async def 출금(interaction: discord.Interaction, 금액: int):
     net_interest, tax = process_bank_withdraw(user_id, 금액)
     original_interest = net_interest + tax  # 세전 이자
 
-    add_balance(user_id, 금액 + net_interest)
+    # ✅ 캐시에서 잔액 업데이트
+    balances = load_balances_cached()
+    current_balance = balances.get(user_id, {}).get("amount", 0)
+    new_balance = current_balance + 금액 + net_interest
 
+    balances[user_id] = {
+        **balances.get(user_id, {}),
+        "amount": new_balance,
+        "last_updated": datetime.now().isoformat()
+    }
+
+    # ✅ 오덕로또 세금 반영
     if tax > 0:
         add_oduk_pool(tax)
-
     pool_amt = get_oduk_pool_amount()
 
-    # ✅ 이자 한도 초과 안내 (500,000원 이상 → 컷팅됨)
+    # ✅ 안전 저장
+    await save_balances_safe(balances)
+
+    # ✅ 이자 한도 안내
     if original_interest > 500_000:
         await interaction.channel.send(
             f"⚠️ **이자 지급 한도 초과 안내**\n"
             f"원래 계산된 이자는 **{original_interest:,}원**이었지만,\n"
             f"시스템 상 하루 최대 이자 지급 한도는 **500,000원**입니다.\n"
-            f"따라서 실제 지급된 이자는 세금 차감 후 **{net_interest:,}원**입니다.",
-            ephemeral=True
+            f"따라서 실제 지급된 이자는 세금 차감 후 **{net_interest:,}원**입니다."
         )
 
-    await interaction.response.send_message(embed=create_embed(
+    # ✅ 최종 메시지
+    embed = create_embed(
         "🏧 출금 완료",
         (
             f"🏛️ 은행 → 지갑: **{금액:,}원** 출금됨\n"
             f"💵 순이자 지급: **{net_interest:,}원** (세금 {tax:,}원 → 오덕로또 적립)\n"
-            f"💰 현재 지갑 잔액: **{get_balance(user_id):,}원**\n"
+            f"💰 현재 지갑 잔액: **{new_balance:,}원**\n"
             f"🏦 남은 은행 잔고: **{get_total_bank_balance(user_id):,}원**\n\n"
             f"🎯 현재 오덕로또 상금: **{pool_amt:,}원**\n"
             f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
         ),
         discord.Color.green(),
         user_id
-    ))
+    )
+    await interaction.response.send_message(embed=embed)
+
 
 
 # ✅ 출금 자동완성
