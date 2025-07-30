@@ -2745,8 +2745,9 @@ def load_balances_cached():
 async def save_balances_async():
     global BALANCES_CACHE
     async with CACHE_LOCK:
-        data_copy = BALANCES_CACHE.copy()
+        data_copy = dict(BALANCES_CACHE)  # 최신값 그대로 복사
     await asyncio.to_thread(save_balances, data_copy)
+
 
 
 
