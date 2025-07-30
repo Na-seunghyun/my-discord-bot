@@ -2730,7 +2730,9 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
 @tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 100원부터 도박 가능")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
-    # ✅ 오덕도박장 채널 ID
+    import time
+    start_time = time.time()
+
     if interaction.channel.id != 1394331814642057418:
         return await interaction.response.send_message(
             "❌ 이 명령어는 **#오덕도박장** 채널에서만 사용할 수 있습니다.",
@@ -2738,9 +2740,10 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
 
     user_id = str(interaction.user.id)
-    balance = get_balance(user_id)
+    balances = load_balances()
+    user_data = balances.get(user_id, {})
+    balance = user_data.get("amount", 0)
 
-    # 최소 베팅, 잔액 부족 체크
     if 베팅액 < 100:
         return await interaction.response.send_message(
             embed=create_embed("❌ 베팅 실패", "최소 베팅 금액은 **100원**입니다.", discord.Color.red()),
@@ -2752,14 +2755,13 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             ephemeral=True
         )
 
-    # 잔액 차감
-    add_balance(user_id, -베팅액)
+    # 💸 베팅 차감
+    balance -= 베팅액
 
-    # 도박 실행
+    # 🎲 확률 생성
     success_chance = random.randint(30, 70)
     roll = random.randint(1, 100)
 
-    # ✅ 시각화 막대 (width=20, 마커 포함)
     def create_graph_bar(chance: int, roll: int, width: int = 20) -> str:
         success_pos = round(chance / 100 * width)
         roll_pos = round(roll / 100 * width)
@@ -2773,47 +2775,67 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     bar = create_graph_bar(success_chance, roll)
 
-    # 성공
-    if roll <= success_chance:
-        is_jackpot = random.random() < 0.01
-        multiplier = 4 if is_jackpot else 2
-        reward = 베팅액 * multiplier
-        add_balance(user_id, reward)
-        final_balance = get_balance(user_id)
+    building = get_user_building(user_id)
+    stat_gain_text = ""
 
-        # ✅ 기록 반영
+    if roll <= success_chance:
+        # 🎰 잭팟 체크
+        jackpot_chance = get_jackpot_chance(user_id, 0.01)
+        is_jackpot = random.random() < jackpot_chance
+        multiplier = 4 if is_jackpot else 2
+        reward = apply_gamble_bonus(user_id, 베팅액 * multiplier)
+
+        # 💰 보상 반영
+        balance += reward
+
+        # 📈 상태치 증가
+        if building:
+            user_stats = get_user_stats(user_id)
+            gained_stats = []
+            for stat in ["stability", "risk", "labor", "tech"]:
+                if random.random() < 0.15:
+                    add_user_stat(user_id, stat, 1)
+                    gained_stats.append(stat)
+            if gained_stats:
+                stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
+
         record_gamble_result(user_id, success=True)
         title = get_gamble_title(user_id, success=True)
-
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
-        embed = create_embed(
-            "🎉 도박 성공!",
-            f"{jackpot_msg}"
-            f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n"
-            f"🏅 칭호: {title}",
-            discord.Color.gold() if is_jackpot else discord.Color.green(),
-            user_id
-        )
-
-    # 실패
     else:
+        # ❌ 실패 → 오덕로또 적립
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
-
-        # ✅ 기록 반영
         record_gamble_result(user_id, success=False)
         title = get_gamble_title(user_id, success=False)
 
+    # 💾 잔액 저장
+    balances[user_id] = {
+        "amount": balance,
+        "last_updated": datetime.now().isoformat()
+    }
+    save_balances(balances)
+
+    # 📥 최신 잔액 반영
+    final_balance = get_balance(user_id)
+
+    # 📤 응답 메시지
+    if roll <= success_chance:
+        embed = create_embed(
+            "🎉 도박 성공!",
+            f"{jackpot_msg}(확률: {success_chance}%, 값: {roll})\n{bar}\n"
+            f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n🏅 칭호: {title}{stat_gain_text}",
+            discord.Color.gold() if is_jackpot else discord.Color.green(),
+            user_id
+        )
+    else:
         embed = create_embed(
             "💀 도박 실패!",
-            (
-                f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
-                f"-{베팅액:,}원 손실...\n"
-                f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
-                f"🎟️ `/오덕로또참여`로 도전하세요!\n\n"
-                f"🏅 칭호: {title}"
-            ),
+            f"(확률: {success_chance}%, 값: {roll})\n{bar}\n"
+            f"-{베팅액:,}원 손실...\n"
+            f"🍜 오덕 로또 상금: **{pool_amt:,}원** 적립됨!\n"
+            f"🎟️ /오덕로또참여로 도전하세요!\n\n"
+            f"🏅 칭호: {title}",
             discord.Color.red(),
             user_id
         )
