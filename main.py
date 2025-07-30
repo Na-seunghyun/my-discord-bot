@@ -2803,9 +2803,8 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
                 stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
 
         # ✅ 기록 저장
-        record_gamble_result(balances, user_id, success=True)
-        save_balances(balances)
-        title = get_gamble_title(balances.get(user_id, {}), success=True)
+        record_gamble_result(user_id, True)
+        title = get_gamble_title(load_balances().get(user_id, {}), True)
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
 
     # ❌ 도박 실패
@@ -2813,9 +2812,8 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
 
-        record_gamble_result(balances, user_id, success=False)
-        save_balances(balances)
-        title = get_gamble_title(balances.get(user_id, {}), success=False)
+        record_gamble_result(user_id, False)
+        title = get_gamble_title(load_balances().get(user_id, {}), False)
 
     # 💾 잔액 저장
     balances[user_id] = {
@@ -2851,6 +2849,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     await interaction.response.send_message(embed=embed)
 
     print(f"⏱️ /도박 실행 완료 ({interaction.user.name}): {time.time() - start_time:.2f}초")
+
 
 
 
