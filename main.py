@@ -2739,7 +2739,7 @@ async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
 @tree.command(name="도박", description="도박 성공 시 2배 획득 (성공확률 30~70%)", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(베팅액="최소 100원부터 도박 가능")
 async def 도박(interaction: discord.Interaction, 베팅액: int):
-    import time
+    import time, asyncio
     start_time = time.time()
 
     if interaction.channel.id != 1394331814642057418:
@@ -2749,8 +2749,8 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
 
     user_id = str(interaction.user.id)
-    balances = load_balances()
-    user_data = balances.get(user_id, {})
+    balances = load_balances()  # ✅ 1회만 로드
+    user_data = balances.get(user_id, {"amount": 0, "last_updated": datetime.utcnow().isoformat()})
     balance = user_data.get("amount", 0)
 
     if 베팅액 < 100:
@@ -2786,11 +2786,14 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
     building = get_user_building(user_id)
     stat_gain_text = ""
-
-    balances = load_balances()
-    user_data = balances.get(user_id, {"amount": balance, "last_updated": datetime.utcnow().isoformat()})
+    title = ""
+    jackpot_msg = ""
+    success = False
+    reward = 0
+    pool_amt = 0
 
     if roll <= success_chance:
+        success = True
         # 🎰 잭팟 체크
         jackpot_chance = get_jackpot_chance(user_id, 0.01)
         is_jackpot = random.random() < jackpot_chance
@@ -2811,39 +2814,34 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             if gained_stats:
                 stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
 
-        # ✅ 기록 및 칭호 처리 (I/O 1회만)
-        record_gamble_result(balances, user_id, success=True)
-        title = get_gamble_title(balances[user_id], success=True)
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
-
     else:
         # ❌ 실패 → 오덕로또 적립
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
 
-        # ✅ 기록 및 칭호 처리 (I/O 1회만)
-        record_gamble_result(balances, user_id, success=False)
-        title = get_gamble_title(balances[user_id], success=False)
-
-    # 💾 잔액 저장 (기존 gamble 기록 유지)
+    # 💾 메모리에서 즉시 잔액 반영
     balances[user_id] = {
         **balances.get(user_id, {}),
         "amount": balance,
         "last_updated": datetime.now().isoformat()
     }
-    save_balances(balances)
+    final_balance = balance
 
-    # 📥 최신 잔액 반영
-    final_balance = balances[user_id]["amount"]
+    # ✅ 칭호 즉시 계산 (현재 balances 데이터 사용)
+    record_gamble_result(balances, user_id, success)
+    title = get_gamble_title(balances[user_id], success)
 
+    # ✅ 빠른 응답 예약
+    await interaction.response.defer(thinking=True)
 
-    # 📤 응답 메시지
-    if roll <= success_chance:
+    # 📤 결과 메시지
+    if success:
         embed = create_embed(
             "🎉 도박 성공!",
             f"{jackpot_msg}(확률: {success_chance}%, 값: {roll})\n{bar}\n"
             f"+{reward:,}원 획득!\n💰 잔액: {final_balance:,}원\n\n🏅 칭호: {title}{stat_gain_text}",
-            discord.Color.gold() if is_jackpot else discord.Color.green(),
+            discord.Color.gold() if multiplier == 4 else discord.Color.green(),
             user_id
         )
     else:
@@ -2858,9 +2856,15 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             user_id
         )
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
+
+    # ✅ 느린 저장 작업은 백그라운드에서 처리
+    async def post_save():
+        await asyncio.to_thread(save_balances, balances)
+    asyncio.create_task(post_save())
 
     print(f"⏱️ /도박 실행 완료 ({interaction.user.name}): {time.time() - start_time:.2f}초")
+
 
 
 
