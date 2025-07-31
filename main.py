@@ -1731,6 +1731,10 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         player_id = get_player_id(닉네임)
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
+
+           # 여기서 API 데이터 구조 확인용 로그 찍기
+        print("API squad data sample:", stats["data"]["attributes"]["gameModeStats"].get("squad", {}))
+
         ranked = get_player_ranked_stats(player_id, season_id)
 
         squad_metrics, error = extract_squad_metrics(stats)
