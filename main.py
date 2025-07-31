@@ -1549,12 +1549,10 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
     try:
         await interaction.response.defer()
     except discord.NotFound:
-        print("❌ Interaction expired before defer.")
         return
 
     if not can_make_request():
-        await interaction.followup.send("⚠️ API 요청 제한(분당 10회)으로 인해 잠시 후 다시 시도해주세요.", ephemeral=True)
-        return
+        return await interaction.followup.send("⚠️ API 요청 제한(분당 10회)이 초과되었습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
 
     try:
         register_request()
@@ -1575,7 +1573,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             color=discord.Color.blue()
         )
 
-        # ✅ SOLO / DUO / SQUAD 모드별 전적 및 평가 출력
+        # ✅ 모드별 전적 출력 (가로 3칸)
         for mode in ["solo", "duo", "squad"]:
             mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
             if not mode_stats or mode_stats["roundsPlayed"] == 0:
@@ -1596,46 +1594,37 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             headshot_ratio = (headshots / kills) * 100 if kills > 0 else 0
 
             time_survived = mode_stats.get("timeSurvived", 0)
-            avg_survival_time = time_survived / rounds if rounds > 0 else 0
+            avg_survival_time = time_survived / rounds
             surv_min = int(avg_survival_time // 60)
             surv_sec = int(avg_survival_time % 60)
 
             longest_kill = mode_stats.get("longestKill", 0)
 
-            # ✅ 자동 평가 메시지
-            comment = ""
-            if rounds < 5:
-                comment = "⚠️ 경기 수가 적어 통계가 부정확할 수 있어요."
-            elif kd >= 4:
-                comment = "🔥 고화력 플레이어! 압도적인 화력으로 제압 중!"
-            elif win_pct >= 20:
-                comment = "🏆 안정적인 승리 루트 확보!"
-            elif top10_ratio >= 60:
-                comment = "🎖 높은 상위권 진입률! 꾸준함이 돋보여요."
-            elif headshot_ratio >= 25:
-                comment = "🎯 정확한 에임으로 헤드샷 다수 기록!"
-            else:
-                comment = "⚔️ 꾸준한 경기력, 더 성장할 여지가 보여요."
-
             value = (
-                f"📌 게임 수: {rounds}판 | 🏆 승률: {win_pct:.1f}% | 🔫 K/D: {kd:.2f}\n"
-                f"💀 킬 수: {kills} | 🎯 헤드샷률: {headshot_ratio:.1f}%\n"
-                f"🔥 평균 데미지: {avg_damage:.1f} | 🎖 Top10: {top10_ratio:.1f}%\n"
-                f"⏱ 평균 생존시간: {surv_min}분 {surv_sec}초 | 🔭 최장 저격: {longest_kill:.1f}m\n"
-                f"{comment}"
+                "```yaml\n"
+                f"게임   : {rounds}판\n"
+                f"승률   : {win_pct:.1f}%\n"
+                f"K/D    : {kd:.2f}\n"
+                f"킬수   : {kills}\n"
+                f"헤드샷 : {headshot_ratio:.1f}%\n"
+                f"데미지 : {avg_damage:.1f}\n"
+                f"Top10  : {top10_ratio:.1f}%\n"
+                f"생존   : {surv_min}분 {surv_sec}초\n"
+                f"저격   : {longest_kill:.1f}m\n"
+                "```"
             )
-            embed.add_field(name=mode.upper(), value=value, inline=False)
+            embed.add_field(name=f"🎮 {mode.upper()}", value=value, inline=True)
 
-        # ✅ SQUAD 분석 피드백
+        # ✅ 분석 피드백
         embed.add_field(name="📊 SQUAD 분석 피드백", value="전투 성능을 바탕으로 분석된 결과입니다.", inline=False)
         embed.add_field(name="🔫 평균 데미지", value=f"```{dmg_msg}```", inline=False)
         embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
         embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
 
-        # ✅ 리더보드 저장
+        # ✅ 리더보드 기록 저장
         save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id, source="전적명령")
 
-        # ✅ 랭크 정보
+        # ✅ 랭크 정보 표시
         best_rank_score = -1
         best_rank_tier = "Unranked"
         best_rank_sub_tier = ""
@@ -1668,9 +1657,9 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                     best_rank_tier = tier
                     best_rank_sub_tier = sub_tier
         else:
-            embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
+            embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 데이터를 불러올 수 없습니다.", inline=False)
 
-        # ✅ 썸네일 및 전송
+        # ✅ 썸네일 이미지 출력
         image_path = get_rank_image_path(best_rank_tier, best_rank_sub_tier)
         image_file = discord.File(image_path, filename="rank.png")
         embed.set_thumbnail(url="attachment://rank.png")
@@ -1679,9 +1668,10 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         await interaction.followup.send(embed=embed, file=image_file)
 
     except requests.HTTPError as e:
-        await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ API 오류 발생: {e}", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ 전적 조회 중 오류 발생: {e}", ephemeral=True)
+
 
 
 
