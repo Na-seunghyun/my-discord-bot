@@ -1856,11 +1856,21 @@ async def 시즌랭킹(interaction: discord.Interaction):
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
 
     def format_top_score(entries):
-        return "```\n" + "\n".join(
-            f"{medals[i]} {'*'+entry[0]+'*' if i < 3 else entry[0]:20} {entry[1]:.3f} | "
-            f"D{entry[2]:.2f} K{entry[3]:.2f} W{entry[4]:.2f} T{entry[5]:.2f} H{entry[6]:.2f} S{entry[7]:.2f} C{entry[8]:.2f}"
-            for i, entry in enumerate(entries)
-        ) + "\n```"
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
+        lines = []
+        for i, entry in enumerate(entries):
+            name = f"*{entry[0]}*" if i < 3 else entry[0]
+            score = f"{entry[1]:.3f}"
+            d = f"D{entry[2]:.1f}"
+            k = f"K{entry[3]:.1f}"
+            w = f"W{entry[4]:.1f}"
+            t = f"T{entry[5]:.1f}"
+            h = f"H{entry[6]:.1f}"
+            s = f"S{entry[7]:.1f}"
+            c = f"C{entry[8]:.1f}"
+            line = f"{medals[i]} {name:20} {score} | {d} {k} {w} {t} {h} {s} {c}"
+            lines.append(line)
+        return "```\n" + "\n".join(lines) + "\n```"
 
     def format_top(entries, is_percentage=False):
         return "```\n" + "\n".join(
