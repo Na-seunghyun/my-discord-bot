@@ -1451,11 +1451,31 @@ def extract_squad_metrics(stats):
     wins = mode_stats['wins']
     kills = mode_stats['kills']
     damage = mode_stats['damageDealt']
+    top10s = mode_stats.get("top10s", 0)
+    headshots = mode_stats.get("headshotKills", 0)
+    time_survived = mode_stats.get("timeSurvived", 0)
+    longest_kill = mode_stats.get("longestKill", 0)
+
     avg_damage = damage / rounds
     kd = kills / max(1, rounds - wins)
     win_rate = (wins / rounds) * 100
+    top10_rate = (top10s / rounds) * 100 if rounds > 0 else 0
+    headshot_ratio = (headshots / kills * 100) if kills > 0 else 0
+    avg_survival = time_survived / rounds if rounds > 0 else 0
 
-    return (avg_damage, kd, win_rate), None
+    # ✅ return 타입을 튜플(스코어용) + 상세 딕셔너리로 구분
+    primary_metrics = (avg_damage, kd, win_rate)
+    additional_metrics = {
+        "top10_rate": top10_rate,
+        "headshot_ratio": headshot_ratio,
+        "avg_survival": avg_survival,
+        "longest_kill": longest_kill,
+        "rounds": rounds,
+        "kills": kills,
+        "wins": wins
+    }
+
+    return primary_metrics, additional_metrics
 
 # ✅ 구간 분류 함수
 def get_damage_key(avg_damage):
@@ -1541,9 +1561,8 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         player_id = get_player_id(닉네임)
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
-        ranked_stats = get_player_ranked_stats(player_id, season_id)  # 랭크 전적 호출
+        ranked_stats = get_player_ranked_stats(player_id, season_id)
 
-        # 일반 스쿼드 전적 피드백
         squad_metrics, error = extract_squad_metrics(stats)
         if squad_metrics:
             avg_damage, kd, win_rate = squad_metrics
@@ -1556,46 +1575,49 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             color=discord.Color.blue()
         )
 
-        # 일반 전적 필드 추가
-        for mode in ["solo", "duo", "squad"]:
-            mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
-            if not mode_stats or mode_stats["roundsPlayed"] == 0:
-                continue
-
-            rounds = mode_stats['roundsPlayed']
-            wins = mode_stats['wins']
-            kills = mode_stats['kills']
-            damage = mode_stats['damageDealt']
+        mode_stats = stats["data"]["attributes"]["gameModeStats"].get("squad")
+        if mode_stats and mode_stats["roundsPlayed"] > 0:
+            rounds = mode_stats["roundsPlayed"]
+            wins = mode_stats["wins"]
+            kills = mode_stats["kills"]
+            damage = mode_stats["damageDealt"]
             avg_damage = damage / rounds
             kd = kills / max(1, rounds - wins)
             win_pct = (wins / rounds) * 100
 
-            value = (
-                f"게임 수: {rounds}\n"
-                f"승리 수: {wins} ({win_pct:.2f}%)\n"
-                f"킬 수: {kills}\n"
-                f"평균 데미지: {avg_damage:.2f}\n"
-                f"K/D: {kd:.2f}"
-            )
-            embed.add_field(name=mode.upper(), value=value, inline=True)
+            top10s = mode_stats.get("top10s", 0)
+            top10_ratio = (top10s / rounds) * 100 if rounds > 0 else 0
 
-        # 일반 스쿼드 피드백 임베드 필드
-        embed.add_field(name="📊 SQUAD 분석 피드백", value="전투 성능을 바탕으로 분석된 결과입니다.", inline=False)
-        embed.add_field(name="🔫 평균 데미지", value=f"```{dmg_msg}```", inline=False)
-        embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
-        embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
+            headshots = mode_stats.get("headshotKills", 0)
+            headshot_ratio = (headshots / kills) * 100 if kills > 0 else 0
 
-        # 랭크 썸네일용 대표 티어 추적
+            time_survived = mode_stats.get("timeSurvived", 0)
+            avg_survival_time = time_survived / rounds
+            surv_min = int(avg_survival_time // 60)
+            surv_sec = int(avg_survival_time % 60)
+
+            longest_kill = mode_stats.get("longestKill", 0)
+
+            embed.add_field(name="📊 SQUAD 분석 피드백", value="전투 성능을 바탕으로 분석된 결과입니다.", inline=False)
+            embed.add_field(name="🔫 평균 데미지", value=f"```{dmg_msg}```", inline=False)
+            embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
+            embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
+
+            embed.add_field(name="📈 추가 지표", value=(
+                f"Top10 진입률: **{top10_ratio:.2f}%**\n"
+                f"헤드샷률: **{headshot_ratio:.2f}%**\n"
+                f"평균 생존시간: **{surv_min}분 {surv_sec}초**\n"
+                f"최장 저격 거리: **{longest_kill:.1f}m**"
+            ), inline=False)
+        else:
+            embed.add_field(name="📊 SQUAD 분석", value="전적 데이터가 부족하여 분석할 수 없습니다.", inline=False)
+
+        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id, source="전적명령")
+
         best_rank_score = -1
         best_rank_tier = "Unranked"
         best_rank_sub_tier = ""
 
-        # ✅ 이 줄 추가하세요
-        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id, source="전적명령")
-
-
-
-        # 랭크 전적 임베드 필드 추가
         if ranked_stats and "data" in ranked_stats:
             ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
             for mode in ["solo", "duo", "squad"]:
@@ -1619,7 +1641,6 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 embed.add_field(name=f"🏅 {mode.upper()} 킬 수", value=str(kills), inline=True)
                 embed.add_field(name=f"🏅 {mode.upper()} K/D", value=f"{kd:.2f}", inline=True)
 
-                # 가장 높은 랭크 이미지용
                 if rank_point > best_rank_score:
                     best_rank_score = rank_point
                     best_rank_tier = tier
@@ -1627,18 +1648,18 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         else:
             embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
 
-        # 랭크 이미지 설정
         image_path = get_rank_image_path(best_rank_tier, best_rank_sub_tier)
         image_file = discord.File(image_path, filename="rank.png")
         embed.set_thumbnail(url="attachment://rank.png")
-
         embed.set_footer(text="PUBG API 제공")
+
         await interaction.followup.send(embed=embed, file=image_file)
 
     except requests.HTTPError as e:
         await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
+
 
 @전적.autocomplete("닉네임")
 async def 닉네임_자동완성(interaction: discord.Interaction, current: str):
