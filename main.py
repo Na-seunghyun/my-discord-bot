@@ -1793,6 +1793,108 @@ async def 닉네임_자동완성(interaction: discord.Interaction, current: str)
     return choices[:25]
 
 
+@tree.command(name="전적해설", description="특정 유저 시즌 점수 계산 해설을 확인합니다.", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(닉네임="PUBG 닉네임")
+async def 전적해설(interaction: discord.Interaction, 닉네임: str):
+    await interaction.response.defer()
+
+    # leaderboard 불러오기
+    leaderboard_path = "season_leaderboard.json"
+    if not os.path.exists(leaderboard_path):
+        await interaction.followup.send("❌ 시즌 데이터가 없습니다.", ephemeral=True)
+        return
+
+    with open(leaderboard_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    players = data.get("players", [])
+    player = next((p for p in players if p.get("nickname") == 닉네임), None)
+    if not player:
+        await interaction.followup.send(f"❌ '{닉네임}' 님의 시즌 전적을 찾을 수 없습니다.", ephemeral=True)
+        return
+
+    squad = player.get("squad", {})
+    games = squad.get("rounds_played", 0)
+
+    if games == 0:
+        await interaction.followup.send("❌ 게임 수가 0인 유저는 해설이 제공되지 않습니다.", ephemeral=True)
+        return
+
+    # 통계 계산을 위해 전체 플레이어 데이터에서 항목별 리스트 준비
+    keys = ["avg_damage", "kd", "win_rate", "top10_ratio", "headshot_pct", "avg_survive"]
+    metric_lists = {k: [p.get("squad", {}).get(k, 0) for p in players if isinstance(p.get("squad"), dict)] for k in keys}
+    import statistics
+    means = {k: statistics.mean(v) if v else 0 for k, v in metric_lists.items()}
+    stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
+
+    def z_score(val, key):
+        return (val - means[key]) / stds[key]
+
+    factor = games / (games + 500)
+
+    explanation_lines = [f"🏅 **{닉네임}** 님의 시즌 점수 해설\n"]
+    explanation_lines.append(f"🎮 게임 수: {games} 판 (보정계수: {factor:.3f})\n")
+
+    total_score = 0
+    weights = {
+        "avg_damage": 0.25,
+        "kd": 0.25,
+        "win_rate": 0.20,
+        "top10_ratio": 0.10,
+        "headshot_pct": 0.10,
+        "avg_survive": 0.10
+    }
+
+    for key in keys:
+        val = squad.get(key, 0)
+        mean = means[key]
+        std = stds[key]
+        z = z_score(val, key)
+        adj = z * factor
+        contrib = adj * weights[key]
+        total_score += contrib
+
+        explanation_lines.append(
+            f"📊 {key} : {val:.2f} (평균: {mean:.2f}, 표준편차: {std:.2f})\n"
+            f"    → Z-Score: {z:.3f}, 보정 후: {adj:.3f}, 가중치: {weights[key]*100:.0f}%, 점수 기여도: {contrib:.3f}"
+        )
+
+    explanation_lines.append(f"\n🏆 최종 종합 점수: **{total_score:.3f}** (점수가 높을수록 우수)")
+
+    await interaction.followup.send("\n".join(explanation_lines), ephemeral=True)
+
+
+# 자동완성 연결 (기존 자동완성 코드 활용)
+@전적해설.autocomplete("닉네임")
+async def 닉네임_자동완성(interaction: discord.Interaction, current: str):
+    guild = interaction.guild
+    if not guild:
+        return []
+
+    choices = []
+    for member in guild.members:
+        if member.bot or not member.nick:
+            continue
+
+        parts = member.nick.split("/")
+        if len(parts) >= 2:
+            nickname = parts[1].strip()
+            full_nick = member.nick.strip()
+
+            if current.lower() in full_nick.lower() or current.lower() in nickname.lower():
+                choices.append(app_commands.Choice(
+                    name=full_nick,
+                    value=nickname
+                ))
+
+    return choices[:25]
+
+
+
+
+
+
+
 @tree.command(name="시즌랭킹", description="현재 시즌의 항목별 TOP7을 확인합니다.", guild=discord.Object(id=GUILD_ID))
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
