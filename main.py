@@ -1762,11 +1762,18 @@ async def 닉네임_자동완성(interaction: discord.Interaction, current: str)
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
 
-    # -----------------------------
-    # 설정값
-    # -----------------------------
+    import statistics
+
     M_CONFIDENCE = 500  # 판수 보정 기준값
-    weights = {"dmg": 0.4, "kd": 0.35, "win": 0.25}
+
+    weights = {
+        "dmg": 0.25,
+        "kd": 0.25,
+        "win": 0.20,
+        "top10": 0.10,
+        "hs_pct": 0.10,
+        "surv": 0.10
+    }
 
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
@@ -1783,121 +1790,115 @@ async def 시즌랭킹(interaction: discord.Interaction):
         await interaction.followup.send("❌ 현재 시즌에 저장된 유저 데이터가 없습니다.", ephemeral=True)
         return
 
-    # -----------------------------
-    # 항목별 TOP7 리스트 생성
-    # -----------------------------
-    damage_list = []
-    kd_list = []
-    winrate_list = []
-    rankpoint_list = []
-    rounds_list = []
-    kills_list = []
+    # 데이터 추출 (squad 기준)
+    def safe_get(p, key):
+        return p.get("squad", {}).get(key, 0)
 
-    for player in players:
-        name = player["nickname"]
-        squad = player.get("squad", {})
-        ranked = player.get("ranked", {})
+    dmg_values = [safe_get(p, "avg_damage") for p in players]
+    kd_values = [safe_get(p, "kd") for p in players]
+    win_values = [safe_get(p, "win_rate") for p in players]
+    top10_values = [safe_get(p, "top10_ratio") for p in players]
+    hs_values = [safe_get(p, "headshot_pct") for p in players]
+    surv_values = [safe_get(p, "avg_survive") for p in players]
 
-        if squad:
-            damage_list.append((name, squad.get("avg_damage", 0)))
-            kd_list.append((name, squad.get("kd", 0)))
-            winrate_list.append((name, squad.get("win_rate", 0)))
-            rounds_list.append((name, squad.get("rounds_played", 0)))
-            kills_list.append((name, squad.get("kills", 0)))
+    means = {
+        "dmg": statistics.mean(dmg_values) if dmg_values else 0,
+        "kd": statistics.mean(kd_values) if kd_values else 0,
+        "win": statistics.mean(win_values) if win_values else 0,
+        "top10": statistics.mean(top10_values) if top10_values else 0,
+        "hs_pct": statistics.mean(hs_values) if hs_values else 0,
+        "surv": statistics.mean(surv_values) if surv_values else 0
+    }
 
-        if ranked:
-            rankpoint_list.append((name, ranked.get("points", 0), ranked.get("tier", ""), ranked.get("subTier", "")))
-
-    # 상위 7명
-    damage_top = sorted(damage_list, key=lambda x: x[1], reverse=True)[:7]
-    kd_top = sorted(kd_list, key=lambda x: x[1], reverse=True)[:7]
-    win_top = sorted(winrate_list, key=lambda x: x[1], reverse=True)[:7]
-    rank_top = sorted(rankpoint_list, key=lambda x: x[1], reverse=True)[:7]
-    rounds_top = sorted(rounds_list, key=lambda x: x[1], reverse=True)[:7]
-    kills_top = sorted(kills_list, key=lambda x: x[1], reverse=True)[:7]
-
-    # -----------------------------
-    # 통계 기반 종합 점수 계산
-    # -----------------------------
-    import statistics, math
-
-    avg_dmg_values = [p["squad"]["avg_damage"] for p in players if "squad" in p]
-    kd_values = [p["squad"]["kd"] for p in players if "squad" in p]
-    win_values = [p["squad"]["win_rate"] for p in players if "squad" in p]
-    games_values = [p["squad"]["rounds_played"] for p in players if "squad" in p]
-
-    mean_dmg = statistics.mean(avg_dmg_values) if avg_dmg_values else 0
-    std_dmg = statistics.pstdev(avg_dmg_values) or 1
-    mean_kd = statistics.mean(kd_values) if kd_values else 0
-    std_kd = statistics.pstdev(kd_values) or 1
-    mean_win = statistics.mean(win_values) if win_values else 0
-    std_win = statistics.pstdev(win_values) or 1
+    stds = {
+        "dmg": statistics.pstdev(dmg_values) or 1,
+        "kd": statistics.pstdev(kd_values) or 1,
+        "win": statistics.pstdev(win_values) or 1,
+        "top10": statistics.pstdev(top10_values) or 1,
+        "hs_pct": statistics.pstdev(hs_values) or 1,
+        "surv": statistics.pstdev(surv_values) or 1
+    }
 
     weighted_list = []
     for p in players:
         if "squad" not in p:
             continue
+
         name = p["nickname"]
-        dmg = p["squad"].get("avg_damage", 0)
-        kd = p["squad"].get("kd", 0)
-        win = p["squad"].get("win_rate", 0)
-        games = p["squad"].get("rounds_played", 0)
+        squad = p["squad"]
+        games = squad.get("rounds_played", 0)
+        if games == 0:
+            continue
+        factor = games / (games + M_CONFIDENCE)
 
-        # Z-Score 계산
-        z_dmg = (dmg - mean_dmg) / std_dmg
-        z_kd = (kd - mean_kd) / std_kd
-        z_win = (win - mean_win) / std_win
+        def z_score(key):
+            return (squad.get(key, 0) - means[key]) / stds[key]
 
-        # 베이지안 보정
-        bayesian_factor = games / (games + M_CONFIDENCE)
-        adj_dmg = z_dmg * bayesian_factor
-        adj_kd = z_kd * bayesian_factor
-        adj_win = z_win * bayesian_factor
+        adj_dmg = z_score("avg_damage") * factor
+        adj_kd = z_score("kd") * factor
+        adj_win = z_score("win_rate") * factor
+        adj_top10 = z_score("top10_ratio") * factor
+        adj_hs = z_score("headshot_pct") * factor
+        adj_surv = z_score("avg_survive") * factor
 
-        # 최종 점수
-        score = (adj_dmg * weights["dmg"]) + (adj_kd * weights["kd"]) + (adj_win * weights["win"])
-        weighted_list.append((name, score, adj_dmg, adj_kd, adj_win, bayesian_factor))
+        score = (
+            adj_dmg * weights["dmg"] +
+            adj_kd * weights["kd"] +
+            adj_win * weights["win"] +
+            adj_top10 * weights["top10"] +
+            adj_hs * weights["hs_pct"] +
+            adj_surv * weights["surv"]
+        )
+
+        weighted_list.append((name, score, adj_dmg, adj_kd, adj_win, adj_top10, adj_hs, adj_surv, factor))
 
     weighted_top = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:7]
 
-    # -----------------------------
+    # 기존 항목별 TOP7 리스트 생성 (계속 유지)
+    damage_top = sorted([(p["nickname"], safe_get(p, "avg_damage")) for p in players], key=lambda x: x[1], reverse=True)[:7]
+    kd_top = sorted([(p["nickname"], safe_get(p, "kd")) for p in players], key=lambda x: x[1], reverse=True)[:7]
+    win_top = sorted([(p["nickname"], safe_get(p, "win_rate")) for p in players], key=lambda x: x[1], reverse=True)[:7]
+    rounds_top = sorted([(p["nickname"], safe_get(p, "rounds_played")) for p in players], key=lambda x: x[1], reverse=True)[:7]
+    kills_top = sorted([(p["nickname"], safe_get(p, "kills")) for p in players], key=lambda x: x[1], reverse=True)[:7]
+
+    rankpoint_list = []
+    for p in players:
+        ranked = p.get("ranked", {})
+        if ranked:
+            rankpoint_list.append((p["nickname"], ranked.get("points", 0), ranked.get("tier", ""), ranked.get("subTier", "")))
+    rank_top = sorted(rankpoint_list, key=lambda x: x[1], reverse=True)[:7]
+
     # 포맷 함수 (TOP3 Bold + 고정폭 정렬)
-    # -----------------------------
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
+
     def format_top_score(entries):
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
         return "```\n" + "\n".join(
-            f"{medals[i]} {'*'+entry[0]+'*' if i<3 else entry[0]:20} {entry[1]:.3f} | D{entry[2]:.2f}/K{entry[3]:.2f}/W{entry[4]:.2f}/C{entry[5]:.2f}"
+            f"{medals[i]} {'*'+entry[0]+'*' if i < 3 else entry[0]:20} {entry[1]:.3f} | "
+            f"D{entry[2]:.2f} K{entry[3]:.2f} W{entry[4]:.2f} T{entry[5]:.2f} H{entry[6]:.2f} S{entry[7]:.2f} C{entry[8]:.2f}"
             for i, entry in enumerate(entries)
         ) + "\n```"
 
     def format_top(entries, is_percentage=False):
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
         return "```\n" + "\n".join(
-            f"{medals[i]} {'*'+entry[0]+'*' if i<3 else entry[0]:20} {f'{entry[1]:.2f}%' if is_percentage else f'{entry[1]:.2f}'}"
+            f"{medals[i]} {'*'+entry[0]+'*' if i < 3 else entry[0]:20} "
+            f"{f'{entry[1]:.2f}%' if is_percentage else f'{entry[1]:.2f}'}"
             for i, entry in enumerate(entries)
         ) + "\n```"
 
     def format_top_int(entries):
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
         return "```\n" + "\n".join(
-            f"{medals[i]} {'*'+entry[0]+'*' if i<3 else entry[0]:20} {str(entry[1]).rjust(7)}"
+            f"{medals[i]} {'*'+entry[0]+'*' if i < 3 else entry[0]:20} {str(entry[1]).rjust(7)}"
             for i, entry in enumerate(entries)
         ) + "\n```"
 
-    # -----------------------------
-    # Embed 생성 (TOP7 버전)
-    # -----------------------------
+    # Embed 생성
     embed = discord.Embed(
         title=f"🏆 현재 시즌 랭킹 (시즌 ID: {stored_season_id})",
         color=discord.Color.gold()
     )
 
     if weighted_top:
-        embed.add_field(
-            name="💯 종합 점수 TOP 7",
-            value=format_top_score(weighted_top),
-            inline=False
-        )
+        embed.add_field(name="💯 종합 점수 TOP 7", value=format_top_score(weighted_top), inline=False)
 
     embed.add_field(name="🔫 평균 데미지", value=format_top(damage_top), inline=True)
     embed.add_field(name="⚔️ K/D", value=format_top(kd_top), inline=True)
@@ -1906,19 +1907,17 @@ async def 시즌랭킹(interaction: discord.Interaction):
     embed.add_field(name="💀 킬 수", value=format_top_int(kills_top), inline=True)
 
     if rank_top:
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
-        rank_msg = [f"{medals[i]} {'*'+name+'*' if i<3 else name} - {tier} {sub} ({points})"
+        rank_msg = [f"{medals[i]} {'*'+name+'*' if i < 3 else name} - {tier} {sub} ({points})"
                     for i, (name, points, tier, sub) in enumerate(rank_top)]
         embed.add_field(name="🥇 랭크 포인트", value="```\n" + "\n".join(rank_msg) + "\n```", inline=False)
 
     embed.add_field(
         name="📌 점수 계산 안내",
         value=(
-            "1️⃣ 종합점수는 **데미지(40%) + K/D(35%) + 승률(25%)**을 기반으로 계산됩니다.\n"
-            "2️⃣ 경기 수가 적으면 평균값에 가까워지도록 자동 보정됩니다.\n"
-            "3️⃣ 보정 기준은 500판, 판 수가 많을수록 실력 점수가 더 정확히 반영됩니다.\n"
-            "4️⃣ 최종 점수 = (각 항목 점수 × 가중치) × (게임수 ÷ (게임수+500))\n"
-            "5️⃣ 공정하고 안정적인 랭킹을 위해 적용된 시스템입니다."
+            "1️⃣ 종합점수는 데미지, K/D, 승률, Top10 진입률, 헤드샷률, 평균 생존시간을 기반으로 계산됩니다.\n"
+            "2️⃣ 각 항목은 Z-Score로 표준화되어 판수에 따라 보정됩니다 (보정 기준 500판).\n"
+            "3️⃣ 최종 점수 = (각 항목별 점수 × 가중치) × (게임수 ÷ (게임수 + 500))\n"
+            "4️⃣ 가중치는 데미지 25%, K/D 25%, 승률 20%, Top10 10%, 헤드샷 10%, 생존시간 10%입니다."
         ),
         inline=False
     )
@@ -1927,10 +1926,11 @@ async def 시즌랭킹(interaction: discord.Interaction):
         with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
             valid_members = json.load(f)
         embed.set_footer(text=f"※ 기준: 저장된 유저 {len(players)}명 / 총 적합 인원 {len(valid_members)}명")
-    except:
+    except Exception:
         embed.set_footer(text="※ 기준: 저장된 유저 전적")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
