@@ -1902,6 +1902,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     import statistics
 
     M_CONFIDENCE = 500  # 판수 보정 기준값
+    PENALTY_SCORE = 0.5  # 판수 적을 때 평균 이하로 내릴 페널티 강도 (조절 가능)
 
     weights = {
         "avg_damage": 0.25,
@@ -1941,6 +1942,11 @@ async def 시즌랭킹(interaction: discord.Interaction):
     means = {k: statistics.mean(v) if v else 0 for k, v in metric_lists.items()}
     stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
 
+    def adjusted_score(z, n, C=M_CONFIDENCE, penalty=PENALTY_SCORE):
+        factor = n / (n + C)
+        penalty_factor = C / (n + C)
+        return z * factor - penalty * penalty_factor
+
     seen_names = set()
     weighted_list = []
     for p in players:
@@ -1957,7 +1963,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
         if games == 0:
             continue
 
-        # 개별 항목별 보정계수 적용
         def z_score(key):
             val = squad.get(key, 0)
             mean = means.get(key, 0)
@@ -1966,18 +1971,15 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
         adj_scores = {}
         for k in keys:
-            # 판수 보정계수
-            factor = games / (games + M_CONFIDENCE)
-            adj_scores[k] = z_score(k) * factor
+            adj_scores[k] = adjusted_score(z_score(k), games)
 
-        # 가중치 곱하여 최종 점수 계산
         score = sum(adj_scores[k] * weights[k] for k in keys)
 
         weighted_list.append((
             name,
             score,
             *[adj_scores[k] for k in keys],
-            factor
+            games / (games + M_CONFIDENCE)
         ))
 
     weighted_top = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:7]
@@ -2019,8 +2021,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         for i, entry in enumerate(entries):
             name = f"*{entry[0]}*" if i < 3 else entry[0]
             score = f"{entry[1]:.3f}"
-            line = f"{medals[i]} {name:20} {score}"
-            lines.append(line)
+            lines.append(f"{medals[i]} {name:20} {score}")
         return "```\n" + "\n".join(lines) + "\n```"
 
     def format_top(entries, is_percentage=False):
@@ -2059,9 +2060,10 @@ async def 시즌랭킹(interaction: discord.Interaction):
         name="📌 점수 계산 안내",
         value=(
             "1️⃣ 종합점수는 데미지, K/D, 승률, Top10 진입률, 헤드샷률, 평균 생존시간을 기반으로 계산됩니다.\n"
-            "2️⃣ 각 항목은 Z-Score로 표준화되어 판수에 따라 보정됩니다 (보정 기준 500판).\n"
-            "3️⃣ 최종 점수 = (각 항목별 점수 × 가중치) × (게임수 ÷ (게임수 + 500))\n"
-            "4️⃣ 가중치는 데미지 25%, K/D 25%, 승률 20%, Top10 10%, 헤드샷 10%, 생존시간 10%입니다."
+            "2️⃣ 각 항목은 Z-Score로 표준화되고, 판수에 따른 보정이 개별 항목별로 적용됩니다.\n"
+            "3️⃣ 판수가 적으면 평균보다 낮게 보정되어, 신뢰도가 낮은 점수를 페널티로 처리합니다.\n"
+            "4️⃣ 최종 점수 = (각 항목별 점수 × 가중치) × (게임수 ÷ (게임수 + 500)) - 페널티 보정 포함\n"
+            "5️⃣ 가중치는 데미지 25%, K/D 25%, 승률 20%, Top10 10%, 헤드샷 10%, 생존시간 10%입니다."
         ),
         inline=False
     )
@@ -2074,6 +2076,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         embed.set_footer(text="※ 기준: 저장된 유저 전적")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
