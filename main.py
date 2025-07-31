@@ -1808,11 +1808,17 @@ async def 시즌랭킹(interaction: discord.Interaction):
         await interaction.followup.send("❌ 아직 저장된 전적 데이터가 없습니다.", ephemeral=True)
         return
 
-    with open(leaderboard_path, "r", encoding="utf-8") as f:
-        file_data = json.load(f)
-        all_players = file_data.get("players", [])
-        players = [p for p in all_players if "(게스트)" not in p.get("nickname", "")]
-        stored_season_id = file_data.get("season_id", "알 수 없음")
+    try:
+        with open(leaderboard_path, "r", encoding="utf-8") as f:
+            file_data = json.load(f)
+            stored_season_id = file_data.get("season_id", "알 수 없음")
+            all_players = file_data.get("players", [])
+    except Exception as e:
+        await interaction.followup.send(f"❌ 시즌랭킹 데이터를 읽는 중 오류가 발생했습니다: {e}", ephemeral=True)
+        print(f"[시즌랭킹 데이터 오류] {e}")
+        return
+
+    players = [p for p in all_players if "(게스트)" not in p.get("nickname", "")]
 
     if not players:
         await interaction.followup.send("❌ 현재 시즌에 저장된 유저 데이터가 없습니다.", ephemeral=True)
@@ -1884,7 +1890,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
 
     def format_top_score(entries):
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
         lines = []
         for i, entry in enumerate(entries):
             name = f"*{entry[0]}*" if i < 3 else entry[0]
@@ -1892,7 +1897,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
             d = f"D{entry[2]:.1f}"
             k = f"K{entry[3]:.1f}"
             w = f"W{entry[4]:.1f}"
-            # 0인 값은 출력하지 않도록 조건 추가
             extras = []
             if entry[5] != 0:
                 extras.append(f"T{entry[5]:.1f}")
@@ -1906,7 +1910,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
             line = f"{medals[i]} {name:20} {score} | {d} {k} {w} {extras_str}"
             lines.append(line)
         return "```\n" + "\n".join(lines) + "\n```"
-
 
     def format_top(entries, is_percentage=False):
         return "```\n" + "\n".join(
@@ -1960,6 +1963,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         embed.set_footer(text="※ 기준: 저장된 유저 전적")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
