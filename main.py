@@ -1622,6 +1622,7 @@ class ModeSwitchView(View):
             await interaction.response.edit_message(embed=embed, view=self, attachments=[])
 
 
+
 def generate_mode_embed(stats, mode="squad", nickname="플레이어"):
     embed = discord.Embed(title=f"{nickname} - {mode.upper()} 전적", color=discord.Color.blurple())
 
@@ -1640,20 +1641,26 @@ def generate_mode_embed(stats, mode="squad", nickname="플레이어"):
     wins = m.get("wins", 0)
     kills = m.get("kills", 0)
     top10s = m.get("top10s", 0)
-    top10_ratio = (top10s / rounds * 100) if rounds else 0.0
+    headshot_kills = m.get("headshotKills", 0)
+    damage_dealt = m.get("damageDealt", 0.0)
+    longest_kill = m.get("longestKill", 0.0)
+    time_survived = m.get("timeSurvived", 0)
+
+    # 안전한 계산 (0 나누기 방지)
+    win_rate = (wins / rounds * 100) if rounds > 0 else 0
+    top10_ratio = (top10s / rounds * 100) if rounds > 0 else 0
     kd = round(kills / (rounds - wins) if (rounds - wins) > 0 else kills, 2)
-    avg_dmg = m.get("damageDealt", 0.0) / rounds if rounds else 0
-    hs_pct = m.get("headshotKills", 0) / kills * 100 if kills else 0
-    long_kill = m.get("longestKill", 0.0)
-    survival_time = m.get("timeSurvived", 0) / rounds if rounds else 0
+    avg_dmg = (damage_dealt / rounds) if rounds > 0 else 0
+    hs_pct = (headshot_kills / kills * 100) if kills > 0 else 0
+    survival_time = (time_survived / rounds) if rounds > 0 else 0
 
     mins = int(survival_time // 60)
     secs = int(survival_time % 60)
     surv_fmt = f"{mins}분 {secs:02d}초"
 
-    # 좌우 정렬 임베드 필드
+    # 임베드 필드 추가 (좌우 정렬)
     embed.add_field(name="게임 수", value=f"{rounds:,}판", inline=True)
-    embed.add_field(name="승률", value=f"{(wins / rounds * 100):.2f}%", inline=True)
+    embed.add_field(name="승률", value=f"{win_rate:.2f}%", inline=True)
 
     embed.add_field(name="K/D", value=f"{kd:.2f}", inline=True)
     embed.add_field(name="킬 수", value=f"{kills:,}", inline=True)
@@ -1664,20 +1671,22 @@ def generate_mode_embed(stats, mode="squad", nickname="플레이어"):
     embed.add_field(name="헤드샷률", value=f"{hs_pct:.2f}%", inline=True)
     embed.add_field(name="평균 생존시간", value=surv_fmt, inline=True)
 
-    embed.add_field(name="최장 저격 거리", value=f"{long_kill:.1f}m", inline=True)
+    embed.add_field(name="최장 저격 거리", value=f"{longest_kill:.1f}m", inline=True)
 
-    # ✅ 외부 정의된 피드백 사용
+    # 스쿼드 모드일 때 피드백 표시
     if mode == "squad":
         metrics, error = extract_squad_metrics(stats)
         if metrics:
-            avg_dmg, kd, win_rate = metrics
-            dmg_msg, kd_msg, win_msg = detailed_feedback(avg_dmg, kd, win_rate)
+            avg_damage, kd_val, win_rate_val = metrics
+            dmg_msg, kd_msg, win_msg = detailed_feedback(avg_damage, kd_val, win_rate_val)
             feedback_text = f"{dmg_msg}\n{kd_msg}\n{win_msg}"
         else:
             feedback_text = error
         embed.add_field(name="📊 SQUAD 분석 피드백", value=feedback_text, inline=False)
 
     return embed
+
+
 
 
 
