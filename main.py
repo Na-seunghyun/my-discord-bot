@@ -1355,6 +1355,7 @@ import time
 
 recent_saves = {}
 
+
 def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None, discord_id=None, source="기본"):
     key = f"{nickname}_{discord_id}"
     now = time.time()
@@ -1372,20 +1373,32 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None,
     }
 
     if stats:
-        rounds_played = stats["data"]["attributes"]["gameModeStats"].get("squad", {}).get("roundsPlayed", 0)
-        kills = stats["data"]["attributes"]["gameModeStats"].get("squad", {}).get("kills", 0)
+        squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
+        rounds_played = squad_stats.get("roundsPlayed", 0)
+        kills = squad_stats.get("kills", 0)
+        top10s = squad_stats.get("top10s", 0)
+        headshot_kills = squad_stats.get("headshotKills", 0)
+        time_survived = squad_stats.get("timeSurvived", 0)
+        longest_kill = squad_stats.get("longestKill", 0)
     else:
-        rounds_played = 0
-        kills = 0
+        rounds_played = kills = top10s = headshot_kills = time_survived = longest_kill = 0
 
     if squad_metrics:
         avg_damage, kd, win_rate = squad_metrics
+        top10_ratio = (top10s / rounds_played * 100) if rounds_played else 0
+        headshot_pct = (headshot_kills / kills * 100) if kills else 0
+        avg_survive = (time_survived / rounds_played) if rounds_played else 0
+
         data_to_save["squad"] = {
             "avg_damage": avg_damage,
             "kd": kd,
             "win_rate": win_rate,
             "rounds_played": rounds_played,
-            "kills": kills
+            "kills": kills,
+            "top10_ratio": top10_ratio,
+            "headshot_pct": headshot_pct,
+            "avg_survive": avg_survive,
+            "longest_kill": longest_kill
         }
     else:
         data_to_save["squad"] = {
@@ -1393,7 +1406,11 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None,
             "kd": 0,
             "win_rate": 0,
             "rounds_played": rounds_played,
-            "kills": kills
+            "kills": kills,
+            "top10_ratio": 0,
+            "headshot_pct": 0,
+            "avg_survive": 0,
+            "longest_kill": 0
         }
 
     if ranked_stats and "data" in ranked_stats:
@@ -1431,6 +1448,7 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None,
         print(f"✅ 저장 성공 ({source}): {nickname}")
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
+
 
 
 
@@ -1864,13 +1882,21 @@ async def 시즌랭킹(interaction: discord.Interaction):
             d = f"D{entry[2]:.1f}"
             k = f"K{entry[3]:.1f}"
             w = f"W{entry[4]:.1f}"
-            t = f"T{entry[5]:.1f}"
-            h = f"H{entry[6]:.1f}"
-            s = f"S{entry[7]:.1f}"
-            c = f"C{entry[8]:.1f}"
-            line = f"{medals[i]} {name:20} {score} | {d} {k} {w} {t} {h} {s} {c}"
+            # 0인 값은 출력하지 않도록 조건 추가
+            extras = []
+            if entry[5] != 0:
+                extras.append(f"T{entry[5]:.1f}")
+            if entry[6] != 0:
+                extras.append(f"H{entry[6]:.1f}")
+            if entry[7] != 0:
+                extras.append(f"S{entry[7]:.1f}")
+            if entry[8] != 0:
+                extras.append(f"C{entry[8]:.1f}")
+            extras_str = " ".join(extras)
+            line = f"{medals[i]} {name:20} {score} | {d} {k} {w} {extras_str}"
             lines.append(line)
         return "```\n" + "\n".join(lines) + "\n```"
+
 
     def format_top(entries, is_percentage=False):
         return "```\n" + "\n".join(
