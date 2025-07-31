@@ -1544,119 +1544,142 @@ def get_rank_image_path(tier: str, sub_tier: str = "") -> str:
         return path
     return os.path.join("rank-image", "Unranked.png")
 
+
+from discord.ui import View, Button
+
+class ModeSwitchView(View):
+    def __init__(self, nickname, stats, ranked_stats=None):
+        super().__init__(timeout=180)
+        self.nickname = nickname
+        self.stats = stats
+        self.ranked_stats = ranked_stats
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return True
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="SOLO", style=discord.ButtonStyle.secondary, custom_id="solo")
+    async def solo_button(self, interaction: discord.Interaction, button: Button):
+        embed = generate_mode_embed(self.stats, "solo", self.nickname)
+        await interaction.response.edit_message(embed=embed, view=self, attachments=[])
+
+    @discord.ui.button(label="DUO", style=discord.ButtonStyle.secondary, custom_id="duo")
+    async def duo_button(self, interaction: discord.Interaction, button: Button):
+        embed = generate_mode_embed(self.stats, "duo", self.nickname)
+        await interaction.response.edit_message(embed=embed, view=self, attachments=[])
+
+    @discord.ui.button(label="SQUAD", style=discord.ButtonStyle.primary, custom_id="squad")
+    async def squad_button(self, interaction: discord.Interaction, button: Button):
+        embed = generate_mode_embed(self.stats, "squad", self.nickname)
+        await interaction.response.edit_message(embed=embed, view=self, attachments=[])
+
+    @discord.ui.button(label="랭크", style=discord.ButtonStyle.success, custom_id="ranked")
+    async def ranked_button(self, interaction: discord.Interaction, button: Button):
+        embed, file = generate_ranked_embed(self.ranked_stats, self.nickname)
+        if file:
+            await interaction.response.edit_message(embed=embed, view=self, attachments=[file])
+        else:
+            await interaction.response.edit_message(embed=embed, view=self, attachments=[])
+
+
+def generate_mode_embed(stats, mode, nickname="플레이어"):
+    m = stats["data"]["attributes"]["gameModeStats"].get(mode)
+    if not m or m.get("roundsPlayed", 0) == 0:
+        return discord.Embed(
+            title=f"{nickname} - {mode.upper()}",
+            description="❌ 전적 데이터가 없습니다.",
+            color=discord.Color.red()
+        )
+
+    rounds = m.get("roundsPlayed", 0)
+    wins = m.get("wins", 0)
+    kills = m.get("kills", 0)
+    deaths = max(1, rounds - wins)
+    kd = kills / deaths
+    win_pct = wins / rounds * 100
+    avg_dmg = m.get("damageDealt", 0) / rounds
+    top10_pct = m.get("top10s", 0) / rounds * 100 if "top10s" in m else 0
+    hs_pct = m.get("headshotKills", 0) / max(1, kills) * 100
+    long_kill = m.get("longestKill", 0)
+    survival_time = m.get("timeSurvived", 0) / rounds
+    minutes = int(survival_time // 60)
+    seconds = int(survival_time % 60)
+
+    embed = discord.Embed(title=f"{nickname} - {mode.upper()} 전적", color=discord.Color.blue())
+    embed.add_field(name="📊 전투 요약", value=(
+        f"**Match** : {rounds:<4}  **Win%** : {win_pct:.2f}\n"
+        f"**K/D**   : {kd:.2f}  **Kills**: {kills}\n"
+        f"**HS%**   : {hs_pct:.1f}  **DMG**  : {avg_dmg:.1f}\n"
+        f"**Top10%**: {top10_pct:.1f}  **Surv** : {minutes}분 {seconds}초\n"
+        f"**LongK** : {long_kill:.1f}m"
+    ), inline=False)
+    return embed
+
+
+def generate_ranked_embed(ranked_stats, nickname="플레이어"):
+    embed = discord.Embed(title=f"{nickname} - 랭크 전적", color=discord.Color.gold())
+
+    if not ranked_stats or "data" not in ranked_stats:
+        embed.description = "❌ 랭크 전적 정보가 없습니다."
+        return embed, None
+
+    modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
+    for mode in ["solo", "duo", "squad"]:
+        m = modes.get(mode)
+        if not m:
+            continue
+
+        tier = m.get("currentTier", {}).get("tier", "Unranked")
+        sub = m.get("currentTier", {}).get("subTier", "")
+        point = m.get("currentRankPoint", 0)
+        rounds = m.get("roundsPlayed", 0)
+        wins = m.get("wins", 0)
+        kd = m.get("kda", 0.0)
+        win_pct = wins / rounds * 100 if rounds else 0
+
+        embed.add_field(
+            name=f"🏅 {mode.upper()}",
+            value=(
+                f"티어: **{tier} {sub}**\n"
+                f"RP: **{point}** | K/D: **{kd:.2f}**\n"
+                f"게임: **{rounds}** | 승률: **{win_pct:.2f}%**"
+            ),
+            inline=False
+        )
+
+    # ✅ RP 가장 높은 티어로 이미지 결정
+    tier, sub, _ = pick_best_rank_tier(ranked_stats)
+    img_path = get_rank_image_path(tier, sub)
+    file = None
+    if os.path.exists(img_path):
+        file = discord.File(img_path, filename="rank.png")
+        embed.set_thumbnail(url="attachment://rank.png")
+
+    return embed, file
+
+
 @tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
 async def 전적(interaction: discord.Interaction, 닉네임: str):
-    try:
-        await interaction.response.defer()
-    except discord.NotFound:
-        return
-
-    if not can_make_request():
-        await interaction.followup.send("⚠️ API 요청 제한(분당 10회)으로 인해 잠시 후 다시 시도해주세요.", ephemeral=True)
-        return
+    await interaction.response.defer()
 
     try:
-        register_request()
         player_id = get_player_id(닉네임)
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
-        ranked_stats = get_player_ranked_stats(player_id, season_id)
+        ranked = get_player_ranked_stats(player_id, season_id)
 
-        squad_metrics, error = extract_squad_metrics(stats)
-        if squad_metrics:
-            avg_damage, kd, win_rate = squad_metrics
-            dmg_msg, kd_msg, win_msg = detailed_feedback(avg_damage, kd, win_rate)
-        else:
-            dmg_msg = kd_msg = win_msg = error
+        # 기본은 squad embed로 보여줌
+        embed = generate_mode_embed(stats, "squad", 닉네임)
+        view = ModeSwitchView(nickname=닉네임, stats=stats, ranked_stats=ranked)
+        await interaction.followup.send(embed=embed, view=view)
 
-        embed = discord.Embed(title=f"{닉네임}님의 PUBG 전적 요약", color=discord.Color.blue())
-
-        for mode in ["solo", "duo", "squad"]:
-            m = stats["data"]["attributes"]["gameModeStats"].get(mode)
-            if not m or m["roundsPlayed"] == 0:
-                continue
-
-            rounds = m["roundsPlayed"]
-            wins = m["wins"]
-            kills = m["kills"]
-            damage = m["damageDealt"]
-            top10 = m.get("top10s", 0)
-            headshot_kills = m.get("headshotKills", 0)
-            longest_kill = m.get("longestKill", 0.0)
-            time_survived = m.get("timeSurvived", 0.0)
-
-            kd = round(kills / max(1, rounds - wins), 2)
-            avg_dmg = round(damage / rounds, 1)
-            win_pct = round(wins / rounds * 100, 2)
-            top10_pct = round(top10 / rounds * 100, 2)
-            hs_pct = round(headshot_kills / kills * 100, 2) if kills > 0 else 0.0
-            surv_m, surv_s = divmod(int(time_survived / rounds), 60)
-            surv_str = f"{surv_m}분 {surv_s:02d}초"
-            longest_kill_str = f"{longest_kill:.1f}m"
-
-            embed.add_field(name=f"📍 {mode.upper()} 전적", value="‎", inline=False)
-            embed.add_field(name="🎮 Match", value=str(rounds), inline=True)
-            embed.add_field(name="🏆 Win Rate", value=f"{win_pct}%", inline=True)
-            embed.add_field(name="⚔️ K/D", value=f"{kd}", inline=True)
-            embed.add_field(name="🔫 Kills", value=str(kills), inline=True)
-            embed.add_field(name="🎯 Headshot %", value=f"{hs_pct}%", inline=True)
-            embed.add_field(name="💥 Avg Damage", value=f"{avg_dmg}", inline=True)
-            embed.add_field(name="🔟 Top10 %", value=f"{top10_pct}%", inline=True)
-            embed.add_field(name="⏱️ Survival", value=surv_str, inline=True)
-            embed.add_field(name="📏 Longest Kill", value=longest_kill_str, inline=True)
-
-        embed.add_field(name="📊 SQUAD 분석 피드백", value="전투 성능을 바탕으로 분석된 결과입니다.", inline=False)
-        embed.add_field(name="🔫 평균 데미지", value=f"```{dmg_msg}```", inline=False)
-        embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
-        embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
-
-        best_rank_score = -1
-        best_rank_tier = "Unranked"
-        best_rank_sub_tier = ""
-
-        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id, source="전적명령")
-
-        if ranked_stats and "data" in ranked_stats:
-            ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
-            for mode in ["solo", "duo", "squad"]:
-                mode_rank = ranked_modes.get(mode)
-                if not mode_rank:
-                    continue
-
-                tier = mode_rank.get("currentTier", {}).get("tier", "Unknown")
-                sub_tier = mode_rank.get("currentTier", {}).get("subTier", "")
-                rank_point = mode_rank.get("currentRankPoint", 0)
-                rounds = mode_rank.get("roundsPlayed", 0)
-                wins = mode_rank.get("wins", 0)
-                kills = mode_rank.get("kills", 0)
-                kda = mode_rank.get("kda", 0)
-                win_pct = (wins / rounds * 100) if rounds > 0 else 0
-
-                embed.add_field(name=f"🏅 {mode.upper()} 랭크 티어", value=f"{tier} {sub_tier}티어", inline=True)
-                embed.add_field(name=f"🏅 {mode.upper()} 랭크 포인트", value=str(rank_point), inline=True)
-                embed.add_field(name=f"🏅 {mode.upper()} 게임 수", value=str(rounds), inline=True)
-                embed.add_field(name=f"🏅 {mode.upper()} 승리 수", value=f"{wins} ({win_pct:.2f}%)", inline=True)
-                embed.add_field(name=f"🏅 {mode.upper()} 킬 수", value=str(kills), inline=True)
-                embed.add_field(name=f"🏅 {mode.upper()} K/D", value=f"{kda:.2f}", inline=True)
-
-                if rank_point > best_rank_score:
-                    best_rank_score = rank_point
-                    best_rank_tier = tier
-                    best_rank_sub_tier = sub_tier
-        else:
-            embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
-
-        image_path = get_rank_image_path(best_rank_tier, best_rank_sub_tier)
-        image_file = discord.File(image_path, filename="rank.png")
-        embed.set_thumbnail(url="attachment://rank.png")
-
-        embed.set_footer(text="PUBG API 제공")
-        await interaction.followup.send(embed=embed, file=image_file)
-
-    except requests.HTTPError as e:
-        await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ 오류 발생: {e}", ephemeral=True)
+
+
 
 
 
