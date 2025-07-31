@@ -1727,20 +1727,26 @@ def generate_ranked_embed(ranked_stats, nickname="플레이어"):
 @tree.command(name="전적", description="PUBG 닉네임으로 전적 조회", guild=discord.Object(id=GUILD_ID))
 async def 전적(interaction: discord.Interaction, 닉네임: str):
     await interaction.response.defer()
-
     try:
         player_id = get_player_id(닉네임)
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
         ranked = get_player_ranked_stats(player_id, season_id)
 
-        # 기본은 squad embed로 보여줌
+        squad_metrics, error = extract_squad_metrics(stats)
+        if squad_metrics:
+            save_player_stats_to_file(
+                닉네임, squad_metrics, ranked, stats,
+                discord_id=interaction.user.id, source="전적명령"
+            )
+
         embed = generate_mode_embed(stats, "squad", 닉네임)
         view = ModeSwitchView(nickname=닉네임, stats=stats, ranked_stats=ranked)
         await interaction.followup.send(embed=embed, view=view)
 
     except Exception as e:
         await interaction.followup.send(f"❌ 오류 발생: {e}", ephemeral=True)
+
 
 
 
