@@ -505,7 +505,7 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
         channel = bot.get_channel(DOKDO_CHANNEL_ID)
         if channel:
             await channel.send(
-                f"📉 **오덕로또 상금 감가 적용**\n"
+                f"📉 **오덕로또 1시간 주기 상금 감가 적용**\n"
                 f"💰 기존 상금: **{current_amount:,}원** → 현재 상금: **{new_amount:,}원**\n"
                 f"🧾 **100만 원 초과분의 50%**가 감가되었으며, 최소 **100만 원**은 보장됩니다.\n"
                 f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
@@ -514,7 +514,7 @@ async def decay_oduk_pool(bot):  # ✅ 인자 추가
         print("✅ 오덕로또 상금이 100만 원 이하라 감가되지 않음")
 
 
-@tasks.loop(hours=2)
+@tasks.loop(hours=1)
 async def auto_decay_oduk_pool():
     print("🕓 오덕로또 감가 시작")
     await decay_oduk_pool(bot)
