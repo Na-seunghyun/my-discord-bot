@@ -1552,7 +1552,8 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         return
 
     if not can_make_request():
-        return await interaction.followup.send("⚠️ API 요청 제한(분당 10회)이 초과되었습니다. 잠시 후 다시 시도해주세요.", ephemeral=True)
+        await interaction.followup.send("⚠️ API 요청 제한(분당 10회)으로 인해 잠시 후 다시 시도해주세요.", ephemeral=True)
+        return
 
     try:
         register_request()
@@ -1561,77 +1562,59 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         stats = get_player_stats(player_id, season_id)
         ranked_stats = get_player_ranked_stats(player_id, season_id)
 
-        # ✅ 스쿼드 분석 피드백
-        squad_metrics, feedback = extract_squad_metrics(stats)
+        squad_metrics, error = extract_squad_metrics(stats)
         if squad_metrics:
-            s_avg_dmg, s_kd, s_win = squad_metrics
-            dmg_msg, kd_msg, win_msg = detailed_feedback(s_avg_dmg, s_kd, s_win)
+            avg_damage, kd, win_rate = squad_metrics
+            dmg_msg, kd_msg, win_msg = detailed_feedback(avg_damage, kd, win_rate)
         else:
-            dmg_msg = kd_msg = win_msg = feedback or "데이터 없음"
+            dmg_msg = kd_msg = win_msg = error
 
-        embed = discord.Embed(
-            title=f"{닉네임}님의 PUBG 전적 요약",
-            color=discord.Color.blue()
-        )
+        embed = discord.Embed(title=f"{닉네임}님의 PUBG 전적 요약", color=discord.Color.blue())
 
-        # ✅ 모드별 전적 박스 출력 (가로 3칸, 정렬)
-        modes_rendered = 0
         for mode in ["solo", "duo", "squad"]:
-            mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
-            if not mode_stats or mode_stats.get("roundsPlayed", 0) == 0:
+            m = stats["data"]["attributes"]["gameModeStats"].get(mode)
+            if not m or m["roundsPlayed"] == 0:
                 continue
 
-            rounds = mode_stats["roundsPlayed"]
-            wins = mode_stats["wins"]
-            kills = mode_stats["kills"]
-            damage = mode_stats["damageDealt"]
-            avg_damage = damage / rounds if rounds > 0 else 0.0
-            kd = kills / max(1, rounds - wins)
-            win_pct = (wins / rounds) * 100 if rounds > 0 else 0.0
+            rounds = m["roundsPlayed"]
+            wins = m["wins"]
+            kills = m["kills"]
+            damage = m["damageDealt"]
+            top10 = m.get("top10s", 0)
+            headshot_kills = m.get("headshotKills", 0)
+            longest_kill = m.get("longestKill", 0.0)
+            time_survived = m.get("timeSurvived", 0.0)
 
-            top10s = mode_stats.get("top10s", 0)
-            top10_ratio = (top10s / rounds) * 100 if rounds > 0 else 0.0
+            kd = round(kills / max(1, rounds - wins), 2)
+            avg_dmg = round(damage / rounds, 1)
+            win_pct = round(wins / rounds * 100, 2)
+            top10_pct = round(top10 / rounds * 100, 2)
+            hs_pct = round(headshot_kills / kills * 100, 2) if kills > 0 else 0.0
+            surv_m, surv_s = divmod(int(time_survived / rounds), 60)
+            surv_str = f"{surv_m}분 {surv_s:02d}초"
+            longest_kill_str = f"{longest_kill:.1f}m"
 
-            headshots = mode_stats.get("headshotKills", 0)
-            headshot_ratio = (headshots / max(1, kills)) * 100 if kills > 0 else 0.0
+            embed.add_field(name=f"📍 {mode.upper()} 전적", value="‎", inline=False)
+            embed.add_field(name="🎮 Match", value=str(rounds), inline=True)
+            embed.add_field(name="🏆 Win Rate", value=f"{win_pct}%", inline=True)
+            embed.add_field(name="⚔️ K/D", value=f"{kd}", inline=True)
+            embed.add_field(name="🔫 Kills", value=str(kills), inline=True)
+            embed.add_field(name="🎯 Headshot %", value=f"{hs_pct}%", inline=True)
+            embed.add_field(name="💥 Avg Damage", value=f"{avg_dmg}", inline=True)
+            embed.add_field(name="🔟 Top10 %", value=f"{top10_pct}%", inline=True)
+            embed.add_field(name="⏱️ Survival", value=surv_str, inline=True)
+            embed.add_field(name="📏 Longest Kill", value=longest_kill_str, inline=True)
 
-            time_survived = mode_stats.get("timeSurvived", 0)
-            avg_survival_time = time_survived / rounds if rounds > 0 else 0.0
-            surv_min = int(avg_survival_time // 60)
-            surv_sec = int(avg_survival_time % 60)
-
-            longest_kill = mode_stats.get("longestKill", 0.0)
-
-            value = (
-                "```yaml\n"
-                f"Match : {rounds:>4}   Win% : {win_pct:>5.1f}\n"
-                f"K/D   : {kd:>5.2f}   Kills: {kills:>4}\n"
-                f"HS%   : {headshot_ratio:>5.1f}   DMG  : {avg_damage:>6.1f}\n"
-                f"Top10%: {top10_ratio:>5.1f}   Surv : {surv_min}:{surv_sec:02d}\n"
-                f"LongK : {longest_kill:>6.1f}m\n"
-                "```"
-            )
-            embed.add_field(name=f"🎮 {mode.upper()}", value=value, inline=True)
-            modes_rendered += 1
-
-        # 레이아웃 균형 보정
-        while modes_rendered % 3 != 0:
-            embed.add_field(name="\u200b", value="```yaml\n \n```", inline=True)
-            modes_rendered += 1
-
-        # ✅ 스쿼드 분석 피드백
         embed.add_field(name="📊 SQUAD 분석 피드백", value="전투 성능을 바탕으로 분석된 결과입니다.", inline=False)
-        embed.add_field(name="🔫 평균 데미지", value=f"```{dmg_msg}```", inline=True)
-        embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=True)
-        embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=True)
+        embed.add_field(name="🔫 평균 데미지", value=f"```{dmg_msg}```", inline=False)
+        embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
+        embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
 
-        # ✅ 리더보드 저장
-        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id, source="전적명령")
-
-        # ✅ 기존 랭크 정보 출력 유지
         best_rank_score = -1
         best_rank_tier = "Unranked"
         best_rank_sub_tier = ""
+
+        save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id, source="전적명령")
 
         if ranked_stats and "data" in ranked_stats:
             ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
@@ -1646,7 +1629,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 rounds = mode_rank.get("roundsPlayed", 0)
                 wins = mode_rank.get("wins", 0)
                 kills = mode_rank.get("kills", 0)
-                kd = mode_rank.get("kda", 0)
+                kda = mode_rank.get("kda", 0)
                 win_pct = (wins / rounds * 100) if rounds > 0 else 0
 
                 embed.add_field(name=f"🏅 {mode.upper()} 랭크 티어", value=f"{tier} {sub_tier}티어", inline=True)
@@ -1654,28 +1637,26 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 embed.add_field(name=f"🏅 {mode.upper()} 게임 수", value=str(rounds), inline=True)
                 embed.add_field(name=f"🏅 {mode.upper()} 승리 수", value=f"{wins} ({win_pct:.2f}%)", inline=True)
                 embed.add_field(name=f"🏅 {mode.upper()} 킬 수", value=str(kills), inline=True)
-                embed.add_field(name=f"🏅 {mode.upper()} K/D", value=f"{kd:.2f}", inline=True)
+                embed.add_field(name=f"🏅 {mode.upper()} K/D", value=f"{kda:.2f}", inline=True)
 
                 if rank_point > best_rank_score:
                     best_rank_score = rank_point
                     best_rank_tier = tier
                     best_rank_sub_tier = sub_tier
         else:
-            embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 데이터를 불러올 수 없습니다.", inline=False)
+            embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
 
-        # ✅ 랭크 티어 이미지 썸네일
         image_path = get_rank_image_path(best_rank_tier, best_rank_sub_tier)
         image_file = discord.File(image_path, filename="rank.png")
         embed.set_thumbnail(url="attachment://rank.png")
-        embed.set_footer(text="PUBG API 제공")
 
+        embed.set_footer(text="PUBG API 제공")
         await interaction.followup.send(embed=embed, file=image_file)
 
     except requests.HTTPError as e:
-        await interaction.followup.send(f"❌ API 오류 발생: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ 전적 조회 중 오류 발생: {e}", ephemeral=True)
-
+        await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
 
 
 
