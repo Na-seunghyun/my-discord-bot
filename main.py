@@ -1798,7 +1798,6 @@ async def 닉네임_자동완성(interaction: discord.Interaction, current: str)
 async def 전적해설(interaction: discord.Interaction, 닉네임: str):
     await interaction.response.defer()
 
-    # leaderboard 불러오기
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
         await interaction.followup.send("❌ 시즌 데이터가 없습니다.", ephemeral=True)
@@ -1815,22 +1814,23 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
 
     squad = player.get("squad", {})
     games = squad.get("rounds_played", 0)
-
     if games == 0:
         await interaction.followup.send("❌ 게임 수가 0인 유저는 해설이 제공되지 않습니다.", ephemeral=True)
         return
 
-    # 통계 계산을 위해 전체 플레이어 데이터에서 항목별 리스트 준비
     keys = ["avg_damage", "kd", "win_rate", "top10_ratio", "headshot_pct", "avg_survive"]
-    metric_lists = {k: [p.get("squad", {}).get(k, 0) for p in players if isinstance(p.get("squad"), dict)] for k in keys}
     import statistics
+    metric_lists = {k: [p.get("squad", {}).get(k, 0) for p in players if isinstance(p.get("squad"), dict)] for k in keys}
     means = {k: statistics.mean(v) if v else 0 for k, v in metric_lists.items()}
     stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
 
     def z_score(val, key):
         return (val - means[key]) / stds[key]
 
-    factor = games / (games + 500)
+    M_CONFIDENCE = 500
+    PENALTY_SCORE = 0.5
+
+    factor = games / (games + M_CONFIDENCE)
 
     explanation_lines = [f"🏅 **{닉네임}** 님의 시즌 점수 해설\n"]
     explanation_lines.append(f"🎮 게임 수: {games} 판 (보정계수: {factor:.3f})\n")
@@ -1850,7 +1850,7 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
         mean = means[key]
         std = stds[key]
         z = z_score(val, key)
-        adj = z * factor
+        adj = z * factor - PENALTY_SCORE * (1 - factor)
         contrib = adj * weights[key]
         total_score += contrib
 
@@ -1860,8 +1860,10 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
         )
 
     explanation_lines.append(f"\n🏆 최종 종합 점수: **{total_score:.3f}** (점수가 높을수록 우수)")
+    explanation_lines.append("\n⚠️ 게임 수가 적을수록 평균보다 낮게 점수가 보정되어 신뢰도가 낮은 점수에 페널티가 적용됩니다.")
 
     await interaction.followup.send("\n".join(explanation_lines), ephemeral=True)
+
 
 
 # 자동완성 연결 (기존 자동완성 코드 활용)
