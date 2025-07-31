@@ -1575,7 +1575,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             color=discord.Color.blue()
         )
 
-        # ✅ SOLO / DUO / SQUAD 모드별 전적 및 추가지표 출력
+        # ✅ SOLO / DUO / SQUAD 모드별 전적 및 평가 출력
         for mode in ["solo", "duo", "squad"]:
             mode_stats = stats["data"]["attributes"]["gameModeStats"].get(mode)
             if not mode_stats or mode_stats["roundsPlayed"] == 0:
@@ -1602,29 +1602,40 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
             longest_kill = mode_stats.get("longestKill", 0)
 
-            value = (
-                f"게임 수: {rounds}\n"
-                f"승리 수: {wins} ({win_pct:.2f}%)\n"
-                f"킬 수: {kills}\n"
-                f"평균 데미지: {avg_damage:.2f}\n"
-                f"K/D: {kd:.2f}\n"
-                f"Top10 진입률: {top10_ratio:.2f}%\n"
-                f"헤드샷률: {headshot_ratio:.2f}%\n"
-                f"평균 생존시간: {surv_min}분 {surv_sec}초\n"
-                f"최장 저격 거리: {longest_kill:.1f}m"
-            )
-            embed.add_field(name=mode.upper(), value=value, inline=True)
+            # ✅ 자동 평가 메시지
+            comment = ""
+            if rounds < 5:
+                comment = "⚠️ 경기 수가 적어 통계가 부정확할 수 있어요."
+            elif kd >= 4:
+                comment = "🔥 고화력 플레이어! 압도적인 화력으로 제압 중!"
+            elif win_pct >= 20:
+                comment = "🏆 안정적인 승리 루트 확보!"
+            elif top10_ratio >= 60:
+                comment = "🎖 높은 상위권 진입률! 꾸준함이 돋보여요."
+            elif headshot_ratio >= 25:
+                comment = "🎯 정확한 에임으로 헤드샷 다수 기록!"
+            else:
+                comment = "⚔️ 꾸준한 경기력, 더 성장할 여지가 보여요."
 
-        # ✅ SQUAD 분석 피드백 출력
+            value = (
+                f"📌 게임 수: {rounds}판 | 🏆 승률: {win_pct:.1f}% | 🔫 K/D: {kd:.2f}\n"
+                f"💀 킬 수: {kills} | 🎯 헤드샷률: {headshot_ratio:.1f}%\n"
+                f"🔥 평균 데미지: {avg_damage:.1f} | 🎖 Top10: {top10_ratio:.1f}%\n"
+                f"⏱ 평균 생존시간: {surv_min}분 {surv_sec}초 | 🔭 최장 저격: {longest_kill:.1f}m\n"
+                f"{comment}"
+            )
+            embed.add_field(name=mode.upper(), value=value, inline=False)
+
+        # ✅ SQUAD 분석 피드백
         embed.add_field(name="📊 SQUAD 분석 피드백", value="전투 성능을 바탕으로 분석된 결과입니다.", inline=False)
         embed.add_field(name="🔫 평균 데미지", value=f"```{dmg_msg}```", inline=False)
         embed.add_field(name="⚔️ K/D", value=f"```{kd_msg}```", inline=False)
         embed.add_field(name="🏆 승률", value=f"```{win_msg}```", inline=False)
 
-        # ✅ 전적 저장 (리더보드용)
+        # ✅ 리더보드 저장
         save_player_stats_to_file(닉네임, squad_metrics, ranked_stats, stats, discord_id=interaction.user.id, source="전적명령")
 
-        # ✅ 랭크 티어 정보
+        # ✅ 랭크 정보
         best_rank_score = -1
         best_rank_tier = "Unranked"
         best_rank_sub_tier = ""
@@ -1659,7 +1670,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         else:
             embed.add_field(name="🏅 랭크 전적 정보", value="랭크 전적 정보를 불러올 수 없습니다.", inline=False)
 
-        # ✅ 랭크 티어 이미지 썸네일 설정
+        # ✅ 썸네일 및 전송
         image_path = get_rank_image_path(best_rank_tier, best_rank_sub_tier)
         image_file = discord.File(image_path, filename="rank.png")
         embed.set_thumbnail(url="attachment://rank.png")
@@ -1671,6 +1682,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         await interaction.followup.send(f"❌ API 오류가 발생했습니다: {e}", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ 전적 조회 중 오류가 발생했습니다: {e}", ephemeral=True)
+
 
 
 
