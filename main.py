@@ -1941,9 +1941,14 @@ async def 시즌랭킹(interaction: discord.Interaction):
     means = {k: statistics.mean(v) if v else 0 for k, v in metric_lists.items()}
     stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
 
+    seen_names = set()
     weighted_list = []
     for p in players:
         name = p.get("nickname", "")
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+
         squad = p.get("squad", {})
         if not isinstance(squad, dict):
             continue
@@ -1952,18 +1957,21 @@ async def 시즌랭킹(interaction: discord.Interaction):
         if games == 0:
             continue
 
-        factor = games / (games + M_CONFIDENCE)
-
+        # 개별 항목별 보정계수 적용
         def z_score(key):
             val = squad.get(key, 0)
             mean = means.get(key, 0)
             std = stds.get(key, 1)
             return (val - mean) / std
 
-        adj_scores = {k: z_score(k) * factor for k in keys}
-        score = sum(adj_scores[k] * weights[k] for k in keys)
+        adj_scores = {}
+        for k in keys:
+            # 판수 보정계수
+            factor = games / (games + M_CONFIDENCE)
+            adj_scores[k] = z_score(k) * factor
 
-      
+        # 가중치 곱하여 최종 점수 계산
+        score = sum(adj_scores[k] * weights[k] for k in keys)
 
         weighted_list.append((
             name,
@@ -1974,24 +1982,36 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
     weighted_top = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:7]
 
-    # 이하 기존 코드 계속...
+    # 중복 제거 후 각 항목별 TOP7 리스트 생성
+    def unique_top(lst):
+        seen = set()
+        result = []
+        for item in lst:
+            name = item[0]
+            if name in seen:
+                continue
+            seen.add(name)
+            result.append(item)
+            if len(result) == 7:
+                break
+        return result
 
-
-    # 기존 항목별 TOP7 리스트 생성 (계속 유지)
-    damage_top = sorted([(p["nickname"], safe_get(p, "avg_damage")) for p in players], key=lambda x: x[1], reverse=True)[:7]
-    kd_top = sorted([(p["nickname"], safe_get(p, "kd")) for p in players], key=lambda x: x[1], reverse=True)[:7]
-    win_top = sorted([(p["nickname"], safe_get(p, "win_rate")) for p in players], key=lambda x: x[1], reverse=True)[:7]
-    rounds_top = sorted([(p["nickname"], safe_get(p, "rounds_played")) for p in players], key=lambda x: x[1], reverse=True)[:7]
-    kills_top = sorted([(p["nickname"], safe_get(p, "kills")) for p in players], key=lambda x: x[1], reverse=True)[:7]
+    damage_top = unique_top(sorted([(p["nickname"], safe_get(p, "avg_damage")) for p in players], key=lambda x: x[1], reverse=True))
+    kd_top = unique_top(sorted([(p["nickname"], safe_get(p, "kd")) for p in players], key=lambda x: x[1], reverse=True))
+    win_top = unique_top(sorted([(p["nickname"], safe_get(p, "win_rate")) for p in players], key=lambda x: x[1], reverse=True))
+    rounds_top = unique_top(sorted([(p["nickname"], safe_get(p, "rounds_played")) for p in players], key=lambda x: x[1], reverse=True))
+    kills_top = unique_top(sorted([(p["nickname"], safe_get(p, "kills")) for p in players], key=lambda x: x[1], reverse=True))
 
     rankpoint_list = []
+    seen_rank_names = set()
     for p in players:
         ranked = p.get("ranked", {})
-        if ranked:
-            rankpoint_list.append((p["nickname"], ranked.get("points", 0), ranked.get("tier", ""), ranked.get("subTier", "")))
+        name = p.get("nickname", "")
+        if ranked and name not in seen_rank_names:
+            seen_rank_names.add(name)
+            rankpoint_list.append((name, ranked.get("points", 0), ranked.get("tier", ""), ranked.get("subTier", "")))
     rank_top = sorted(rankpoint_list, key=lambda x: x[1], reverse=True)[:7]
 
-    # 포맷 함수 (TOP3 Bold + 고정폭 정렬)
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
 
     def format_top_score(entries):
@@ -2002,7 +2022,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
             line = f"{medals[i]} {name:20} {score}"
             lines.append(line)
         return "```\n" + "\n".join(lines) + "\n```"
-
 
     def format_top(entries, is_percentage=False):
         return "```\n" + "\n".join(
@@ -2017,7 +2036,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
             for i, entry in enumerate(entries)
         ) + "\n```"
 
-    # Embed 생성
     embed = discord.Embed(
         title=f"🏆 현재 시즌 랭킹 (시즌 ID: {stored_season_id})",
         color=discord.Color.gold()
@@ -2056,6 +2074,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         embed.set_footer(text="※ 기준: 저장된 유저 전적")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
