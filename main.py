@@ -1439,8 +1439,8 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None,
 
         leaderboard = [
             p for p in leaderboard
-            if p.get("nickname") != nickname and p.get("discord_id") != str(discord_id)
-        ]
+            if not (p.get("nickname") == nickname and p.get("discord_id") == str(discord_id))
+]
         leaderboard.append(data_to_save)
 
         with open(leaderboard_path, "w", encoding="utf-8") as f:
