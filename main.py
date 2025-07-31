@@ -1621,7 +1621,8 @@ def generate_mode_embed(stats, mode="squad", nickname="플레이어"):
     rounds = m.get("roundsPlayed", 0)
     wins = m.get("wins", 0)
     kills = m.get("kills", 0)
-    top10_ratio = m.get("top10Ratio", 0.0) * 100
+    top10s = m.get("top10s", 0)
+    top10_ratio = (top10s / rounds * 100) if rounds else 0.0
     kd = round(kills / (rounds - wins) if (rounds - wins) > 0 else kills, 2)
     avg_dmg = m.get("damageDealt", 0.0) / rounds if rounds else 0
     hs_pct = m.get("headshotKills", 0) / kills * 100 if kills else 0
