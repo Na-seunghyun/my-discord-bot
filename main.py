@@ -1854,16 +1854,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         adj_scores = {k: z_score(k) * factor for k in keys}
         score = sum(adj_scores[k] * weights[k] for k in keys)
 
-        # 로그 출력
-        print(f"[DEBUG] {name}:")
-        print(f"  원본 값: " + ", ".join(f"{k}={squad.get(k, 0):.2f}" for k in keys))
-        print(f"  평균: " + ", ".join(f"{k}={means[k]:.2f}" for k in keys))
-        print(f"  표준편차: " + ", ".join(f"{k}={stds[k]:.2f}" for k in keys))
-        print(f"  Z-Score (보정 전): " + ", ".join(f"{k}={(squad.get(k, 0) - means[k]) / stds[k]:.3f}" for k in keys))
-        print(f"  보정 계수 (factor): {factor:.3f}")
-        print(f"  보정된 점수: " + ", ".join(f"{k}={adj_scores[k]:.3f}" for k in keys))
-        print(f"  최종 점수: {score:.3f}")
-        print("--------------------------------------------------")
+      
 
         weighted_list.append((
             name,
