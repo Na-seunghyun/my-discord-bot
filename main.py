@@ -1545,6 +1545,25 @@ def get_rank_image_path(tier: str, sub_tier: str = "") -> str:
     return os.path.join("rank-image", "Unranked.png")
 
 
+def pick_best_rank_tier(ranked_stats):
+    """가장 높은 RP 기준으로 best 티어를 반환"""
+    best = ("Unranked", "", 0)
+    modes = ranked_stats.get("data", {}).get("attributes", {}).get("rankedGameModeStats", {})
+
+    for mode_data in modes.values():
+        tier = mode_data.get("currentTier", {}).get("tier", "Unranked")
+        sub = mode_data.get("currentTier", {}).get("subTier", "")
+        point = mode_data.get("currentRankPoint", 0)
+
+        if point > best[2]:
+            best = (tier, sub, point)
+
+    return best  # (tier, sub, point)
+
+
+
+
+
 from discord.ui import View, Button
 
 class ModeSwitchView(View):
@@ -1585,38 +1604,63 @@ class ModeSwitchView(View):
             await interaction.response.edit_message(embed=embed, view=self, attachments=[])
 
 
-def generate_mode_embed(stats, mode, nickname="플레이어"):
-    m = stats["data"]["attributes"]["gameModeStats"].get(mode)
-    if not m or m.get("roundsPlayed", 0) == 0:
-        return discord.Embed(
-            title=f"{nickname} - {mode.upper()}",
-            description="❌ 전적 데이터가 없습니다.",
-            color=discord.Color.red()
-        )
+def generate_mode_embed(stats, mode="squad", nickname="플레이어"):
+    embed = discord.Embed(title=f"{nickname} - {mode.upper()} 전적", color=discord.Color.blurple())
+
+    mode_key = {
+        "solo": "solo",
+        "duo": "duo",
+        "squad": "squad"
+    }.get(mode.lower(), "squad")
+
+    m = stats.get("data", {}).get("attributes", {}).get("gameModeStats", {}).get(mode_key, {})
+    if not m:
+        embed.description = f"❌ {mode.upper()} 전적 정보가 없습니다."
+        return embed
 
     rounds = m.get("roundsPlayed", 0)
     wins = m.get("wins", 0)
     kills = m.get("kills", 0)
-    deaths = max(1, rounds - wins)
-    kd = kills / deaths
-    win_pct = wins / rounds * 100
-    avg_dmg = m.get("damageDealt", 0) / rounds
-    top10_pct = m.get("top10s", 0) / rounds * 100 if "top10s" in m else 0
-    hs_pct = m.get("headshotKills", 0) / max(1, kills) * 100
-    long_kill = m.get("longestKill", 0)
-    survival_time = m.get("timeSurvived", 0) / rounds
-    minutes = int(survival_time // 60)
-    seconds = int(survival_time % 60)
+    top10_ratio = m.get("top10Ratio", 0.0) * 100
+    kd = round(kills / (rounds - wins) if (rounds - wins) > 0 else kills, 2)
+    avg_dmg = m.get("damageDealt", 0.0) / rounds if rounds else 0
+    hs_pct = m.get("headshotKills", 0) / kills * 100 if kills else 0
+    long_kill = m.get("longestKill", 0.0)
+    survival_time = m.get("timeSurvived", 0) / rounds if rounds else 0
 
-    embed = discord.Embed(title=f"{nickname} - {mode.upper()} 전적", color=discord.Color.blue())
-    embed.add_field(name="📊 전투 요약", value=(
-        f"**Match** : {rounds:<4}  **Win%** : {win_pct:.2f}\n"
-        f"**K/D**   : {kd:.2f}  **Kills**: {kills}\n"
-        f"**HS%**   : {hs_pct:.1f}  **DMG**  : {avg_dmg:.1f}\n"
-        f"**Top10%**: {top10_pct:.1f}  **Surv** : {minutes}분 {seconds}초\n"
-        f"**LongK** : {long_kill:.1f}m"
-    ), inline=False)
+    mins = int(survival_time // 60)
+    secs = int(survival_time % 60)
+    surv_fmt = f"{mins}분 {secs:02d}초"
+
+    # 좌우 정렬 임베드 필드
+    embed.add_field(name="게임 수", value=f"{rounds:,}판", inline=True)
+    embed.add_field(name="승률", value=f"{(wins / rounds * 100):.2f}%", inline=True)
+
+    embed.add_field(name="K/D", value=f"{kd:.2f}", inline=True)
+    embed.add_field(name="킬 수", value=f"{kills:,}", inline=True)
+
+    embed.add_field(name="평균 데미지", value=f"{avg_dmg:.2f}", inline=True)
+    embed.add_field(name="Top10 진입률", value=f"{top10_ratio:.2f}%", inline=True)
+
+    embed.add_field(name="헤드샷률", value=f"{hs_pct:.2f}%", inline=True)
+    embed.add_field(name="평균 생존시간", value=surv_fmt, inline=True)
+
+    embed.add_field(name="최장 저격 거리", value=f"{long_kill:.1f}m", inline=True)
+
+    # ✅ 외부 정의된 피드백 사용
+    if mode == "squad":
+        metrics, error = extract_squad_metrics(stats)
+        if metrics:
+            avg_dmg, kd, win_rate = metrics
+            dmg_msg, kd_msg, win_msg = detailed_feedback(avg_dmg, kd, win_rate)
+            feedback_text = f"{dmg_msg}\n{kd_msg}\n{win_msg}"
+        else:
+            feedback_text = error
+        embed.add_field(name="📊 SQUAD 분석 피드백", value=feedback_text, inline=False)
+
     return embed
+
+
 
 
 def generate_ranked_embed(ranked_stats, nickname="플레이어"):
