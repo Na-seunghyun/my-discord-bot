@@ -1808,15 +1808,10 @@ async def 시즌랭킹(interaction: discord.Interaction):
         await interaction.followup.send("❌ 아직 저장된 전적 데이터가 없습니다.", ephemeral=True)
         return
 
-    try:
-        with open(leaderboard_path, "r", encoding="utf-8") as f:
-            file_data = json.load(f)
-            stored_season_id = file_data.get("season_id", "알 수 없음")
-            all_players = file_data.get("players", [])
-    except Exception as e:
-        await interaction.followup.send(f"❌ 시즌랭킹 데이터를 읽는 중 오류가 발생했습니다: {e}", ephemeral=True)
-        print(f"[시즌랭킹 데이터 오류] {e}")
-        return
+    with open(leaderboard_path, "r", encoding="utf-8") as f:
+        file_data = json.load(f)
+        stored_season_id = file_data.get("season_id", "알 수 없음")
+        all_players = file_data.get("players", [])
 
     players = [p for p in all_players if "(게스트)" not in p.get("nickname", "")]
 
@@ -1824,10 +1819,8 @@ async def 시즌랭킹(interaction: discord.Interaction):
         await interaction.followup.send("❌ 현재 시즌에 저장된 유저 데이터가 없습니다.", ephemeral=True)
         return
 
-    # 필요한 키 리스트
     keys = list(weights.keys())
 
-    # 각 항목 값 리스트 수집 (빈값은 0 처리)
     def safe_get(p, key):
         squad = p.get("squad", {})
         if not isinstance(squad, dict):
@@ -1836,7 +1829,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
     metric_lists = {k: [safe_get(p, k) for p in players] for k in keys}
 
-    # 평균과 표준편차 계산 (std가 0이면 1로 대체)
     means = {k: statistics.mean(v) if v else 0 for k, v in metric_lists.items()}
     stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
 
@@ -1860,8 +1852,18 @@ async def 시즌랭킹(interaction: discord.Interaction):
             return (val - mean) / std
 
         adj_scores = {k: z_score(k) * factor for k in keys}
-
         score = sum(adj_scores[k] * weights[k] for k in keys)
+
+        # 로그 출력
+        print(f"[DEBUG] {name}:")
+        print(f"  원본 값: " + ", ".join(f"{k}={squad.get(k, 0):.2f}" for k in keys))
+        print(f"  평균: " + ", ".join(f"{k}={means[k]:.2f}" for k in keys))
+        print(f"  표준편차: " + ", ".join(f"{k}={stds[k]:.2f}" for k in keys))
+        print(f"  Z-Score (보정 전): " + ", ".join(f"{k}={(squad.get(k, 0) - means[k]) / stds[k]:.3f}" for k in keys))
+        print(f"  보정 계수 (factor): {factor:.3f}")
+        print(f"  보정된 점수: " + ", ".join(f"{k}={adj_scores[k]:.3f}" for k in keys))
+        print(f"  최종 점수: {score:.3f}")
+        print("--------------------------------------------------")
 
         weighted_list.append((
             name,
@@ -1871,6 +1873,9 @@ async def 시즌랭킹(interaction: discord.Interaction):
         ))
 
     weighted_top = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:7]
+
+    # 이하 기존 코드 계속...
+
 
     # 기존 항목별 TOP7 리스트 생성 (계속 유지)
     damage_top = sorted([(p["nickname"], safe_get(p, "avg_damage")) for p in players], key=lambda x: x[1], reverse=True)[:7]
