@@ -1999,22 +1999,10 @@ async def 시즌랭킹(interaction: discord.Interaction):
         for i, entry in enumerate(entries):
             name = f"*{entry[0]}*" if i < 3 else entry[0]
             score = f"{entry[1]:.3f}"
-            d = f"D{entry[2]:.1f}"
-            k = f"K{entry[3]:.1f}"
-            w = f"W{entry[4]:.1f}"
-            extras = []
-            if entry[5] != 0:
-                extras.append(f"T{entry[5]:.1f}")
-            if entry[6] != 0:
-                extras.append(f"H{entry[6]:.1f}")
-            if entry[7] != 0:
-                extras.append(f"S{entry[7]:.1f}")
-            if entry[8] != 0:
-                extras.append(f"C{entry[8]:.1f}")
-            extras_str = " ".join(extras)
-            line = f"{medals[i]} {name:20} {score} | {d} {k} {w} {extras_str}"
+            line = f"{medals[i]} {name:20} {score}"
             lines.append(line)
         return "```\n" + "\n".join(lines) + "\n```"
+
 
     def format_top(entries, is_percentage=False):
         return "```\n" + "\n".join(
