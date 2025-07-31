@@ -1767,12 +1767,12 @@ async def 시즌랭킹(interaction: discord.Interaction):
     M_CONFIDENCE = 500  # 판수 보정 기준값
 
     weights = {
-        "dmg": 0.25,
+        "avg_damage": 0.25,
         "kd": 0.25,
-        "win": 0.20,
-        "top10": 0.10,
-        "hs_pct": 0.10,
-        "surv": 0.10
+        "win_rate": 0.20,
+        "top10_ratio": 0.10,
+        "headshot_pct": 0.10,
+        "avg_survive": 0.10
     }
 
     leaderboard_path = "season_leaderboard.json"
@@ -1790,67 +1790,51 @@ async def 시즌랭킹(interaction: discord.Interaction):
         await interaction.followup.send("❌ 현재 시즌에 저장된 유저 데이터가 없습니다.", ephemeral=True)
         return
 
-    # 데이터 추출 (squad 기준)
+    # 필요한 키 리스트
+    keys = list(weights.keys())
+
+    # 각 항목 값 리스트 수집 (빈값은 0 처리)
     def safe_get(p, key):
-        return p.get("squad", {}).get(key, 0)
+        squad = p.get("squad", {})
+        if not isinstance(squad, dict):
+            return 0
+        return squad.get(key, 0)
 
-    dmg_values = [safe_get(p, "avg_damage") for p in players]
-    kd_values = [safe_get(p, "kd") for p in players]
-    win_values = [safe_get(p, "win_rate") for p in players]
-    top10_values = [safe_get(p, "top10_ratio") for p in players]
-    hs_values = [safe_get(p, "headshot_pct") for p in players]
-    surv_values = [safe_get(p, "avg_survive") for p in players]
+    metric_lists = {k: [safe_get(p, k) for p in players] for k in keys}
 
-    means = {
-        "dmg": statistics.mean(dmg_values) if dmg_values else 0,
-        "kd": statistics.mean(kd_values) if kd_values else 0,
-        "win": statistics.mean(win_values) if win_values else 0,
-        "top10": statistics.mean(top10_values) if top10_values else 0,
-        "hs_pct": statistics.mean(hs_values) if hs_values else 0,
-        "surv": statistics.mean(surv_values) if surv_values else 0
-    }
-
-    stds = {
-        "dmg": statistics.pstdev(dmg_values) or 1,
-        "kd": statistics.pstdev(kd_values) or 1,
-        "win": statistics.pstdev(win_values) or 1,
-        "top10": statistics.pstdev(top10_values) or 1,
-        "hs_pct": statistics.pstdev(hs_values) or 1,
-        "surv": statistics.pstdev(surv_values) or 1
-    }
+    # 평균과 표준편차 계산 (std가 0이면 1로 대체)
+    means = {k: statistics.mean(v) if v else 0 for k, v in metric_lists.items()}
+    stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
 
     weighted_list = []
     for p in players:
-        if "squad" not in p:
+        name = p.get("nickname", "")
+        squad = p.get("squad", {})
+        if not isinstance(squad, dict):
             continue
 
-        name = p["nickname"]
-        squad = p["squad"]
         games = squad.get("rounds_played", 0)
         if games == 0:
             continue
+
         factor = games / (games + M_CONFIDENCE)
 
         def z_score(key):
-            return (squad.get(key, 0) - means[key]) / stds[key]
+            val = squad.get(key, 0)
+            mean = means.get(key, 0)
+            std = stds.get(key, 1)
+            return (val - mean) / std
 
-        adj_dmg = z_score("avg_damage") * factor
-        adj_kd = z_score("kd") * factor
-        adj_win = z_score("win_rate") * factor
-        adj_top10 = z_score("top10_ratio") * factor
-        adj_hs = z_score("headshot_pct") * factor
-        adj_surv = z_score("avg_survive") * factor
+        adj_scores = {k: z_score(k) * factor for k in keys}
 
-        score = (
-            adj_dmg * weights["dmg"] +
-            adj_kd * weights["kd"] +
-            adj_win * weights["win"] +
-            adj_top10 * weights["top10"] +
-            adj_hs * weights["hs_pct"] +
-            adj_surv * weights["surv"]
-        )
+        score = sum(adj_scores[k] * weights[k] for k in keys)
 
-        weighted_list.append((name, score, adj_dmg, adj_kd, adj_win, adj_top10, adj_hs, adj_surv, factor))
+        weighted_list.append((
+            name,
+            score,
+            *[adj_scores[k] for k in keys],
+            factor
+        ))
 
     weighted_top = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:7]
 
