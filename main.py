@@ -1424,21 +1424,33 @@ recent_saves = {}
 
 
 def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None, discord_id=None, pubg_id=None, source="기본"):
+    import time
+    from datetime import datetime
+
     key = f"{nickname}_{discord_id}"
     now = time.time()
 
+    # ✅ 중복 저장 방지 (30초 내 중복 방지)
     if key in recent_saves and now - recent_saves[key] < 30:
         print(f"⏹ 중복 저장 방지: {nickname} ({source})")
         return
     recent_saves[key] = now
 
+    # ✅ 시즌 ID 획득
     season_id = get_season_id()
+
+    # ✅ pubg_id 누락 시 경고 출력 (디버깅 도움)
+    if not pubg_id:
+        print(f"⚠️ pubg_id 누락됨: {nickname} / discord_id: {discord_id}")
+
+    # ✅ 저장할 데이터 기본 구조 (pubg_id 포함)
     data_to_save = {
         "nickname": nickname,
         "discord_id": str(discord_id),
-        "pubg_id": pubg_id.strip().lower() if pubg_id else "",
+        "pubg_id": pubg_id.strip().lower() if pubg_id else "",  # ✅ 핵심 부분
         "timestamp": datetime.now().isoformat()
     }
+
 
     if stats:
         squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
