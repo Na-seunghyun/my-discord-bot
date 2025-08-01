@@ -9292,25 +9292,26 @@ async def search_best_by_lavalink(query: str, limit: int = 10) -> wavelink.Playa
     return best
 
 async def get_or_connect_player(interaction: discord.Interaction) -> wavelink.Player:
+    # 1) 유저가 음성 채널에 있어야 합니다.
     if not interaction.user.voice or not interaction.user.voice.channel:
         raise ValueError("❌ 먼저 음성 채널에 접속해주세요!")
-
     channel = interaction.user.voice.channel
 
-    # Lavalink 노드 가져오기 (기본 노드)
-    node = wavelink.Pool.get_node()
-    if not node:
-        raise RuntimeError("❌ Lavalink 노드가 아직 연결되지 않았습니다.")
+    # 2) 이미 연결된 Player 있으면 가져오기
+    #    interaction.guild.voice_client 은 wavelink.Player 타입일 수 있습니다.
+    player = interaction.guild.voice_client  # type: ignore
 
-    # Player 가져오기 또는 생성
-    player: wavelink.Player = node.get_player(interaction.guild.id)
-    if not player:
-        player: wavelink.Player = await node.connect(interaction.guild.id, channel.id)
+    # 3) Player가 없으면, 채널에 연결해서 생성
+    if not isinstance(player, wavelink.Player):
+        # cls=wavelink.Player를 지정하면 Wavelink Player로 연결됩니다.
+        player: wavelink.Player = await channel.connect(cls=wavelink.Player)
 
+    # 4) 이미 다른 채널에 연결된 상태면 이동
     elif player.channel.id != channel.id:
-        await player.connect(channel.id)
+        await player.move_to(channel)
 
     return player
+
 
 
 class SongSearchModal(discord.ui.Modal, title="노래 검색"):
