@@ -9671,6 +9671,41 @@ async def beep(interaction: discord.Interaction):
     # 7) 사용자 피드백
     await interaction.followup.send("🔊 Beep 테스트 재생중...", ephemeral=True)
 
+@tree.command(
+    name="테스트재생",
+    description="channel.connect(cls=wavelink.Player) 방식으로 재생 테스트",
+    guild=discord.Object(id=GUILD_ID)
+)
+async def playtest(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+
+    # 1) 음성 채널 체크
+    channel = interaction.user.voice.channel if interaction.user.voice else None
+    if not channel:
+        return await interaction.followup.send("❌ 먼저 음성 채널에 접속해주세요!", ephemeral=True)
+
+    # 2) 채널에 직접 연결 (wavelink.Player 사용)
+    player: wavelink.Player = interaction.guild.voice_client  # type: ignore
+    if not player:
+        player = await channel.connect(cls=wavelink.Player)
+    print("[PlayTest] Player 객체:", player)
+
+    # 3) 테스트 트랙 검색
+    search = await wavelink.Playable.search("ytsearch:IU LILAC", limit=1)
+    if not search:
+        return await interaction.followup.send("❌ 테스트 트랙을 찾을 수 없습니다.", ephemeral=True)
+    track = search[0]
+    print("[PlayTest] 트랙 URI:", track.uri)
+
+    # 4) 재생
+    await player.play(track)
+    print("[PlayTest] play() 호출 완료")
+
+    await interaction.followup.send(f"▶️ 테스트 재생 시작: **{track.title}**")
+
+
+
+
 
 
 
