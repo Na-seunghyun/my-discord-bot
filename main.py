@@ -9320,6 +9320,36 @@ async def get_or_connect_player(interaction: discord.Interaction) -> wavelink.Pl
 
     return player
 
+async def lavalink_search_http(query: str) -> dict | None:
+    """
+    Lavalink v4 REST API로 ytsearch:쿼리를 날려서
+    첫 번째 트랙 정보를 dict 형태로 반환합니다.
+    """
+    url = f"http://{LAVALINK_HOST}:{LAVALINK_PORT}/v4/loadtracks"
+    headers = {"Authorization": LAVALINK_PASSWORD}
+    params = {"identifier": f"ytsearch:{query}"}
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params, headers=headers) as resp:
+            if resp.status != 200:
+                print(f"[SongSearch]   ⚠️ HTTP REST 실패: 상태코드 {resp.status}")
+                return None
+            body = await resp.json()
+
+    if body.get("loadType") != "search":
+        print(f"[SongSearch]   ⚠️ REST loadType: {body.get('loadType')}")
+        return None
+
+    data = body.get("data", [])
+    if not data:
+        print("[SongSearch]   · HTTP REST 검색 결과 없음")
+        return None
+
+    # 첫 번째 아이템 리턴
+    return data[0]
+
+
+
 
 
 class SongSearchModal(discord.ui.Modal, title="노래 검색"):
@@ -9371,21 +9401,37 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
             except Exception as e:
                 print(f"[SongSearch]   ⚠️ YouTubeTrack.search 예외: {e}")
 
-        # 5) Playable.search 최종 폴백
-        if not track:
-            print("[SongSearch]   · Playable.search 호출")
-            try:
-                plays = await wavelink.Playable.search(f"ytsearch:{query}")
-                print(f"[SongSearch]   · Playable.search 결과: {plays!r}")
-                if plays:
-                    track = plays[0]
-            except Exception as e:
-                print(f"[SongSearch]   ⚠️ Playable.search 예외: {e}")
+         # 5) Playable.search 최종 폴백
+         if not track:
+             print("[SongSearch]   · Playable.search 호출")
+             try:
+                 plays = await wavelink.Playable.search(f"ytsearch:{query}")
+                 print(f"[SongSearch]   · Playable.search 결과: {plays!r}")
+                 if plays:
+                     track = plays[0]
+             except Exception as e:
+                 print(f"[SongSearch]   ⚠️ Playable.search 예외: {e}")
 
-        # 6) 발견 여부 체크
-        if not track:
-            print("[SongSearch] ❌ 트랙 미발견")
-            return await interaction.followup.send(
++        # 6) HTTP REST 직접 검색 폴백
++        if not track:
++            print("[SongSearch]   · HTTP REST 직접 검색 폴백")
++            rest_item = await lavalink_search_http(query)
++            if rest_item:
++                uri = rest_item["info"]["uri"]
++                print(f"[SongSearch]   · REST 반환 URI: {uri}")
++                try:
++                    # URL로 Playable.search 다시 시도
++                    plays = await wavelink.Playable.search(uri)
++                    print(f"[SongSearch]   · URI Playable.search 결과: {plays!r}")
++                    if plays:
++                        track = plays[0]
++                except Exception as e:
++                    print(f"[SongSearch]   ⚠️ URI Playable.search 예외: {e}")
+
+         # 7) 발견 여부 체크
+         if not track:
+             print("[SongSearch] ❌ 트랙 미발견")
+             return await interaction.followup.send(
                 "🔍 검색 결과를 찾지 못했어요. 키워드를 조금 바꿔볼까요?",
                 ephemeral=True
             )
