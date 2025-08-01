@@ -9685,11 +9685,25 @@ async def playtest(interaction: discord.Interaction):
     if not channel:
         return await interaction.followup.send("❌ 먼저 음성 채널에 접속해주세요!", ephemeral=True)
 
-    # 2) Lavalink 노드에서 플레이어 생성/가져오기
-    node = wavelink.Pool.get_node()
-    if not node:
-        return await interaction.followup.send("❌ Lavalink 노드가 연결되지 않았습니다.", ephemeral=True)
+    # 2) Lavalink Pool 에 노드가 있는지 확인, 없으면 연결
+    if not wavelink.Pool.nodes:
+        await wavelink.Pool.connect(
+            client=bot,
+            nodes=[
+                wavelink.Node(
+                    host=LAVALINK_HOST,
+                    port=LAVALINK_PORT,
+                    password=LAVALINK_PASSWORD,
+                    region="global",
+                )
+            ]
+        )
+        print("[PlayTest] playtest 내에서 Lavalink Pool.connect 호출")
 
+    node = wavelink.Pool.get_node()
+    print("[PlayTest] 사용할 노드:", node)
+
+    # 3) 노드를 통해 플레이어 연결
     try:
         player: wavelink.Player = await node.connect(
             guild_id=interaction.guild.id,
@@ -9700,29 +9714,18 @@ async def playtest(interaction: discord.Interaction):
         print("[PlayTest] node.connect 예외:", e)
         return await interaction.followup.send(f"❌ 플레이어 연결 실패: {e}", ephemeral=True)
 
-    # 3) HTTP REST → Playable.search 로 트랙 검색
+    # 4) REST → Playable.search 로 트랙 검색
     query = "IU LILAC"
-    print(f"[PlayTest] HTTP REST 검색: ytsearch:{query}")
     item = await lavalink_search_http(query)
-    if not item:
-        return await interaction.followup.send("❌ 테스트 트랙을 찾을 수 없습니다.", ephemeral=True)
-
     uri = item["info"]["uri"]
-    print("[PlayTest] URI 재검색:", uri)
     results = await wavelink.Playable.search(uri)
-    if not results:
-        return await interaction.followup.send("❌ URI 재검색 실패", ephemeral=True)
     track = results[0]
 
-    # 4) 재생
-    try:
-        await player.play(track)
-        print("[PlayTest] play() 호출 완료")
-    except Exception as e:
-        print("[PlayTest] play() 예외:", e)
-        return await interaction.followup.send(f"❌ 재생 실패: {e}", ephemeral=True)
-
+    # 5) 재생
+    await player.play(track)
+    print("[PlayTest] play() 호출 완료")
     await interaction.followup.send(f"▶️ 테스트 재생 시작: **{track.title}**")
+
 
 
 
@@ -9764,7 +9767,7 @@ async def on_ready():
                         host=LAVALINK_HOST,
                         port=LAVALINK_PORT,
                         password=LAVALINK_PASSWORD,
-                        region="global"
+                        region="global",
                         # stats_port=2334  # 필요 시 추가
                     )
                 ]
