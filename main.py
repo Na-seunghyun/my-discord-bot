@@ -9615,7 +9615,38 @@ async def init_song_cache_table():
 
 
 
+@tree.command(
+    name="삑",
+    description="짧은 테스트 삑 소리를 재생합니다.",
+    guild=discord.Object(id=GUILD_ID)
+)
+async def beep(interaction: discord.Interaction):
+    # 1) 응답을 defer 해서 생각 중 표시
+    await interaction.response.defer(thinking=True)
 
+    # 2) 유저가 음성 채널에 있는지 체크
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        return await interaction.followup.send(
+            "❌ 먼저 음성 채널에 접속해주세요!",
+            ephemeral=True
+        )
+
+    channel = interaction.user.voice.channel
+
+    # 3) 기존에 연결된 VoiceClient 있으면 쓰고, 없으면 새로 연결
+    vc: discord.VoiceClient = interaction.guild.voice_client  # type: ignore
+    if not vc:
+        vc = await channel.connect()
+
+    # 4) test.wav 파일을 FFmpegPCMAudio 로 재생
+    source = discord.FFmpegPCMAudio("/home/ubuntu/my-discord-bot/test.wav")
+    vc.play(source, after=lambda e: print(f"Beep playback done, error: {e}"))
+
+    # 5) 사용자에게 피드백
+    await interaction.followup.send(
+        "🔊 테스트 삑 소리를 재생했습니다!",
+        ephemeral=True
+    )
 
 
 
