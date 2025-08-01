@@ -1423,110 +1423,170 @@ import time
 recent_saves = {}
 
 
-def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None, discord_id=None, pubg_id=None, source="기본"):
+def save_player_stats_to_file(
+    nickname,
+    squad_metrics,
+    ranked_stats,
+    stats=None,
+    discord_id=None,
+    pubg_id=None,
+    source="기본"
+):
+    """
+    시즌 리더보드 저장 함수 (discord_id 기준 식별)
+    - 닉네임/서버별명이 바뀌어도 같은 유저로 덮어쓰기
+    - pubg_id는 기록용(식별에 사용하지 않음)
+    """
+    import os
+    import json
     import time
     from datetime import datetime
 
-    key = f"{nickname}_{discord_id}"
-    now = time.time()
+    # ─────────────────────────────────────────────────────────
+    # 전역 중복저장 방지 캐시 보장
+    # ─────────────────────────────────────────────────────────
+    global recent_saves
+    if "recent_saves" not in globals():
+        recent_saves = {}
 
-    # ✅ 중복 저장 방지 (30초 내 중복 방지)
-    if key in recent_saves and now - recent_saves[key] < 30:
+    # ─────────────────────────────────────────────────────────
+    # 기본 검증
+    # ─────────────────────────────────────────────────────────
+    if discord_id is None:
+        # 식별키가 없으면 저장 불가
+        print(f"❌ 저장 실패 ({source}): {nickname} | 이유: discord_id 없음")
+        return
+
+    # ─────────────────────────────────────────────────────────
+    # 중복 저장 방지 (30초 규칙) - discord_id 단일 키 사용
+    # ─────────────────────────────────────────────────────────
+    key = str(discord_id)
+    now = time.time()
+    last = recent_saves.get(key)
+    if last is not None and now - last < 30:
         print(f"⏹ 중복 저장 방지: {nickname} ({source})")
         return
     recent_saves[key] = now
 
-    # ✅ 시즌 ID 획득
-    season_id = get_season_id()
+    # ─────────────────────────────────────────────────────────
+    # 시즌 ID
+    # ─────────────────────────────────────────────────────────
+    try:
+        season_id = get_season_id()
+    except Exception as e:
+        print(f"❌ 저장 실패 ({source}): {nickname} | 시즌 ID 조회 실패: {e}")
+        return
 
-    # ✅ pubg_id 누락 시 경고 출력 (디버깅 도움)
+    # ─────────────────────────────────────────────────────────
+    # pubg_id 체크(기록용)
+    # ─────────────────────────────────────────────────────────
     if not pubg_id:
         print(f"⚠️ pubg_id 누락됨: {nickname} / discord_id: {discord_id}")
 
-    # ✅ 저장할 데이터 기본 구조 (pubg_id 포함)
+    # 저장 데이터 기본 구조
     data_to_save = {
-        "nickname": nickname,
-        "discord_id": str(discord_id),
-        "pubg_id": pubg_id.strip().lower() if pubg_id else "",  # ✅ 핵심 부분
+        "nickname": nickname,  # 표시용
+        "discord_id": str(discord_id),  # 식별용(불변)
+        "pubg_id": pubg_id.strip().lower() if pubg_id else "",
         "timestamp": datetime.now().isoformat()
     }
 
-
+    # ─────────────────────────────────────────────────────────
+    # 기본(일반전) 통계 파생치 계산
+    # ─────────────────────────────────────────────────────────
     if stats:
-        squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
-        rounds_played = squad_stats.get("roundsPlayed", 0)
-        kills = squad_stats.get("kills", 0)
-        top10s = squad_stats.get("top10s", 0)
-        headshot_kills = squad_stats.get("headshotKills", 0)
-        time_survived = squad_stats.get("timeSurvived", 0)
-        longest_kill = squad_stats.get("longestKill", 0)
+        try:
+            squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
+        except Exception:
+            squad_stats = {}
+
+        rounds_played = int(squad_stats.get("roundsPlayed", 0) or 0)
+        kills = int(squad_stats.get("kills", 0) or 0)
+        top10s = int(squad_stats.get("top10s", 0) or 0)
+        headshot_kills = int(squad_stats.get("headshotKills", 0) or 0)
+        time_survived = float(squad_stats.get("timeSurvived", 0) or 0.0)
+        longest_kill = float(squad_stats.get("longestKill", 0) or 0.0)
     else:
-        rounds_played = kills = top10s = headshot_kills = time_survived = longest_kill = 0
+        rounds_played = kills = top10s = headshot_kills = 0
+        time_survived = longest_kill = 0.0
 
     if squad_metrics:
-        avg_damage, kd, win_rate = squad_metrics
-        top10_ratio = (top10s / rounds_played * 100) if rounds_played else 0
-        headshot_pct = (headshot_kills / kills * 100) if kills else 0
-        avg_survive = (time_survived / rounds_played) if rounds_played else 0
+        try:
+            avg_damage, kd, win_rate = squad_metrics
+        except Exception:
+            # 입력 튜플 형식이 불완전한 경우 안전값
+            avg_damage, kd, win_rate = 0.0, 0.0, 0.0
+        top10_ratio = (top10s / rounds_played * 100) if rounds_played else 0.0
+        headshot_pct = (headshot_kills / kills * 100) if kills else 0.0
+        avg_survive = (time_survived / rounds_played) if rounds_played else 0.0
 
         data_to_save["squad"] = {
-            "avg_damage": avg_damage,
-            "kd": kd,
-            "win_rate": win_rate,
+            "avg_damage": float(avg_damage),
+            "kd": float(kd),
+            "win_rate": float(win_rate),
             "rounds_played": rounds_played,
             "kills": kills,
-            "top10_ratio": top10_ratio,
-            "headshot_pct": headshot_pct,
-            "avg_survive": avg_survive,
-            "longest_kill": longest_kill
+            "top10_ratio": float(top10_ratio),
+            "headshot_pct": float(headshot_pct),
+            "avg_survive": float(avg_survive),
+            "longest_kill": float(longest_kill),
         }
     else:
         data_to_save["squad"] = {
-            "avg_damage": 0,
-            "kd": 0,
-            "win_rate": 0,
+            "avg_damage": 0.0,
+            "kd": 0.0,
+            "win_rate": 0.0,
             "rounds_played": rounds_played,
             "kills": kills,
-            "top10_ratio": 0,
-            "headshot_pct": 0,
-            "avg_survive": 0,
-            "longest_kill": 0
+            "top10_ratio": 0.0,
+            "headshot_pct": 0.0,
+            "avg_survive": 0.0,
+            "longest_kill": float(longest_kill),
         }
 
-    if ranked_stats and "data" in ranked_stats:
-        ranked_modes = ranked_stats["data"]["attributes"]["rankedGameModeStats"]
-        squad_rank = ranked_modes.get("squad")
-        if squad_rank:
-            data_to_save["ranked"] = {
-                "tier": squad_rank.get("currentTier", {}).get("tier", "Unranked"),
-                "subTier": squad_rank.get("currentTier", {}).get("subTier", ""),
-                "points": squad_rank.get("currentRankPoint", 0)
-            }
+    # ─────────────────────────────────────────────────────────
+    # 경쟁전(랭크) 통계
+    # ─────────────────────────────────────────────────────────
+    try:
+        if ranked_stats and "data" in ranked_stats:
+            ranked_modes = ranked_stats["data"]["attributes"].get("rankedGameModeStats", {})
+            squad_rank = ranked_modes.get("squad")
+            if squad_rank:
+                data_to_save["ranked"] = {
+                    "tier": squad_rank.get("currentTier", {}).get("tier", "Unranked"),
+                    "subTier": squad_rank.get("currentTier", {}).get("subTier", ""),
+                    "points": squad_rank.get("currentRankPoint", 0) or 0,
+                }
+    except Exception:
+        # 랭크 파싱 실패는 저장 자체를 막지 않음
+        pass
 
+    # ─────────────────────────────────────────────────────────
+    # 파일 입출력 및 시즌 동기화
+    # ─────────────────────────────────────────────────────────
     leaderboard_path = "season_leaderboard.json"
     try:
         if os.path.exists(leaderboard_path):
             with open(leaderboard_path, "r", encoding="utf-8") as f:
-                file_data = json.load(f)
+                file_data = json.load(f) or {}
                 stored_season_id = file_data.get("season_id")
-                leaderboard = file_data.get("players", [])
+                leaderboard = file_data.get("players", []) or []
         else:
             stored_season_id = None
             leaderboard = []
 
+        # 시즌이 바뀌면 리셋
         if stored_season_id != season_id:
             leaderboard = []
 
-        leaderboard = [
-            p for p in leaderboard
-            if p.get("discord_id") != str(discord_id)
-        ]
+        # 같은 유저(= 같은 discord_id) 기존 항목 제거 → 최신 정보로 대체
+        leaderboard = [p for p in leaderboard if p.get("discord_id") != str(discord_id)]
         leaderboard.append(data_to_save)
 
         with open(leaderboard_path, "w", encoding="utf-8") as f:
             json.dump({"season_id": season_id, "players": leaderboard}, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ 저장 성공 ({source}): {nickname} ({pubg_id})")
+        print(f"✅ 저장 성공 ({source}): {nickname} ({data_to_save.get('pubg_id')})")
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
 
