@@ -9737,8 +9737,6 @@ async def playtest(interaction: discord.Interaction):
 
 
 
-
-
 @bot.event
 async def on_ready():
     global oduk_pool_cache, invites_cache
@@ -9754,7 +9752,7 @@ async def on_ready():
     print(f"🤖 봇 로그인됨: {bot.user}")
 
     # ✅ Lavalink 연결 디버깅 시작
-    nodes = wavelink.Pool.nodes  # dict of connected nodes
+    nodes = wavelink.Pool.nodes
     print("🔌 Lavalink 노드 연결 시도 중...")
     print(f"🔌 현재 연결된 Lavalink 노드 수: {len(nodes)}")
 
@@ -9764,19 +9762,21 @@ async def on_ready():
                 client=bot,
                 nodes=[
                     wavelink.Node(
-                        host=LAVALINK_HOST,
-                        port=LAVALINK_PORT,
+                        uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
                         password=LAVALINK_PASSWORD,
-                        region="global",
-                        # stats_port=2334  # 필요 시 추가
+                        region="global",        # ← 콤마 잊지 마세요
+                        # stats_port=2334      # 필요 시 추가
                     )
                 ]
             )
             print("🎧 Lavalink 노드 연결 성공 ✅")
+            print("🔌 Pool.nodes 상태:", wavelink.Pool.nodes)
         except Exception as e:
             print(f"❌ Lavalink 연결 실패: {type(e).__name__}: {e}")
     else:
         print("✅ 이미 Lavalink 노드가 연결되어 있습니다.")
+        print("🔌 Pool.nodes 상태:", wavelink.Pool.nodes)
+
 
 
     if not auto_apply_maintenance.is_running():
