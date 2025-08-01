@@ -9674,7 +9674,7 @@ async def beep(interaction: discord.Interaction):
 
 @tree.command(
     name="테스트재생",
-    description="node.connect + HTTP REST → Playable.search 로 재생 테스트",
+    description="node → channel.connect(cls=wavelink.Player, node=...) 테스트",
     guild=discord.Object(id=GUILD_ID)
 )
 async def playtest(interaction: discord.Interaction):
@@ -9685,45 +9685,44 @@ async def playtest(interaction: discord.Interaction):
     if not channel:
         return await interaction.followup.send("❌ 먼저 음성 채널에 접속해주세요!", ephemeral=True)
 
-    # 2) Pool에 노드가 하나도 없으면 uri 방식으로 연결
-    if not wavelink.Pool.nodes:
-        await wavelink.Pool.connect(
-            client=bot,
-            nodes=[
-                wavelink.Node(
-                    uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
-                    password=LAVALINK_PASSWORD
-                    # region, host, port 절대 쓰지 마세요
-                )
-            ]
-        )
-        print("[PlayTest] Pool.connect() 호출")
-
-    # 3) 연결된 노드 가져오기
+    # 2) Lavalink 노드가 연결되어 있는지 확인
     node = wavelink.Pool.get_node()
+    if not node:
+        return await interaction.followup.send("❌ Lavalink 노드가 연결되지 않았습니다.", ephemeral=True)
     print("[PlayTest] 사용할 노드:", node)
 
-    # 4) node.connect 로 플레이어 생성 또는 이동
-    player: wavelink.Player
+    # 3) channel.connect 로 플레이어 생성 (node 파라미터 추가)
     try:
-        player = await node.connect(
-            guild_id=interaction.guild.id,
-            channel_id=channel.id
+        player: wavelink.Player = interaction.guild.voice_client or await channel.connect(
+            cls=wavelink.Player,
+            node=node
         )
-        print("[PlayTest] node.connect() 완료")
+        print("[PlayTest] channel.connect() 플레이어 생성 완료")
     except Exception as e:
-        print("[PlayTest] node.connect 예외:", e)
+        print("[PlayTest] channel.connect 예외:", e)
         return await interaction.followup.send(f"❌ 플레이어 연결 실패: {e}", ephemeral=True)
 
-    # 5) 트랙 검색 & 재생
+    # 4) HTTP REST 검색 → Playable.search → 트랙 재생
     item = await lavalink_search_http("IU LILAC")
-    uri  = item["info"]["uri"]
+    if not item:
+        return await interaction.followup.send("❌ 테스트 트랙을 찾을 수 없습니다.", ephemeral=True)
+
+    uri = item["info"]["uri"]
+    print("[PlayTest] URI 재검색:", uri)
     results = await wavelink.Playable.search(uri)
+    if not results:
+        return await interaction.followup.send("❌ URI 재검색 실패", ephemeral=True)
     track = results[0]
 
-    await player.play(track)
-    print("[PlayTest] play() 호출 완료")
+    try:
+        await player.play(track)
+        print("[PlayTest] play() 호출 완료")
+    except Exception as e:
+        print("[PlayTest] play() 예외:", e)
+        return await interaction.followup.send(f"❌ 재생 실패: {e}", ephemeral=True)
+
     await interaction.followup.send(f"▶️ 테스트 재생 시작: **{track.title}**")
+
 
 
 
