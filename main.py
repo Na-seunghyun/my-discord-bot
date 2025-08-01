@@ -1793,10 +1793,62 @@ async def 닉네임_자동완성(interaction: discord.Interaction, current: str)
     return choices[:25]
 
 
+from scipy.stats import norm
+
+def compute_final_score(raw_value, mean, std, n, C=500, confidence=0.95):
+    """
+    성과를 Z-Score로 변환하고, 신뢰 하한과 유지난이도 보정을 반영한 점수 계산 함수.
+    
+    - raw_value: 사용자 스탯 값
+    - mean: 공식 평균
+    - std: 사용자 집단 표준편차
+    - n: 판 수
+    - C: 기준 판수 (default=500)
+    - confidence: 신뢰수준 (default=95%)
+    """
+    if n == 0 or std == 0:
+        return -999  # 점수 무효 처리
+
+    z = (raw_value - mean) / std
+
+    # 🧠 신뢰구간 기반 하한값 보정
+    z_critical = norm.ppf((1 + confidence) / 2)  # e.g., 1.96 for 95%
+    se = std / (n ** 0.5)
+    adjusted_z = z - z_critical * (se / std)
+
+    # 🔼 유지 난이도 기반 보정 (판수가 많을수록 점수 상승)
+    if n > C:
+        factor = (n - C) / C
+        bonus = 1 + min(factor * 0.1, 0.15)  # 최대 +15%
+        adjusted_z *= bonus
+
+    return adjusted_z
+
+
+
+
+
+
 @tree.command(name="전적해설", description="특정 유저 시즌 점수 계산 해설을 확인합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(닉네임="PUBG 닉네임")
 async def 전적해설(interaction: discord.Interaction, 닉네임: str):
     await interaction.response.defer()
+
+    import os, json, statistics
+    from scipy.stats import norm
+
+    def compute_final_score(raw_value, mean, std, n, C=500, confidence=0.95):
+        if n == 0 or std == 0:
+            return -999
+        z = (raw_value - mean) / std
+        z_critical = norm.ppf((1 + confidence) / 2)
+        se = std / (n ** 0.5)
+        adjusted_z = z - z_critical * (se / std)
+        if n > C:
+            factor = (n - C) / C
+            bonus = 1 + min(factor * 0.1, 0.15)
+            adjusted_z *= bonus
+        return adjusted_z, z, adjusted_z * std + mean  # 보정 z, 원래 z, 보정 후 역변환 값
 
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
@@ -1819,34 +1871,6 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
         return
 
     keys = ["avg_damage", "kd", "win_rate", "top10_ratio", "headshot_pct", "avg_survive"]
-
-    # 최신 공식 전체 배틀그라운드 평균값 (신뢰 가능한 출처로 갱신 가능)
-    official_means = {
-        "avg_damage": 153.18,
-        "kd": 1.17,
-        "win_rate": 5.49,
-        "top10_ratio": 41.46,
-        "headshot_pct": 18.86,
-        "avg_survive": 575.82
-    }
-
-    # 공식 표준편차도 임의로 넣거나, 서버 데이터로 계산하되 기본값 사용 권장
-    import statistics
-    metric_lists = {k: [p.get("squad", {}).get(k, 0) for p in players if isinstance(p.get("squad"), dict)] for k in keys}
-    stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
-
-    def z_score(val, key):
-        return (val - official_means.get(key, 0)) / stds[key]
-
-    M_CONFIDENCE = 500
-    PENALTY_SCORE = 0.5
-
-    factor = games / (games + M_CONFIDENCE)
-
-    explanation_lines = [f"🏅 **{닉네임}** 님의 시즌 점수 해설\n"]
-    explanation_lines.append(f"🎮 게임 수: {games} 판 (보정계수: {factor:.3f})\n")
-
-    total_score = 0
     weights = {
         "avg_damage": 0.25,
         "kd": 0.25,
@@ -1856,24 +1880,50 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
         "avg_survive": 0.10
     }
 
+    official_means = {
+        "avg_damage": 153.18,
+        "kd": 1.17,
+        "win_rate": 5.49,
+        "top10_ratio": 41.46,
+        "headshot_pct": 18.86,
+        "avg_survive": 575.82
+    }
+
+    metric_lists = {
+        k: [p.get("squad", {}).get(k, 0) for p in players if isinstance(p.get("squad"), dict)]
+        for k in keys
+    }
+    stds = {
+        k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1
+        for k, v in metric_lists.items()
+    }
+
+    explanation_lines = [f"🏅 **{닉네임}** 님의 시즌 점수 해설\n"]
+    explanation_lines.append(f"🎮 게임 수: {games} 판\n")
+
+    total_score = 0
+
     for key in keys:
         val = squad.get(key, 0)
         mean = official_means.get(key, 0)
         std = stds[key]
-        z = z_score(val, key)
-        adj = z * factor - PENALTY_SCORE * (1 - factor)
-        contrib = adj * weights[key]
+
+        adj_z, raw_z, inferred_val = compute_final_score(val, mean, std, games)
+        contrib = adj_z * weights[key]
         total_score += contrib
 
         explanation_lines.append(
             f"📊 {key} : {val:.2f} (공식 평균: {mean:.2f}, 표준편차: {std:.2f})\n"
-            f"    → Z-Score: {z:.3f}, 보정 후: {adj:.3f}, 가중치: {weights[key]*100:.0f}%, 점수 기여도: {contrib:.3f}"
+            f"    → Z-Score: {raw_z:.3f}, 보정 Z: {adj_z:.3f}, 기여도: {contrib:.3f}, 가중치: {weights[key]*100:.0f}%"
         )
 
-    explanation_lines.append(f"\n🏆 최종 종합 점수: **{total_score:.3f}** (점수가 높을수록 우수)")
-    explanation_lines.append("\n⚠️ 게임 수가 적을수록 평균보다 낮게 점수가 보정되어 신뢰도가 낮은 점수에 페널티가 적용됩니다.")
+    explanation_lines.append(f"\n🏆 최종 종합 점수: **{total_score:.3f}**")
+    explanation_lines.append("📌 Z-Score는 통계적으로 얼마나 평균보다 높은지를 의미하며,")
+    explanation_lines.append("📌 신뢰 하한 기반 보정과 고판수 보정으로 공정한 점수를 산출합니다.")
+    explanation_lines.append("📌 판수가 많을수록 성과 유지에 대한 가산점이 소폭 부여됩니다. (최대 +15%)")
 
     await interaction.followup.send("\n".join(explanation_lines), ephemeral=True)
+
 
 
 @전적해설.autocomplete("닉네임")
@@ -1907,16 +1957,18 @@ async def 닉네임_자동완성(interaction: discord.Interaction, current: str)
 
 
 
+
 @tree.command(name="시즌랭킹", description="현재 시즌의 항목별 TOP7을 확인합니다.", guild=discord.Object(id=GUILD_ID))
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
 
-    import statistics
     import os
     import json
+    import statistics
+    from scipy.stats import norm
 
-    M_CONFIDENCE = 500  # 판수 보정 기준값
-    PENALTY_SCORE = 0.5  # 판수 적을 때 평균 이하로 내릴 페널티 강도 (조절 가능)
+    M_CONFIDENCE = 500  # 기준 판수
+    leaderboard_path = "season_leaderboard.json"
 
     weights = {
         "avg_damage": 0.25,
@@ -1927,7 +1979,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
         "avg_survive": 0.10
     }
 
-    leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
         await interaction.followup.send("❌ 아직 저장된 전적 데이터가 없습니다.", ephemeral=True)
         return
@@ -1951,7 +2002,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
             return 0
         return squad.get(key, 0)
 
-    # 공식 전체 배틀그라운드 평균값 (실제 최신 공식 데이터로 교체하세요)
     official_means = {
         "avg_damage": 153.18,
         "kd": 1.17,
@@ -1961,16 +2011,22 @@ async def 시즌랭킹(interaction: discord.Interaction):
         "avg_survive": 575.82
     }
 
-    # 표준편차는 유저 데이터 기준으로 계산
     metric_lists = {k: [safe_get(p, k) for p in players] for k in keys}
     stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
+    means = official_means
 
-    means = official_means  # 평균값을 공식 평균으로 대체
-
-    def adjusted_score(z, n, C=M_CONFIDENCE, penalty=PENALTY_SCORE):
-        factor = n / (n + C)
-        penalty_factor = C / (n + C)
-        return z * factor - penalty * penalty_factor
+    def compute_final_score(raw_value, mean, std, n, C=M_CONFIDENCE, confidence=0.95):
+        if n == 0 or std == 0:
+            return -999
+        z = (raw_value - mean) / std
+        z_critical = norm.ppf((1 + confidence) / 2)
+        se = std / (n ** 0.5)
+        adjusted_z = z - z_critical * (se / std)
+        if n > C:
+            factor = (n - C) / C
+            bonus = 1 + min(factor * 0.1, 0.15)  # 최대 +15%
+            adjusted_z *= bonus
+        return adjusted_z
 
     seen_names = set()
     weighted_list = []
@@ -1988,18 +2044,16 @@ async def 시즌랭킹(interaction: discord.Interaction):
         if games == 0:
             continue
 
-        def z_score(key):
-            val = squad.get(key, 0)
-            mean = means.get(key, 0)
-            std = stds.get(key, 1)
-            return (val - mean) / std
-
         adj_scores = {}
         for k in keys:
-            adj_scores[k] = adjusted_score(z_score(k), games)
+            adj_scores[k] = compute_final_score(
+                squad.get(k, 0),
+                means[k],
+                stds[k],
+                games
+            )
 
         score = sum(adj_scores[k] * weights[k] for k in keys)
-
         weighted_list.append((
             name,
             score,
@@ -2009,7 +2063,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
     weighted_top = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:7]
 
-    # 중복 제거 후 각 항목별 TOP7 리스트 생성
     def unique_top(lst):
         seen = set()
         result = []
@@ -2085,11 +2138,10 @@ async def 시즌랭킹(interaction: discord.Interaction):
         name="📌 점수 계산 안내",
         value=(
             "1️⃣ 종합점수는 데미지, K/D, 승률, Top10 진입률, 헤드샷률, 평균 생존시간을 기반으로 계산됩니다.\n"
-            "2️⃣ 각 항목은 Z-Score로 표준화되고, 판수에 따른 보정이 개별 항목별로 적용됩니다.\n"
-            "3️⃣ 판수가 적으면 평균보다 낮게 보정되어, 신뢰도가 낮은 점수를 페널티로 처리합니다.\n"
-            "4️⃣ 최종 점수 = (각 항목별 점수 × 가중치) × (게임수 ÷ (게임수 + 500)) - 페널티 보정 포함\n"
-            "5️⃣ 가중치는 데미지 25%, K/D 25%, 승률 20%, Top10 10%, 헤드샷 10%, 생존시간 10%입니다.\n"
-            "6️⃣ 평균은 배틀그라운드 공식 전체 유저 평균값을 사용합니다."
+            "2️⃣ 각 항목은 Z-Score로 표준화되며, 표준오차 기반 신뢰 하한값으로 조정됩니다.\n"
+            "3️⃣ 판수가 많을수록 성과 유지 난이도를 고려한 소폭 가산점이 적용됩니다. (최대 15%)\n"
+            "4️⃣ 최종 점수 = (조정된 Z × 가중치)의 합으로 계산됩니다.\n"
+            "5️⃣ 평균은 배틀그라운드 공식 전체 유저 평균값을 사용합니다."
         ),
         inline=False
     )
@@ -2102,6 +2154,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         embed.set_footer(text="※ 기준: 저장된 유저 전적")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
