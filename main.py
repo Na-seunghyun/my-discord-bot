@@ -9702,9 +9702,8 @@ async def playtest(interaction: discord.Interaction):
             print("[PlayTest] Pool.connect 예외:", e)
             return await interaction.followup.send(f"❌ Lavalink 연결 실패: {e}", ephemeral=True)
 
-    # 3) Pool 노드 확인
+    # 3) Pool 노드 확인 (v4에서는 wait_until_ready 없음)
     try:
-        await wavelink.Pool.wait_until_ready()
         node = wavelink.Pool.get_node()
         print("[PlayTest] 사용할 노드:", node)
     except Exception as e:
