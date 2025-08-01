@@ -1819,18 +1819,21 @@ def generate_ranked_embed(ranked_stats, nickname="플레이어"):
 async def 전적(interaction: discord.Interaction, 닉네임: str):
     await interaction.response.defer()
     try:
-        player_id = get_player_id(닉네임)
+        player_id = get_player_id(닉네임)  # ✅ 이게 pubg_id
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
-
- 
         ranked = get_player_ranked_stats(player_id, season_id)
 
         squad_metrics, error = extract_squad_metrics(stats)
         if squad_metrics:
             save_player_stats_to_file(
-                닉네임, squad_metrics, ranked, stats,
-                discord_id=interaction.user.id, source="전적명령"
+                닉네임,
+                squad_metrics,
+                ranked,
+                stats=stats,
+                discord_id=interaction.user.id,
+                pubg_id=player_id,                      # ✅ pubg_id를 반드시 넘긴다!
+                source="전적명령"
             )
 
         embed = generate_mode_embed(stats, "squad", 닉네임)
@@ -1839,8 +1842,6 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
     except Exception as e:
         await interaction.followup.send(f"❌ 오류 발생: {e}", ephemeral=True)
-
-
 
 
 
@@ -2940,7 +2941,7 @@ async def start_pubg_collection():
                     stats = get_player_stats(player_id, season_id)
                     ranked_stats = get_player_ranked_stats(player_id, season_id)
                     squad_metrics, _ = extract_squad_metrics(stats)
-                    save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, discord_id=m["discord_id"], source="자동갱신")
+                    save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, discord_id=m["discord_id"], pubg_id=player_id, source="자동갱신")
 
                     print(f"✅ 저장 성공: {nickname}")
                     failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
