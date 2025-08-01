@@ -8899,7 +8899,13 @@ MUSIC_VOICE_CHANNEL_ID = 1400712268932583435
 
 current_playing = {}  # guild_id: {"title": ..., "url": ...}
 
-YDL_OPTS = {"format": "bestaudio/best", "noplaylist": True, "quiet": True}
+YDL_OPTS = {
+    "format": "bestaudio/best",
+    "noplaylist": True,
+    "quiet": True,
+    "cookiefile": "cookies.txt",  # ✅ 유튜브 로그인 쿠키 사용
+    "extractor_args": {"youtube": {"player_client": ["android"]}},  # (옵션) 우회율 높이기
+}
 FFMPEG_OPTS = {"options": "-vn"}
 YOUTUBE_URL_RE = re.compile(r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/")
 
