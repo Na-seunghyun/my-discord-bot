@@ -2041,7 +2041,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
 
     import os, json, statistics
-    from scipy.stats import norm
 
     weights = {
         "avg_damage": 0.28,
@@ -2083,12 +2082,17 @@ async def 시즌랭킹(interaction: discord.Interaction):
     except Exception:
         return await interaction.followup.send("❌ 유효 PUBG ID 목록을 불러오지 못했습니다.", ephemeral=True)
 
+    # ✅ 유효 게임 ID + 디스코드 ID 수집 (is_guest 제외)
     valid_pubg_ids = set()
     valid_discord_ids = set()
     for entry in valid_data:
         if not entry.get("is_guest", False):
-            valid_pubg_ids.add(entry.get("game_id", ""))
-            valid_discord_ids.add(str(entry.get("discord_id", "")))
+            game_id = entry.get("game_id", "").strip().lower()
+            discord_id = str(entry.get("discord_id", "")).strip()
+            if game_id:
+                valid_pubg_ids.add(game_id)
+            if discord_id:
+                valid_discord_ids.add(discord_id)
 
     # ✅ season_leaderboard.json 로드
     leaderboard_path = "season_leaderboard.json"
@@ -2101,13 +2105,23 @@ async def 시즌랭킹(interaction: discord.Interaction):
     raw_players = data.get("players", [])
     total_saved_non_guest = sum(1 for p in raw_players if "(게스트)" not in p.get("nickname", ""))
 
-    # ✅ 필터: 게스트X, pubg_id 포함, discord_id 포함
-    players = [
-        p for p in raw_players
-        if "(게스트)" not in p.get("nickname", "")
-        and p.get("pubg_id", "") in valid_pubg_ids
-        and str(p.get("discord_id", "")) in valid_discord_ids
-    ]
+    # ✅ 유효 필터링 (nickname / pubg_id / discord_id)
+    players = []
+    for p in raw_players:
+        nickname = p.get("nickname", "")
+        pubg_id = p.get("pubg_id", "").strip().lower()
+        discord_id = str(p.get("discord_id", "")).strip()
+
+        if "(게스트)" in nickname:
+            continue
+        if pubg_id not in valid_pubg_ids:
+            print(f"❌ 제외: pubg_id 불일치 → {pubg_id}")
+            continue
+        if discord_id not in valid_discord_ids:
+            print(f"❌ 제외: discord_id 불일치 → {discord_id}")
+            continue
+
+        players.append(p)
 
     if not players:
         return await interaction.followup.send("❌ 유효한 유저 전적이 없습니다. (게스트 제외 + ID검사 통과자 없음)", ephemeral=True)
