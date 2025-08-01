@@ -408,29 +408,86 @@ MAINTENANCE_TIERS = [
 DOKDO_CHANNEL_ID = 1394331814642057418  # 오덕도박장
 
 
+DISCORD_MESSAGE_LIMIT = 4000        # 디스코드 메시지 본문 최대 길이
+EMBED_DESCRIPTION_LIMIT = 2048      # 임베드 description 권장 최대
+FILE_FALLBACK_THRESHOLD = 4000 * 6  # 이 길이를 넘으면 파일로 전달
+
+async def send_long_message(channel: discord.abc.Messageable, lines: list[str], limit: int = DISCORD_MESSAGE_LIMIT):
+    """
+    lines(list[str])를 메시지 길이 제한에 맞춰 여러 번 나눠서 순차 전송합니다.
+    각 줄이 단독으로도 limit를 초과할 수 있으므로, 그 경우 줄 자체를 여러 조각으로 분할합니다.
+    """
+    if not lines:
+        return
+
+    # 전체 텍스트가 지나치게 길면 파일로 전송하는 우회
+    full_text = "\n".join(lines)
+    if len(full_text) > FILE_FALLBACK_THRESHOLD:
+        fp = io.BytesIO(full_text.encode("utf-8"))
+        fp.seek(0)
+        await channel.send(
+            content="📄 내용이 길어 파일로 전달합니다.",
+            file=discord.File(fp, filename="maintenance_report.txt")
+        )
+        return
+
+    chunk = ""
+    for line in lines:
+        # 한 줄이 limit보다 긴 특수 케이스 처리
+        if len(line) > limit:
+            # 남아있던 chunk 먼저 전송
+            if chunk:
+                await channel.send(chunk)
+                chunk = ""
+            # line을 limit 사이즈로 쪼개서 전송
+            i = 0
+            while i < len(line):
+                await channel.send(line[i:i+limit])
+                i += limit
+            continue
+
+        # 현재 줄 추가 시 제한 초과면 먼저 전송
+        if len(chunk) + len(line) + 1 > limit:
+            await channel.send(chunk)
+            chunk = ""
+
+        chunk += (line + "\n")
+
+    if chunk:
+        await channel.send(chunk)
+
+
 async def apply_maintenance_costs(bot):
+    """
+    자산 유지비(감가)를 3시간마다 적용하고, 결과를 공지 채널(DOKDO_CHANNEL_ID)에 안내합니다.
+    - MAINTENANCE_TIERS: List[Tuple[int, float]]  예) [(10000000, 0.02), (5000000, 0.015), (1000000, 0.01)]
+      (threshold, rate) 형태. 큰 금액 티어부터 적용되도록 내림차순 정렬하여 사용.
+    - load_balances()/save_balances(): 유저 자산 로드/저장 함수
+    - fetch_user_safe(user_id): Member or User(없으면 None) 반환
+    - KST: Asia/Seoul tzinfo (없으면 timezone(timedelta(hours=9)))
+    """
     balances = load_balances()
-    now = datetime.now(KST).isoformat()
-    changed_users = []
+    now = datetime.now(KST).isoformat() if 'KST' in globals() else datetime.now(timezone.utc).isoformat()
+    changed_users: list[tuple[str, int, int, float, int, int]] = []
 
     # ✅ 티어는 큰 기준부터 적용되도록 내림차순 정렬
     tiers_desc = sorted(MAINTENANCE_TIERS, key=lambda x: x[0], reverse=True)
-    min_threshold = tiers_desc[-1][0]  # ✅ 최저 티어 기준(현재 100만 원)
+    min_threshold = tiers_desc[-1][0]  # ✅ 최저 티어 기준(예: 1,000,000)
 
     for user_id, info in balances.items():
-        amount = info.get("amount", 0)
+        amount = int(info.get("amount", 0))
 
         # ✅ 최저 티어 미만은 감가 대상 아님
         if amount < min_threshold:
             continue
 
         # ✅ MAINTENANCE_TIERS 기준 감가율 결정(가장 높은 티어 우선)
-        rate = 0
+        rate = 0.0
         applied_threshold = 0
         for threshold, r in tiers_desc:
             if amount >= threshold:
-                rate = r
-                applied_threshold = threshold
+                rate = float(r)
+                applied_threshold = int(threshold)
                 break
 
         deduction = int(amount * rate)
@@ -449,28 +506,38 @@ async def apply_maintenance_costs(bot):
 
     save_balances(balances)
 
-    # ✅ 오덕도박장 채널에 안내 메시지 전송
-    if changed_users:
-        channel = bot.get_channel(DOKDO_CHANNEL_ID)
-        if channel:
-            msg_lines = ["💸 **자산 유지비 감가 정산 결과**"]
-            for uid, before, after, rate, th, cut in changed_users:
-                member = await fetch_user_safe(uid)
-                name = member.display_name if member else f"ID:{uid}"
-                msg_lines.append(
-                    f"• {name} → **{before:,}원 → {after:,}원** "
-                    f"(이번 회차 {cut:,}원 차감, 적용율 {int(rate*100)}%, 티어 ≥{th:,}원)"
-                )
+    # ✅ 안내 메시지 전송
+    if not changed_users:
+        return
 
-            # 정책 안내(주기/티어/최소 보장) — 티어 최저 기준을 자동 반영
-            tier_desc = " / ".join([f"≥{t:,}원 {int(r*100)}%" for t, r in tiers_desc])
-            msg_lines.append(
-                f"\n📉 자산이 **{min_threshold:,}원 이상**일 경우 **3시간마다** 감가가 적용됩니다.\n"
-                f"🧮 적용 티어: {tier_desc}\n"
-                f"🛡️ 감가 후 최소 보장: **1,000,000원**"
-            )
+    channel = bot.get_channel(DOKDO_CHANNEL_ID)
+    if not channel:
+        print(f"[apply_maintenance_costs] 채널(ID={DOKDO_CHANNEL_ID})을 찾을 수 없습니다.")
+        return
 
-            await channel.send("\n".join(msg_lines))
+    msg_lines: list[str] = ["💸 **자산 유지비 감가 정산 결과**"]
+
+    # 각 유저 결과 라인 구성
+    for uid, before, after, rate, th, cut in changed_users:
+        member = await fetch_user_safe(uid)
+        name = (getattr(member, "display_name", None)
+                or getattr(member, "name", None)
+                or f"ID:{uid}")
+        msg_lines.append(
+            f"• {name} → **{before:,}원 → {after:,}원** "
+            f"(이번 회차 {cut:,}원 차감, 적용율 {int(rate*100)}%, 티어 ≥{th:,}원)"
+        )
+
+    # 정책 안내(주기/티어/최소 보장) — 티어 최저 기준을 자동 반영
+    tier_desc = " / ".join([f"≥{t:,}원 {int(r*100)}%" for t, r in tiers_desc])
+    msg_lines.append(
+        f"\n📉 자산이 **{min_threshold:,}원 이상**일 경우 **3시간마다** 감가가 적용됩니다.\n"
+        f"🧮 적용 티어: {tier_desc}\n"
+        f"🛡️ 감가 후 최소 보장: **1,000,000원**"
+    )
+
+    # ✅ 길이 제한 안전 전송
+    await send_long_message(channel, msg_lines)
 
 
 
