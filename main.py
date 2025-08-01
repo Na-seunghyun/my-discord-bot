@@ -9142,6 +9142,14 @@ import os, re, math, asyncio
 import aiosqlite
 import wavelink
 
+import logging
+
+# ——— wavelink REST 디버그를 위해 로깅 레벨 설정 ———
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("wavelink.rest").setLevel(logging.DEBUG)
+
+
+
 # ── 음악 채널 (원하면 그대로 사용) ─────────────────────────
 MUSIC_TEXT_CHANNEL_ID = 1400712729001721877
 MUSIC_VOICE_CHANNEL_ID = 1400712268932583435
@@ -9323,34 +9331,50 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
         self.parent_view = parent_view
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(thinking=True)
+        # 1) 검색어 준비 & 로그
         artist = self.artist.value.strip()
         title  = self.title_.value.strip()
-        query_norm = _norm_query(artist, title)
         query = f"{artist} {title}".strip()
-
-        # 1) 플레이어 연결 (생략) …
-        player = await get_or_connect_player(interaction)
-
-        # → 여기서 바로 로그
         print(f"[SongSearch] ▶️ 검색 시작: {query}")
 
-        # 2) 캐시 미스 시 Lavalink 검색
-        track = None
-        try:
-            # YouTubeTrack.search 로 시도
-            print(f"[SongSearch]   · YouTubeTrack.search 호출")
-            yt_results = await wavelink.YouTubeTrack.search(query=query, limit=1)
-            print(f"[SongSearch]   · YouTubeTrack.search 결과: {yt_results!r}")
-            if yt_results:
-                track = yt_results[0]
-        except Exception as e:
-            print(f"[SongSearch]   ⚠️ YouTubeTrack.search 예외: {e}")
+        await interaction.response.defer(thinking=True)
 
-        # 3) Playable.search 폴백
-        if not track:
+        # 2) 플레이어 연결
+        try:
+            player = await get_or_connect_player(interaction)
+        except Exception as e:
+            return await interaction.followup.send(f"❌ 플레이어 연결 실패: {e}", ephemeral=True)
+
+        track = None
+        norm = _norm_query(artist, title)
+
+        # 3) 캐시 조회
+        print("[SongSearch]   · 캐시 조회")
+        cached_url = await cache_get_video_url(norm)
+        print(f"[SongSearch]   · 캐시 URL: {cached_url!r}")
+        if cached_url:
             try:
-                print(f"[SongSearch]   · Playable.search 호출")
+                results = await wavelink.Playable.search(cached_url)
+                if results:
+                    track = results[0]
+            except Exception as e:
+                print(f"[SongSearch]   ⚠️ 캐시 재생 예외: {e}")
+
+        # 4) YouTubeTrack.search 폴백
+        if not track:
+            print("[SongSearch]   · YouTubeTrack.search 호출")
+            try:
+                yt = await wavelink.YouTubeTrack.search(query=query, limit=1)
+                print(f"[SongSearch]   · YouTubeTrack.search 결과: {yt!r}")
+                if yt:
+                    track = yt[0]
+            except Exception as e:
+                print(f"[SongSearch]   ⚠️ YouTubeTrack.search 예외: {e}")
+
+        # 5) Playable.search 최종 폴백
+        if not track:
+            print("[SongSearch]   · Playable.search 호출")
+            try:
                 plays = await wavelink.Playable.search(f"ytsearch:{query}")
                 print(f"[SongSearch]   · Playable.search 결과: {plays!r}")
                 if plays:
@@ -9358,27 +9382,31 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
             except Exception as e:
                 print(f"[SongSearch]   ⚠️ Playable.search 예외: {e}")
 
-        # 4) 트랙 발견 여부 로그
-        if track:
-            print(f"[SongSearch] ✅ 트랙 발견: {track.title} ({getattr(track,'uri',None)})")
-        else:
-            print(f"[SongSearch] ❌ 트랙 미발견")
-
-        # 5) 결과 없으면 안내
+        # 6) 발견 여부 체크
         if not track:
+            print("[SongSearch] ❌ 트랙 미발견")
             return await interaction.followup.send(
                 "🔍 검색 결과를 찾지 못했어요. 키워드를 조금 바꿔볼까요?",
                 ephemeral=True
             )
-        # 6) 대기열 또는 즉시 재생
-        player.queue.put(track)
+        print(f"[SongSearch] ✅ 트랙 발견: {track.title} ({track.uri})")
+
+        # 7) 캐시에 저장
+        try:
+            await cache_set_video_url(norm, track.uri, track.title)
+        except Exception as e:
+            print(f"[SongSearch] ⚠️ 캐시 저장 실패: {e}")
+
+        # 8) 재생 또는 대기열
         if not player.playing:
-            await player.play(player.queue.get())
+            await player.play(track)
             msg = f"▶️ 재생 시작: **{track.title}**"
         else:
+            player.queue.put(track)
             msg = f"➕ 대기열 추가: **{track.title}**"
 
         await interaction.followup.send(msg)
+
 
 
 
