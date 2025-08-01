@@ -9673,37 +9673,47 @@ async def beep(interaction: discord.Interaction):
 
 @tree.command(
     name="테스트재생",
-    description="channel.connect(cls=wavelink.Player) 방식으로 재생 테스트",
+    description="node.get_tracks(ytsearch:…) 으로 재생 테스트",
     guild=discord.Object(id=GUILD_ID)
 )
 async def playtest(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
-
     # 1) 음성 채널 체크
     channel = interaction.user.voice.channel if interaction.user.voice else None
     if not channel:
         return await interaction.followup.send("❌ 먼저 음성 채널에 접속해주세요!", ephemeral=True)
 
-    # 2) 채널에 직접 연결 (wavelink.Player 사용)
+    # 2) VoiceClient 가져오기 / 연결
     player: wavelink.Player = interaction.guild.voice_client  # type: ignore
     if not player:
         player = await channel.connect(cls=wavelink.Player)
     print("[PlayTest] Player 객체:", player)
 
-    # 3) 테스트 트랙 검색 (limit 제거)
-    print("[PlayTest] Playable.search 호출")
-    results = await wavelink.Playable.search("ytsearch:IU LILAC")
-    print(f"[PlayTest] Playable.search 결과: {results!r}")
+    # 3) Pool에 연결된 노드 확인
+    node = wavelink.Pool.get_node()
+    print(f"[PlayTest] 연결된 Lavalink 노드: {node!r}")
+
+    # 4) node.get_tracks 로 직접 검색
+    query = "IU LILAC"
+    print(f"[PlayTest] node.get_tracks 호출: ytsearch:{query}")
+    results = await node.get_tracks(f"ytsearch:{query}")
+    print(f"[PlayTest] node.get_tracks 결과: {results!r}")
+
     if not results:
         return await interaction.followup.send("❌ 테스트 트랙을 찾을 수 없습니다.", ephemeral=True)
     track = results[0]
-    print("[PlayTest] 트랙 URI:", track.uri)
+    print("[PlayTest] 선택된 트랙 URI:", track.uri)
 
-    # 4) 재생
-    await player.play(track)
-    print("[PlayTest] play() 호출 완료")
+    # 5) 재생
+    try:
+        await player.play(track)
+        print("[PlayTest] play() 호출 완료")
+    except Exception as e:
+        print("[PlayTest] play() 예외:", e)
+        return await interaction.followup.send(f"❌ 재생 실패: {e}", ephemeral=True)
 
     await interaction.followup.send(f"▶️ 테스트 재생 시작: **{track.title}**")
+
 
 
 
