@@ -9615,38 +9615,61 @@ async def init_song_cache_table():
 
 
 
+# main.py 상단에, 이미 import 되어 있겠지만 혹시 누락됐다면 추가:
+import os
+import discord
+from discord import app_commands
+
+# (bot, tree, GUILD_ID 등 기존 설정 부분)
+
 @tree.command(
     name="삑",
     description="짧은 테스트 삑 소리를 재생합니다.",
     guild=discord.Object(id=GUILD_ID)
 )
 async def beep(interaction: discord.Interaction):
-    # 1) 응답을 defer 해서 생각 중 표시
+    # 1) defer
     await interaction.response.defer(thinking=True)
+    print("[Beep] 커맨드 호출됨")
 
-    # 2) 유저가 음성 채널에 있는지 체크
-    if not interaction.user.voice or not interaction.user.voice.channel:
-        return await interaction.followup.send(
-            "❌ 먼저 음성 채널에 접속해주세요!",
-            ephemeral=True
-        )
+    # 2) 음성 채널 체크
+    channel = interaction.user.voice.channel if interaction.user.voice else None
+    print("[Beep] 유저 채널:", channel)
+    if not channel:
+        return await interaction.followup.send("❌ 먼저 음성 채널에 접속해주세요!", ephemeral=True)
 
-    channel = interaction.user.voice.channel
+    # 3) 파일 경로 및 존재 확인
+    path = os.path.join(os.path.dirname(__file__), "test.wav")
+    print("[Beep] 파일 경로:", path)
+    print("[Beep] 파일 존재:", os.path.exists(path))
+    if not os.path.exists(path):
+        return await interaction.followup.send("❌ test.wav 파일을 찾을 수 없습니다.", ephemeral=True)
 
-    # 3) 기존에 연결된 VoiceClient 있으면 쓰고, 없으면 새로 연결
+    # 4) VoiceClient 연결
     vc: discord.VoiceClient = interaction.guild.voice_client  # type: ignore
     if not vc:
+        print("[Beep] 새로 연결 시도")
         vc = await channel.connect()
+    print("[Beep] VoiceClient:", vc)
 
-    # 4) test.wav 파일을 FFmpegPCMAudio 로 재생
-    source = discord.FFmpegPCMAudio("/home/ubuntu/my-discord-bot/test.wav")
-    vc.play(source, after=lambda e: print(f"Beep playback done, error: {e}"))
+    # 5) FFmpegPCMAudio 생성
+    try:
+        source = discord.FFmpegPCMAudio(path)
+        print("[Beep] FFmpegPCMAudio 생성 성공")
+    except Exception as e:
+        print("[Beep] FFmpegPCMAudio 생성 실패:", e)
+        return await interaction.followup.send(f"❌ FFmpeg 로드 실패: {e}", ephemeral=True)
 
-    # 5) 사용자에게 피드백
-    await interaction.followup.send(
-        "🔊 테스트 삑 소리를 재생했습니다!",
-        ephemeral=True
-    )
+    # 6) 재생
+    try:
+        vc.play(source, after=lambda e: print("[Beep] 재생 완료, 오류:", e))
+        print("[Beep] play() 호출됨")
+    except Exception as e:
+        print("[Beep] play() 예외:", e)
+        return await interaction.followup.send(f"❌ 재생 실패: {e}", ephemeral=True)
+
+    # 7) 사용자 피드백
+    await interaction.followup.send("🔊 Beep 테스트 재생중...", ephemeral=True)
 
 
 
