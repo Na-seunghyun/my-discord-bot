@@ -9149,7 +9149,110 @@ def init_building_db():
     conn.commit()
     conn.close()
 
+import discord
+from discord.ext import commands
+from discord import app_commands
+import yt_dlp
 
+intents = discord.Intents.default()
+intents.message_content = True
+intents.voice_states = True
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+tree = bot.tree
+
+GUILD_ID = 123456789012345678  # 너의 서버 ID
+
+FFMPEG_OPTIONS = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn'
+}
+
+# ✅ 유튜브 검색
+def get_youtube_audio_url(query):
+    ydl_opts = {
+        'format': 'bestaudio',
+        'noplaylist': True,
+        'default_search': 'ytsearch',
+        'quiet': True
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(query, download=False)
+        if 'entries' in info:
+            info = info['entries'][0]
+        return info['url'], info['title']
+
+# ✅ 버튼 컨트롤 뷰
+class MusicControlView(discord.ui.View):
+    def __init__(self, voice_client):
+        super().__init__(timeout=180)
+        self.voice = voice_client
+        self.is_paused = False
+
+    @discord.ui.button(label="⏸️ 일시정지", style=discord.ButtonStyle.secondary)
+    async def pause_resume(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.voice.is_playing():
+            return await interaction.response.send_message("⛔ 재생 중이 아닙니다.", ephemeral=True)
+
+        if self.is_paused:
+            self.voice.resume()
+            button.label = "⏸️ 일시정지"
+            self.is_paused = False
+        else:
+            self.voice.pause()
+            button.label = "▶️ 다시재생"
+            self.is_paused = True
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="⏹️ 정지", style=discord.ButtonStyle.danger)
+    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.voice.stop()
+        await interaction.response.send_message("⏹️ 재생을 중지했어요.", ephemeral=True)
+
+    @discord.ui.button(label="👋 종료", style=discord.ButtonStyle.red)
+    async def disconnect(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.voice.disconnect()
+        await interaction.response.send_message("👋 음성 채널에서 나갔습니다.", ephemeral=True)
+        self.stop()
+
+# ✅ Modal (검색창)
+class SongSearchModal(discord.ui.Modal, title="노래 검색"):
+    artist = discord.ui.TextInput(label="가수", placeholder="예: IU", max_length=80)
+    title_ = discord.ui.TextInput(label="제목", placeholder="예: Love wins all", max_length=100)
+
+    def __init__(self, parent_view: discord.ui.View | None = None):
+        super().__init__(timeout=180)
+        self.parent_view = parent_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+        artist = str(self.artist).strip()
+        title = str(self.title_).strip()
+        query = f"{artist} {title}".strip()
+
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            return await interaction.followup.send("❌ 먼저 음성 채널에 들어가세요!", ephemeral=True)
+
+        channel = interaction.user.voice.channel
+        voice = discord.utils.get(bot.voice_clients, guild=interaction.guild)
+        if not voice or not voice.is_connected():
+            voice = await channel.connect()
+        elif voice.channel != channel:
+            await voice.move_to(channel)
+
+        try:
+            url, song_title = get_youtube_audio_url(query)
+            source = discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS)
+            voice.play(source)
+            view = MusicControlView(voice)
+            await interaction.followup.send(f"▶️ **{song_title}** 재생 중!", view=view)
+        except Exception as e:
+            await interaction.followup.send(f"❌ 재생 실패: {e}", ephemeral=True)
+
+# ✅ /오덕송 명령어
+@tree.command(name="오덕송", description="유튜브에서 오덕송을 재생합니다.", guild=discord.Object(id=GUILD_ID))
+async def 오덕송(interaction: discord.Interaction):
+    await interaction.response.send_modal(SongSearchModal())
 
 
 
@@ -9168,36 +9271,19 @@ def init_building_db():
 async def on_ready():
     global oduk_pool_cache, invites_cache
 
+    # ✅ Opus 코덱 로딩 확인
     print("🔊 Opus loaded:", discord.opus.is_loaded())
 
+    # ✅ 기존 초기화 로직 유지
     await process_overdue_loans_on_startup(bot)
     init_building_db()
     auto_repay_check.start()
     accumulate_building_rewards.start()
     await init_song_cache_table()
+
     print(f"🤖 봇 로그인됨: {bot.user}")
 
-    # ✅ Lavalink 노드 연결 디버깅 시작
-    if not wavelink.Pool.nodes:
-        print("🔌 Lavalink 노드 연결 시도 중...")
-        try:
-            await wavelink.Pool.connect(
-                client=bot,
-                nodes=[
-                    wavelink.Node(
-                        uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
-                        password=LAVALINK_PASSWORD,
-                    )
-                ]
-            )
-            print(f"🎧 Lavalink 노드 연결 성공! 노드 수: {len(wavelink.Pool.nodes)}")
-        except Exception as e:
-            print(f"❌ Lavalink 노드 연결 실패: {type(e).__name__}: {e}")
-    else:
-        print("✅ 이미 Lavalink 노드가 연결되어 있습니다.")
-
-    print("🔌 Pool.nodes 상태:", wavelink.Pool.nodes)
-
+    # 🎵 FFmpeg 기반으로 전환했기 때문에 Lavalink 관련 제거됨
 
 
 
