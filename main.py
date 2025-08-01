@@ -9511,13 +9511,13 @@ async def on_ready():
     # ✅ Lavalink 연결 디버깅 시작
     print("🔌 Lavalink 노드 연결 시도 중...")
 
-    if not wavelink.Pool.nodes:
+    if not wavelink.Pool.is_connected():
         try:
             await wavelink.Pool.connect(
                 client=bot,
                 nodes=[wavelink.Node(
                     uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
-                    password=LAVALINK_PASSWORD,                    
+                    password=LAVALINK_PASSWORD,
                 )]
             )
             print("🎧 Lavalink 노드 연결 성공 ✅")
