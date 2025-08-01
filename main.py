@@ -9494,8 +9494,6 @@ async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
 
 
 
-from wavelink import NodePool, Node
-
 @bot.event
 async def on_ready():
     global oduk_pool_cache, invites_cache
@@ -9508,26 +9506,27 @@ async def on_ready():
     print(f"🤖 봇 로그인됨: {bot.user}")
 
     # ✅ Lavalink 연결 디버깅 시작
-    # NodePool.nodes는 연결된 Node 리스트를 반환합니다.
+    nodes = wavelink.Pool.nodes  # dict of connected nodes
     print("🔌 Lavalink 노드 연결 시도 중...")
-    print(f"🔌 현재 연결된 Lavalink 노드 수: {len(NodePool.nodes)}")
+    print(f"🔌 현재 연결된 Lavalink 노드 수: {len(nodes)}")
 
-    if not NodePool.nodes:
+    if not nodes:
         try:
-            # 최초 연결: create_node를 호출
-            await NodePool.create_node(
-                bot=bot,
-                host=LAVALINK_HOST,
-                port=LAVALINK_PORT,
-                password=LAVALINK_PASSWORD,
-                # stats_port=2334  # 통계를 받고 싶다면 stats_port 도 지정
+            await wavelink.Pool.connect(
+                client=bot,
+                nodes=[
+                    wavelink.Node(
+                        uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
+                        password=LAVALINK_PASSWORD,
+                        # stats_port=2334  # 통계가 필요하면 추가
+                    )
+                ]
             )
             print("🎧 Lavalink 노드 연결 성공 ✅")
         except Exception as e:
             print(f"❌ Lavalink 연결 실패: {type(e).__name__}: {e}")
     else:
         print("✅ 이미 Lavalink 노드가 연결되어 있습니다.")
-
 
 
     if not auto_apply_maintenance.is_running():
