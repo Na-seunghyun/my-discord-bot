@@ -9442,13 +9442,25 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
         except Exception as e:
             print(f"[SongSearch] ⚠️ 캐시 저장 실패: {e}")
 
-        # 재생 또는 대기열 추가
-        if not player.playing:
-            await player.play(track)
+        # 8) 재생 또는 대기열 추가 (is_playing() 사용, 디버그 로그 포함)
+        if not player.is_playing():
+            print(f"[SongSearch] ▶️ 재생 시도: {track.uri}")
+            try:
+                await player.play(track)
+                print("[SongSearch] ▶️ play() 호출 완료")
+            except Exception as e:
+                print(f"[SongSearch]   ⚠️ player.play 예외: {e}")
+                return await interaction.followup.send(f"❌ 재생 실패: {e}", ephemeral=True)
+
             msg = f"▶️ 재생 시작: **{track.title}**"
         else:
+            print(f"[SongSearch] ➕ 이미 재생 중이어서 대기열 추가: {track.title}")
             player.queue.put(track)
             msg = f"➕ 대기열 추가: **{track.title}**"
+
+        # 추가 디버그: 재생 상태와 채널 정보 확인
+        print(f"[SongSearch]   · player.is_playing() → {player.is_playing()}")
+        print(f"[SongSearch]   · player.channel → {getattr(player, 'channel', None)}")
 
         await interaction.followup.send(msg)
 
