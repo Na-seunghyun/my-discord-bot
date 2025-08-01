@@ -9361,7 +9361,7 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
         self.parent_view = parent_view
 
     async def on_submit(self, interaction: discord.Interaction):
-        # 1) 검색어 준비 & 로그
+        # 검색어 준비 & 로그
         artist = self.artist.value.strip()
         title  = self.title_.value.strip()
         query = f"{artist} {title}".strip()
@@ -9369,16 +9369,16 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
 
         await interaction.response.defer(thinking=True)
 
-        # 2) 플레이어 연결
+        # 플레이어 연결
         try:
             player = await get_or_connect_player(interaction)
         except Exception as e:
             return await interaction.followup.send(f"❌ 플레이어 연결 실패: {e}", ephemeral=True)
 
         track = None
-        norm = _norm_query(artist, title)
+        norm  = _norm_query(artist, title)
 
-        # 3) 캐시 조회
+        # 캐시 조회
         print("[SongSearch]   · 캐시 조회")
         cached_url = await cache_get_video_url(norm)
         print(f"[SongSearch]   · 캐시 URL: {cached_url!r}")
@@ -9390,7 +9390,7 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
             except Exception as e:
                 print(f"[SongSearch]   ⚠️ 캐시 재생 예외: {e}")
 
-        # 4) YouTubeTrack.search 폴백
+        # YouTubeTrack.search 폴백
         if not track:
             print("[SongSearch]   · YouTubeTrack.search 호출")
             try:
@@ -9401,49 +9401,48 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
             except Exception as e:
                 print(f"[SongSearch]   ⚠️ YouTubeTrack.search 예외: {e}")
 
-         # 5) Playable.search 최종 폴백
-         if not track:
-             print("[SongSearch]   · Playable.search 호출")
-             try:
-                 plays = await wavelink.Playable.search(f"ytsearch:{query}")
-                 print(f"[SongSearch]   · Playable.search 결과: {plays!r}")
-                 if plays:
-                     track = plays[0]
-             except Exception as e:
-                 print(f"[SongSearch]   ⚠️ Playable.search 예외: {e}")
+        # Playable.search 최종 폴백
+        if not track:
+            print("[SongSearch]   · Playable.search 호출")
+            try:
+                plays = await wavelink.Playable.search(f"ytsearch:{query}")
+                print(f"[SongSearch]   · Playable.search 결과: {plays!r}")
+                if plays:
+                    track = plays[0]
+            except Exception as e:
+                print(f"[SongSearch]   ⚠️ Playable.search 예외: {e}")
 
-+        # 6) HTTP REST 직접 검색 폴백
-+        if not track:
-+            print("[SongSearch]   · HTTP REST 직접 검색 폴백")
-+            rest_item = await lavalink_search_http(query)
-+            if rest_item:
-+                uri = rest_item["info"]["uri"]
-+                print(f"[SongSearch]   · REST 반환 URI: {uri}")
-+                try:
-+                    # URL로 Playable.search 다시 시도
-+                    plays = await wavelink.Playable.search(uri)
-+                    print(f"[SongSearch]   · URI Playable.search 결과: {plays!r}")
-+                    if plays:
-+                        track = plays[0]
-+                except Exception as e:
-+                    print(f"[SongSearch]   ⚠️ URI Playable.search 예외: {e}")
+        # HTTP REST 직접 검색 폴백
+        if not track:
+            print("[SongSearch]   · HTTP REST 직접 검색 폴백")
+            rest_item = await lavalink_search_http(query)
+            if rest_item:
+                uri = rest_item["info"]["uri"]
+                print(f"[SongSearch]   · REST 반환 URI: {uri}")
+                try:
+                    plays = await wavelink.Playable.search(uri)
+                    print(f"[SongSearch]   · URI Playable.search 결과: {plays!r}")
+                    if plays:
+                        track = plays[0]
+                except Exception as e:
+                    print(f"[SongSearch]   ⚠️ URI Playable.search 예외: {e}")
 
-         # 7) 발견 여부 체크
-         if not track:
-             print("[SongSearch] ❌ 트랙 미발견")
-             return await interaction.followup.send(
+        # 발견 여부 체크
+        if not track:
+            print("[SongSearch] ❌ 트랙 미발견")
+            return await interaction.followup.send(
                 "🔍 검색 결과를 찾지 못했어요. 키워드를 조금 바꿔볼까요?",
                 ephemeral=True
             )
         print(f"[SongSearch] ✅ 트랙 발견: {track.title} ({track.uri})")
 
-        # 7) 캐시에 저장
+        # 캐시 저장
         try:
             await cache_set_video_url(norm, track.uri, track.title)
         except Exception as e:
             print(f"[SongSearch] ⚠️ 캐시 저장 실패: {e}")
 
-        # 8) 재생 또는 대기열
+        # 재생 또는 대기열 추가
         if not player.playing:
             await player.play(track)
             msg = f"▶️ 재생 시작: **{track.title}**"
@@ -9452,6 +9451,7 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
             msg = f"➕ 대기열 추가: **{track.title}**"
 
         await interaction.followup.send(msg)
+
 
 
 
