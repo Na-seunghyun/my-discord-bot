@@ -9441,28 +9441,30 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
             await cache_set_video_url(norm, track.uri, track.title)
         except Exception as e:
             print(f"[SongSearch] ⚠️ 캐시 저장 실패: {e}")
-
-+        # 8) 재생 또는 대기열 추가 (player.playing 사용)
-+        if not player.playing:
-+            print(f"[SongSearch] ▶️ 재생 시도: {track.uri}")
-+            try:
-+                await player.play(track)
-+                print("[SongSearch] ▶️ play() 호출 완료")
-+            except Exception as e:
-+                print(f"[SongSearch]   ⚠️ player.play 예외: {e}")
-+                return await interaction.followup.send(f"❌ 재생 실패: {e}", ephemeral=True)
-+
-+            msg = f"▶️ 재생 시작: **{track.title}**"
-+        else:
-+            print(f"[SongSearch] ➕ 이미 재생 중이어서 대기열 추가: {track.title}")
-+            player.queue.put(track)
-+            msg = f"➕ 대기열 추가: **{track.title}**"
-+
-+        # 추가 디버그: 재생 상태와 채널 정보 확인
-+        print(f"[SongSearch]   · player.playing → {player.playing}")
-+        print(f"[SongSearch]   · player.channel → {getattr(player, 'channel', None)}")
  
-         await interaction.followup.send(msg)
+        
+        # 8) 재생 또는 대기열 추가 (player.playing 사용)
+        if not player.playing:
+            print(f"[SongSearch] ▶️ 재생 시도: {track.uri}")
+            try:
+                await player.play(track)
+                print("[SongSearch] ▶️ play() 호출 완료")
+            except Exception as e:
+                print(f"[SongSearch]   ⚠️ player.play 예외: {e}")
+                return await interaction.followup.send(f"❌ 재생 실패: {e}", ephemeral=True)
+
+            msg = f"▶️ 재생 시작: **{track.title}**"
+        else:
+            print(f"[SongSearch] ➕ 이미 재생 중이어서 대기열 추가: {track.title}")
+            player.queue.put(track)
+            msg = f"➕ 대기열 추가: **{track.title}**"
+
+        # 추가 디버그: 재생 상태와 채널 정보 확인
+        print(f"[SongSearch]   · player.playing → {player.playing}")
+        print(f"[SongSearch]   · player.channel → {getattr(player, 'channel', None)}")
+
+        await interaction.followup.send(msg)
+
 
 
 
