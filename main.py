@@ -9732,9 +9732,6 @@ async def playtest(interaction: discord.Interaction):
 
 
 
-
-
-
 @bot.event
 async def on_ready():
     global oduk_pool_cache, invites_cache
@@ -9761,8 +9758,7 @@ async def on_ready():
                 nodes=[
                     wavelink.Node(
                         uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
-                        password=LAVALINK_PASSWORD,
-                        region="global",        # ← 콤마 잊지 마세요
+                        password=LAVALINK_PASSWORD
                         # stats_port=2334      # 필요 시 추가
                     )
                 ]
