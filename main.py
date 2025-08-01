@@ -9329,7 +9329,7 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
         query_norm = _norm_query(artist, title)
         query = f"{artist} {title}".strip()
 
-        # 1) Player 안전하게 연결
+        # 1) Player 연결
         try:
             player = await get_or_connect_player(interaction)
         except ValueError as ve:
@@ -9342,21 +9342,25 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
         cached_url = await cache_get_video_url(query_norm)
         if cached_url:
             try:
-                results = await wavelink.Playable.search(cached_url)
+                # cache된 URL로 검색할 땐 Playable.search도 동작할 수 있지만, node.get_tracks가 더 확실합니다.
+                node = wavelink.Pool.get_node()
+                results = await node.get_tracks(cached_url)
                 if results:
                     track = results[0]
             except Exception:
                 track = None
 
-        # 3) 캐시 미스 시 YouTube 검색 폴백
+        # 3) 캐시 미스 시 Lavalink 노드로 직접 검색
         if not track:
-            # wavelink v1/v2 호환: YouTubeTrack 또는 Playable.search("ytsearch:")
+            node = wavelink.Pool.get_node()
             try:
-                yt_results = await wavelink.YouTubeTrack.search(query=query, limit=1)
-            except AttributeError:
-                yt_results = await wavelink.Playable.search(f"ytsearch:{query}")
-            if yt_results:
-                track = yt_results[0]
+                # "ytsearch:" 프리픽스를 붙여 YouTube 검색
+                results = await node.get_tracks(f"ytsearch:{query}")
+                if results:
+                    track = results[0]
+            except Exception as e:
+                # 로그를 찍어두고, 사용자에겐 폴백 메시지
+                print(f"[SongSearch] Lavalink 검색 실패: {e}")
 
         # 4) 캐시 저장
         if track and getattr(track, "uri", None):
@@ -9378,6 +9382,7 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
             msg = f"➕ 대기열 추가: **{track.title}**"
 
         await interaction.followup.send(msg)
+
 
 
 
