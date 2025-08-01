@@ -2052,7 +2052,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
         "headshot_pct": 0.06
     }
 
-    # 보정 강도: 판수가 적을수록 더 강한 보정
     C_MAP = {
         "avg_damage": 1200,
         "kd": 1200,
@@ -2077,6 +2076,21 @@ async def 시즌랭킹(interaction: discord.Interaction):
         squad = p.get("squad", {})
         return squad.get(key, 0) if isinstance(squad, dict) else 0
 
+    # ✅ valid_pubg_ids.json 로드
+    try:
+        with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
+            valid_data = json.load(f)
+    except Exception:
+        return await interaction.followup.send("❌ 유효 PUBG ID 목록을 불러오지 못했습니다.", ephemeral=True)
+
+    valid_pubg_ids = set()
+    valid_discord_ids = set()
+    for entry in valid_data:
+        if not entry.get("is_guest", False):
+            valid_pubg_ids.add(entry.get("game_id", ""))
+            valid_discord_ids.add(str(entry.get("discord_id", "")))
+
+    # ✅ season_leaderboard.json 로드
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
         return await interaction.followup.send("❌ 저장된 전적 데이터가 없습니다.", ephemeral=True)
@@ -2084,9 +2098,19 @@ async def 시즌랭킹(interaction: discord.Interaction):
     with open(leaderboard_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    players = [p for p in data.get("players", []) if "(게스트)" not in p.get("nickname", "")]
+    raw_players = data.get("players", [])
+    total_saved_non_guest = sum(1 for p in raw_players if "(게스트)" not in p.get("nickname", ""))
+
+    # ✅ 필터: 게스트X, pubg_id 포함, discord_id 포함
+    players = [
+        p for p in raw_players
+        if "(게스트)" not in p.get("nickname", "")
+        and p.get("pubg_id", "") in valid_pubg_ids
+        and str(p.get("discord_id", "")) in valid_discord_ids
+    ]
+
     if not players:
-        return await interaction.followup.send("❌ 유효한 유저 전적이 없습니다.", ephemeral=True)
+        return await interaction.followup.send("❌ 유효한 유저 전적이 없습니다. (게스트 제외 + ID검사 통과자 없음)", ephemeral=True)
 
     keys = list(weights.keys())
     means = {
@@ -2213,12 +2237,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         inline=False
     )
 
-    try:
-        with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
-            valid = json.load(f)
-        embed.set_footer(text=f"※ 기준: 저장 유저 {len(players)}명 / 유효 계정 {len(valid)}명")
-    except:
-        embed.set_footer(text=f"※ 기준: 저장 유저 {len(players)}명")
+    embed.set_footer(text=f"※ 기준: 저장 유저 {total_saved_non_guest}명 / 유효 계정 {len(players)}명 (게스트 제외 + ID검사 통과)")
 
     await interaction.followup.send(embed=embed)
 
