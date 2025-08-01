@@ -2283,7 +2283,7 @@ async def update_valid_pubg_ids(guild):
             is_guest = "(게스트)" in (member.nick or member.name)
             valid_members.append({
                 "name": name,
-                "game_id": game_id,
+                 "game_id": game_id.strip().lower(),  # ← 여기 꼭 추가!
                 "discord_id": member.id,
                 "is_guest": is_guest
             })
