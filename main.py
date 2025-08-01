@@ -7769,26 +7769,23 @@ async def try_repay(user_id, member, *, force=False):
 
 @tree.command(name="상환", description="현재 대출금을 즉시 상환 시도합니다.", guild=discord.Object(id=GUILD_ID))
 async def 상환(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)  # ✅ 3초 이상 처리 대비
+
     user_id = str(interaction.user.id)
     member = interaction.user
 
     loan = get_user_loan(user_id)
     if not loan or loan.get("amount", 0) <= 0:
-        return await interaction.response.send_message(
-            "✅ 현재 상환할 대출금이 없습니다.",
-            ephemeral=True
-        )
+        return await interaction.followup.send("✅ 현재 상환할 대출금이 없습니다.")
 
-    # 수동 상환은 언제든 시도 가능
+    # 수동 상환 시도
     result = await try_repay(user_id, member, force=True)
 
     if result:
-        await interaction.response.send_message(result)
+        await interaction.followup.send(result)  # ✅ followup 사용
     else:
-        await interaction.response.send_message(
-            "❌ 상환 실패! 잔액이 부족하거나 처리 중 오류가 발생했습니다.",
-            ephemeral=True
-        )
+        await interaction.followup.send("❌ 상환 실패! 잔액이 부족하거나 처리 중 오류가 발생했습니다.")
+
 
 
 
