@@ -9324,12 +9324,12 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
-        artist = str(self.artist).strip()
-        title = str(self.title_).strip()
+        artist = self.artist.value.strip()
+        title  = self.title_.value.strip()
         query_norm = _norm_query(artist, title)
         query = f"{artist} {title}".strip()
 
-        # ✅ 안전한 플레이어 연결 처리
+        # 1) Player 안전하게 연결
         try:
             player = await get_or_connect_player(interaction)
         except ValueError as ve:
@@ -9337,38 +9337,48 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
         except Exception as e:
             return await interaction.followup.send(f"❌ 플레이어 연결 실패: {e}", ephemeral=True)
 
-        if not player:
-            return await interaction.followup.send("❌ 플레이어 생성 실패", ephemeral=True)
-
+        # 2) 캐시 조회
         track = None
-
-        # 1) 캐시 조회
         cached_url = await cache_get_video_url(query_norm)
         if cached_url:
             try:
-                ts = await wavelink.Playable.search(cached_url)
-                if ts:
-                    track = ts[0]
+                results = await wavelink.Playable.search(cached_url)
+                if results:
+                    track = results[0]
             except Exception:
                 track = None
 
-        # 2) Fast‑Path: ytsearch + 로컬 스코어링
+        # 3) 캐시 미스 시 YouTube 검색 폴백
         if not track:
-            track = await search_best_by_lavalink(query)
+            # wavelink v1/v2 호환: YouTubeTrack 또는 Playable.search("ytsearch:")
+            try:
+                yt_results = await wavelink.YouTubeTrack.search(query=query, limit=1)
+            except AttributeError:
+                yt_results = await wavelink.Playable.search(f"ytsearch:{query}")
+            if yt_results:
+                track = yt_results[0]
 
-        # 3) 캐시 저장
+        # 4) 캐시 저장
         if track and getattr(track, "uri", None):
             await cache_set_video_url(query_norm, track.uri, track.title)
 
+        # 5) 결과 없으면 안내
         if not track:
-            return await interaction.followup.send("검색 결과를 찾지 못했어요. 키워드를 조금 바꿔볼까요?")
+            return await interaction.followup.send(
+                "🔍 검색 결과를 찾지 못했어요. 키워드를 조금 바꿔볼까요?", 
+                ephemeral=True
+            )
 
+        # 6) 대기열 또는 즉시 재생
         player.queue.put(track)
-        msg = f"➕ 대기열 추가: **{track.title}**"
         if not player.playing:
             await player.play(player.queue.get())
             msg = f"▶️ 재생 시작: **{track.title}**"
+        else:
+            msg = f"➕ 대기열 추가: **{track.title}**"
+
         await interaction.followup.send(msg)
+
 
 
 class MusicControlView(discord.ui.View):
