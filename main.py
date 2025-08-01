@@ -9038,6 +9038,40 @@ async def 오덕송(interaction: discord.Interaction):
 
 
 
+import sqlite3
+
+def get_db_connection():
+    return sqlite3.connect("buildings.db")
+
+def init_building_db():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # ✅ 건물 테이블 생성
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS buildings (
+            user_id TEXT PRIMARY KEY,
+            building_id TEXT,
+            level INTEGER,
+            exp INTEGER,
+            today_reward INTEGER,
+            last_updated TEXT
+        )
+    """)
+
+    # ✅ 상태치 테이블 생성
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS building_stats (
+            user_id TEXT PRIMARY KEY,
+            stability INTEGER DEFAULT 0,
+            risk INTEGER DEFAULT 0,
+            labor INTEGER DEFAULT 0,
+            tech INTEGER DEFAULT 0
+        )
+    """)
+
+    conn.commit()
+    conn.close()
 
 
 
@@ -9053,6 +9087,7 @@ async def on_ready():
     global invites_cache
 
     await process_overdue_loans_on_startup(bot)
+    init_building_db()  # ← 여기에 추가하세요
     auto_repay_check.start()
     accumulate_building_rewards.start()  # ✅ 반드시 루프 시작 필요
     
