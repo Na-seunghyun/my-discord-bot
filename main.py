@@ -1828,7 +1828,6 @@ def compute_final_score(raw_value, mean, std, n, C=500, confidence=0.95):
 
 
 
-
 @tree.command(name="전적해설", description="특정 유저 시즌 점수 계산 해설을 확인합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(닉네임="PUBG 닉네임")
 async def 전적해설(interaction: discord.Interaction, 닉네임: str):
@@ -1837,7 +1836,6 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
     import os, json, statistics
     from scipy.stats import norm
 
-    # 지표별 가중치 (합계 1.0)
     weights = {
         "avg_damage": 0.28,
         "kd": 0.28,
@@ -1847,7 +1845,6 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
         "headshot_pct": 0.06
     }
 
-    # 지표별 보정판수(C) – 신뢰도 기준
     C_MAP = {
         "avg_damage": 1200,
         "kd": 1200,
@@ -1857,28 +1854,23 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
         "headshot_pct": 300
     }
 
-
-    # 신뢰 하한 + 유지난이도 보정 (z>0 && n>C에서만 보너스)
-    def compute_final_score(raw_value, mean, std, n, C, confidence=0.95, bonus_cap=0.15, bonus_slope=0.10):
+    def compute_final_score(raw_value, mean, std, n, C, bonus_cap=0.15):
         if n == 0 or std == 0:
             return -999.0, 0.0, 1.0
         z = (raw_value - mean) / std
-        z_critical = norm.ppf((1 + confidence) / 2.0)  # 1.96 @ 95%
-        se = std / (n ** 0.5)
-        adjusted_z = z - z_critical * (se / std)  # 신뢰 하한
+        penalty_factor = n / (n + C)
+        adjusted_z = z * penalty_factor
 
         bonus_multiplier = 1.0
         if z > 0 and n > C:
-            factor = (n - C) / C
-            bonus_multiplier = 1.0 + min(max(factor * bonus_slope, 0.0), bonus_cap)
+            bonus_multiplier = 1 + min((n - C) / C * 0.1, bonus_cap)
             adjusted_z *= bonus_multiplier
 
         return adjusted_z, z, bonus_multiplier
 
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
-        await interaction.followup.send("❌ 시즌 데이터가 없습니다.", ephemeral=True)
-        return
+        return await interaction.followup.send("❌ 시즌 데이터가 없습니다.", ephemeral=True)
 
     with open(leaderboard_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -1886,19 +1878,15 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
     players = data.get("players", [])
     player = next((p for p in players if p.get("nickname") == 닉네임), None)
     if not player:
-        await interaction.followup.send(f"❌ '{닉네임}' 님의 시즌 전적을 찾을 수 없습니다.", ephemeral=True)
-        return
+        return await interaction.followup.send(f"❌ '{닉네임}' 님의 시즌 전적을 찾을 수 없습니다.", ephemeral=True)
 
     squad = player.get("squad", {})
     games = squad.get("rounds_played", 0)
     if games == 0:
-        await interaction.followup.send("❌ 게임 수가 0인 유저는 해설이 제공되지 않습니다.", ephemeral=True)
-        return
+        return await interaction.followup.send("❌ 게임 수가 0인 유저는 해설이 제공되지 않습니다.", ephemeral=True)
 
-    keys = ["avg_damage", "kd", "win_rate", "top10_ratio", "avg_survive", "headshot_pct"]
-
-    # 공식 평균(필요시 갱신)
-    official_means = {
+    keys = list(weights.keys())
+    means = {
         "avg_damage": 150.00,
         "kd": 1.00,
         "win_rate": 4.50,
@@ -1907,55 +1895,44 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
         "avg_survive": 500.00
     }
 
-    # 표준편차는 서버 데이터로 계산 (하한 1)
     metric_lists = {
         k: [p.get("squad", {}).get(k, 0) for p in players if isinstance(p.get("squad"), dict)]
         for k in keys
     }
-    stds = {}
-    for k, vals in metric_lists.items():
-        sd = statistics.pstdev(vals) if len(vals) > 1 else 0.0
-        stds[k] = sd if sd > 0 else 1.0
+    stds = {k: max(statistics.pstdev(vals), 1.0) for k, vals in metric_lists.items()}
 
-    explanation_lines = [f"🏅 **{닉네임}** 님의 시즌 점수 해설", ""]
-    explanation_lines.append(f"🎮 게임 수: {games} 판")
-    explanation_lines.append("")
+    explanation_lines = [
+        f"🏅 **{닉네임}** 님의 시즌 점수 해설\n",
+        f"🎮 게임 수: {games} 판\n"
+    ]
 
     total_score = 0.0
-
     for key in keys:
         val = squad.get(key, 0)
-        mean = official_means.get(key, 0)
+        mean = means.get(key, 0)
         std = stds[key]
-        adj_z, raw_z, bonus_mul = compute_final_score(
-            raw_value=val,
-            mean=mean,
-            std=std,
-            n=games,
-            C=C_MAP.get(key, 500)
-        )
+
+        adj_z, raw_z, bonus_mul = compute_final_score(val, mean, std, games, C_MAP[key])
         contrib = adj_z * weights[key]
         total_score += contrib
 
         explanation_lines.append(
             f"📊 {key:<12} : {val:.2f} (평균 {mean:.2f}, 표준편차 {std:.2f})\n"
-            f"   • Z         : {raw_z:.3f}\n"
-            f"   • 보정 Z    : {adj_z:.3f}  (보정판수 C={C_MAP.get(key,500)})\n"
-            f"   • 가중치    : {weights[key]:.2f}\n"
-            f"   • 보너스배수: x{bonus_mul:.3f}\n"
-            f"   • 점수기여  : {contrib:.3f}"
+            f"   • Z-Score      : {raw_z:.3f}\n"
+            f"   • 보정 Z       : {adj_z:.3f} (판수 보정 C={C_MAP[key]})\n"
+            f"   • 보너스 배수  : x{bonus_mul:.3f}\n"
+            f"   • 가중치       : {weights[key]:.2f}\n"
+            f"   • 점수 기여도  : {contrib:.3f}\n"
         )
 
-    explanation_lines.append("")
-    explanation_lines.append(f"🏆 최종 종합 점수: **{total_score:.3f}**")
-    explanation_lines.append("")
+    explanation_lines.append(f"🏆 최종 종합 점수: **{total_score:.3f}**\n")
     explanation_lines.append("📌 규칙 요약")
-    explanation_lines.append(" - 신뢰 하한(95%)으로 판수 적을수록 보수적 평가")
-    explanation_lines.append(" - 평균 초과 성과(z>0)를 충분한 판수에서 유지하면 소폭 가산(+최대 0.15)")
-    explanation_lines.append(" - 지표별 C: 데미지/KD/승률=700, Top10/생존=500, 헤드샷=300")
-    explanation_lines.append(" - 가중치: 데미지 0.28, K/D 0.28, 승률 0.20, Top10 0.08, 생존 0.10, 헤드샷 0.06")
+    explanation_lines.append(" - 판수가 적으면 Z-Score가 강하게 줄어듭니다. (Z × n/(n+C))")
+    explanation_lines.append(" - 평균 이상 성과(z>0)를 충분한 판수에서 유지하면 최대 15% 보너스")
+    explanation_lines.append(" - C값은 지표별로 다르게 적용 (승률=1500, KD=1200 등)")
 
     await interaction.followup.send("\n".join(explanation_lines), ephemeral=True)
+
 
 
 
@@ -1996,12 +1973,9 @@ async def 닉네임_자동완성(interaction: discord.Interaction, current: str)
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
 
-    import os
-    import json
-    import statistics
+    import os, json, statistics
     from scipy.stats import norm
 
-    # 지표별 가중치 (합계 1.0)
     weights = {
         "avg_damage": 0.28,
         "kd": 0.28,
@@ -2011,7 +1985,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
         "headshot_pct": 0.06
     }
 
-    # 지표별 보정판수(C) – 신뢰도 기준
+    # 보정 강도: 판수가 적을수록 더 강한 보정
     C_MAP = {
         "avg_damage": 1200,
         "kd": 1200,
@@ -2021,47 +1995,34 @@ async def 시즌랭킹(interaction: discord.Interaction):
         "headshot_pct": 300
     }
 
-    # 신뢰 하한 + 유지난이도 보정 (z>0 && n>C에서만 보너스)
-    def compute_final_score(raw_value, mean, std, n, C, confidence=0.95, bonus_cap=0.15, bonus_slope=0.10):
+    def compute_final_score(raw_value, mean, std, n, C, bonus_cap=0.15):
         if n == 0 or std == 0:
             return -999.0
         z = (raw_value - mean) / std
-        z_critical = norm.ppf((1 + confidence) / 2.0)  # 1.96 @ 95%
-        se = std / (n ** 0.5)
-        adjusted_z = z - z_critical * (se / std)  # 신뢰 하한
-
-        # 유지난이도 보정: 평균 초과 성과(z>0) + 충분한 판수(n>C)
+        penalty_factor = n / (n + C)
+        adjusted_z = z * penalty_factor
         if z > 0 and n > C:
-            factor = (n - C) / C
-            bonus_multiplier = 1.0 + min(max(factor * bonus_slope, 0.0), bonus_cap)
-            adjusted_z *= bonus_multiplier
+            bonus = 1 + min((n - C) / C * 0.1, bonus_cap)
+            adjusted_z *= bonus
         return adjusted_z
 
     def safe_get(p, key):
         squad = p.get("squad", {})
-        if not isinstance(squad, dict):
-            return 0
-        return squad.get(key, 0)
+        return squad.get(key, 0) if isinstance(squad, dict) else 0
 
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
-        await interaction.followup.send("❌ 아직 저장된 전적 데이터가 없습니다.", ephemeral=True)
-        return
+        return await interaction.followup.send("❌ 저장된 전적 데이터가 없습니다.", ephemeral=True)
 
     with open(leaderboard_path, "r", encoding="utf-8") as f:
-        file_data = json.load(f)
-        stored_season_id = file_data.get("season_id", "알 수 없음")
-        all_players = file_data.get("players", [])
+        data = json.load(f)
 
-    players = [p for p in all_players if "(게스트)" not in p.get("nickname", "")]
+    players = [p for p in data.get("players", []) if "(게스트)" not in p.get("nickname", "")]
     if not players:
-        await interaction.followup.send("❌ 현재 시즌에 저장된 유저 데이터가 없습니다.", ephemeral=True)
-        return
+        return await interaction.followup.send("❌ 유효한 유저 전적이 없습니다.", ephemeral=True)
 
     keys = list(weights.keys())
-
-    # 공식 평균(필요시 갱신)
-    official_means = {
+    means = {
         "avg_damage": 150.00,
         "kd": 1.00,
         "win_rate": 4.50,
@@ -2070,14 +2031,10 @@ async def 시즌랭킹(interaction: discord.Interaction):
         "avg_survive": 500.00
     }
 
-    # 표준편차는 서버 데이터로 계산 (하한 1)
-    metric_lists = {k: [safe_get(p, k) for p in players] for k in keys}
-    stds = {}
-    for k, vals in metric_lists.items():
-        sd = statistics.pstdev(vals) if len(vals) > 1 else 0.0
-        stds[k] = sd if sd > 0 else 1.0
-
-    means = official_means
+    stds = {
+        k: max(statistics.pstdev([safe_get(p, k) for p in players]), 1.0)
+        for k in keys
+    }
 
     seen_names = set()
     weighted_list = []
@@ -2088,42 +2045,32 @@ async def 시즌랭킹(interaction: discord.Interaction):
         seen_names.add(name)
 
         squad = p.get("squad", {})
-        if not isinstance(squad, dict):
-            continue
-
         games = squad.get("rounds_played", 0)
         if games == 0:
             continue
 
-        adj_scores = {}
-        for k in keys:
-            adj_scores[k] = compute_final_score(
+        adj_scores = {
+            k: compute_final_score(
                 raw_value=squad.get(k, 0),
                 mean=means[k],
                 std=stds[k],
                 n=games,
-                C=C_MAP.get(k, 500)
-            )
+                C=C_MAP[k]
+            ) for k in keys
+        }
 
         score = sum(adj_scores[k] * weights[k] for k in keys)
-        weighted_list.append((
-            name,
-            score,
-            *[adj_scores[k] for k in keys],
-        ))
+        weighted_list.append((name, score, *[adj_scores[k] for k in keys]))
 
     weighted_top = sorted(weighted_list, key=lambda x: x[1], reverse=True)[:7]
 
-    # 항목별 TOP7 (원시값 기준, 중복 제거)
     def unique_top(lst):
         seen = set()
         result = []
         for item in lst:
-            name = item[0]
-            if name in seen:
-                continue
-            seen.add(name)
-            result.append(item)
+            if item[0] not in seen:
+                seen.add(item[0])
+                result.append(item)
             if len(result) == 7:
                 break
         return result
@@ -2134,12 +2081,11 @@ async def 시즌랭킹(interaction: discord.Interaction):
     rounds_top = unique_top(sorted([(p["nickname"], safe_get(p, "rounds_played")) for p in players], key=lambda x: x[1], reverse=True))
     kills_top = unique_top(sorted([(p["nickname"], safe_get(p, "kills")) for p in players], key=lambda x: x[1], reverse=True))
 
-    # 랭크 포인트
     rankpoint_list = []
     seen_rank_names = set()
     for p in players:
-        ranked = p.get("ranked", {})
         name = p.get("nickname", "")
+        ranked = p.get("ranked", {})
         if ranked and name not in seen_rank_names:
             seen_rank_names.add(name)
             rankpoint_list.append((name, ranked.get("points", 0), ranked.get("tier", ""), ranked.get("subTier", "")))
@@ -2148,34 +2094,30 @@ async def 시즌랭킹(interaction: discord.Interaction):
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
 
     def format_top_score(entries):
-        lines = []
-        for i, entry in enumerate(entries):
-            name = f"*{entry[0]}*" if i < 3 else entry[0]
-            score = f"{entry[1]:.3f}"
-            lines.append(f"{medals[i]} {name:20} {score}")
-        return "```\n" + "\n".join(lines) + "\n```"
+        return "```\n" + "\n".join(
+            f"{medals[i]} {'*'+entry[0]+'*' if i < 3 else entry[0]:20} {entry[1]:.3f}"
+            for i, entry in enumerate(entries)
+        ) + "\n```"
 
     def format_top(entries, is_percentage=False):
         return "```\n" + "\n".join(
-            f"{medals[i]} {'*'+entry[0]+'*' if i < 3 else entry[0]:20} "
-            f"{f'{entry[1]:.2f}%' if is_percentage else f'{entry[1]:.2f}'}"
+            f"{medals[i]} {'*'+entry[0]+'*' if i < 3 else entry[0]:20} {entry[1]:.2f}{'%' if is_percentage else ''}"
             for i, entry in enumerate(entries)
         ) + "\n```"
 
     def format_top_int(entries):
         return "```\n" + "\n".join(
-            f"{medals[i]} {'*'+entry[0]+'*' if i < 3 else entry[0]:20} {str(entry[1]).rjust(7)}"
+            f"{medals[i]} {'*'+entry[0]+'*' if i < 3 else entry[0]:20} {entry[1]:>7}"
             for i, entry in enumerate(entries)
         ) + "\n```"
 
     embed = discord.Embed(
-        title=f"🏆 현재 시즌 랭킹 (시즌 ID: {stored_season_id})",
+        title=f"🏆 현재 시즌 랭킹 (시즌 ID: {data.get('season_id', '알 수 없음')})",
         color=discord.Color.gold()
     )
 
     if weighted_top:
         embed.add_field(name="💯 종합 점수 TOP 7", value=format_top_score(weighted_top), inline=False)
-
     embed.add_field(name="🔫 평균 데미지", value=format_top(damage_top), inline=True)
     embed.add_field(name="⚔️ K/D", value=format_top(kd_top), inline=True)
     embed.add_field(name="🏆 승률", value=format_top(win_top, is_percentage=True), inline=True)
@@ -2183,33 +2125,35 @@ async def 시즌랭킹(interaction: discord.Interaction):
     embed.add_field(name="💀 킬 수", value=format_top_int(kills_top), inline=True)
 
     if rank_top:
-        rank_msg = [f"{medals[i]} {'*'+name+'*' if i < 3 else name} - {tier} {sub} ({points})"
-                    for i, (name, points, tier, sub) in enumerate(rank_top)]
-        embed.add_field(name="🥇 랭크 포인트", value="```\n" + "\n".join(rank_msg) + "\n```", inline=False)
+        embed.add_field(
+            name="🥇 랭크 포인트",
+            value="```\n" + "\n".join(
+                f"{medals[i]} {'*'+name+'*' if i < 3 else name} - {tier} {sub} ({points})"
+                for i, (name, points, tier, sub) in enumerate(rank_top)
+            ) + "\n```",
+            inline=False
+        )
 
-    # 설명 업데이트: 지표별 C, 헤드샷 가중치 하향
     embed.add_field(
-        name="📌 점수 계산 안내",
+        name="📌 점수 계산 방식",
         value=(
-            "1️⃣ 종합점수는 데미지, K/D, 승률, Top10, 평균 생존, 헤드샷률을 기반으로 계산됩니다.\n"
-            "2️⃣ 각 항목은 **Z-Score를 신뢰 하한(95%)로 보정**하여 판수가 적을수록 보수적으로 평가됩니다.\n"
-            "3️⃣ **유지난이도 보정**: 평균을 초과하는 성과(z>0)를 충분한 판수(n>C)에서 유지하면 소폭 가산(+최대 15%).\n"
-            "4️⃣ 지표별 보정판수(C): 데미지/KD/승률=700, Top10/생존=500, 헤드샷=300.\n"
-            "5️⃣ 가중치: 데미지 0.28, K/D 0.28, 승률 0.20, Top10 0.08, 생존 0.10, 헤드샷 0.06.\n"
-            "6️⃣ 평균은 배틀그라운드 공식 전체 유저 평균값을 사용합니다."
+            "1️⃣ 각 항목은 Z-Score를 사용해 평균 대비 성과를 측정합니다.\n"
+            "2️⃣ 판수가 적으면 `Z × (판수 / (판수 + C))`로 강하게 감점됩니다.\n"
+            "3️⃣ 평균 이상 성과(z>0)를 판수로 유지하면 최대 15% 보너스가 적용됩니다.\n"
+            "4️⃣ C값은 지표별로 다릅니다 (예: 승률=1500, KD=1200).\n"
+            "5️⃣ 헤드샷 비중은 낮으며, 평균값은 전체 유저 기준입니다."
         ),
         inline=False
     )
 
     try:
         with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
-            valid_members = json.load(f)
-        embed.set_footer(text=f"※ 기준: 저장된 유저 {len(players)}명 / 총 적합 인원 {len(valid_members)}명")
-    except Exception:
-        embed.set_footer(text=f"※ 기준: 저장된 유저 {len(players)}명")
+            valid = json.load(f)
+        embed.set_footer(text=f"※ 기준: 저장 유저 {len(players)}명 / 유효 계정 {len(valid)}명")
+    except:
+        embed.set_footer(text=f"※ 기준: 저장 유저 {len(players)}명")
 
     await interaction.followup.send(embed=embed)
-
 
 
 
