@@ -9740,6 +9740,9 @@ async def playtest(interaction: discord.Interaction):
 
     await interaction.followup.send(f"▶️ 테스트 재생 시작: **{track.title}**")
 
+@bot.event
+async def on_wavelink_track_start(payload: wavelink.TrackStartEventPayload):
+    print(f"🎶 Track started in guild {payload.guild_id}: {payload.track.title}")
 
 
 
