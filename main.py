@@ -9158,10 +9158,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
-tree = bot.tree
-
-GUILD_ID = 123456789012345678  # 너의 서버 ID
 
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -9266,24 +9262,26 @@ async def 오덕송(interaction: discord.Interaction):
 
 
 
-
 @bot.event
 async def on_ready():
     global oduk_pool_cache, invites_cache
 
-    # ✅ Opus 코덱 로딩 확인
     print("🔊 Opus loaded:", discord.opus.is_loaded())
 
-    # ✅ 기존 초기화 로직 유지
     await process_overdue_loans_on_startup(bot)
     init_building_db()
     auto_repay_check.start()
     accumulate_building_rewards.start()
-    await init_song_cache_table()
+    # await init_song_cache_table()  ← ❌ 삭제 또는 주석처리
 
     print(f"🤖 봇 로그인됨: {bot.user}")
 
-    # 🎵 FFmpeg 기반으로 전환했기 때문에 Lavalink 관련 제거됨
+    # ✅ 슬래시 명령어 등록
+    try:
+        synced = await tree.sync()
+        print(f"📌 {len(synced)}개의 명령어가 Discord에 등록되었습니다.")
+    except Exception as e:
+        print(f"❌ 명령어 등록 실패: {e}")
 
 
 
