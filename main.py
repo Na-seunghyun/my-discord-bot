@@ -9724,15 +9724,14 @@ async def playtest(interaction: discord.Interaction):
 async def on_ready():
     global oduk_pool_cache, invites_cache
 
-        # Opus 로드 여부 확인
+    # Opus 로드 여부 확인
     print("🔊 Opus loaded:", discord.opus.is_loaded())
 
     await process_overdue_loans_on_startup(bot)
     init_building_db()
     auto_repay_check.start()
     accumulate_building_rewards.start()
-    # → 이 부분 바로 아래에 추가
-    await init_song_cache_table()    
+    await init_song_cache_table()
     print(f"🤖 봇 로그인됨: {bot.user}")
 
     # ✅ Lavalink 연결 디버깅 시작
@@ -9746,9 +9745,11 @@ async def on_ready():
                 client=bot,
                 nodes=[
                     wavelink.Node(
-                        uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
+                        host=LAVALINK_HOST,
+                        port=LAVALINK_PORT,
                         password=LAVALINK_PASSWORD,
-                        # stats_port=2334  # 통계가 필요하면 추가
+                        region="global"
+                        # stats_port=2334  # 필요 시 추가
                     )
                 ]
             )
