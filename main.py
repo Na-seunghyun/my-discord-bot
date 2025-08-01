@@ -9465,13 +9465,15 @@ async def on_ready():
     global invites_cache
 
     await process_overdue_loans_on_startup(bot)
-    init_building_db()  # ← 여기에 추가하세요
+    init_building_db()
     auto_repay_check.start()
-    accumulate_building_rewards.start()  # ✅ 반드시 루프 시작 필요
+    accumulate_building_rewards.start()
     
     print(f"🤖 봇 로그인됨: {bot.user}")
-    # ✅ (추가) Lavalink 노드 연결: 이미 연결돼 있으면 건너뜀
-    # ────────────────────────────────────────────────────────
+
+    # ✅ Lavalink 연결 디버깅 시작
+    print("🔌 Lavalink 노드 연결 시도 중...")
+
     if not wavelink.Pool.nodes:
         try:
             await wavelink.Pool.connect(
@@ -9482,10 +9484,12 @@ async def on_ready():
                     secure=False,
                 )]
             )
-            print("🎧 Lavalink 노드 연결 성공")
+            print("🎧 Lavalink 노드 연결 성공 ✅")
         except Exception as e:
-            print(f"❌ Lavalink 연결 실패: {e}")
-    # ────────────────────────────────────────────────────────
+            print(f"❌ Lavalink 연결 실패: {type(e).__name__}: {e}")
+    else:
+        print("✅ 이미 Lavalink 노드가 연결되어 있습니다.")
+
 
     if not auto_apply_maintenance.is_running():
         auto_apply_maintenance.start()
