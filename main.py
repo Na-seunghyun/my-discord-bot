@@ -19,15 +19,20 @@ import uuid  # uuid 추가
 from dotenv import load_dotenv
 
 import discord.opus
+import ctypes.util
 
-# 자동 로드가 안 되면 수동 로드 시도
+# 자동 로드가 실패했을 때, 수동으로 Opus 라이브러리를 찾아 로드
 if not discord.opus.is_loaded():
-    lib_path = discord.opus.find_library('opus')   # 일반적으로 'opus'라는 이름으로 검색
-    try:
-        discord.opus.load_opus(lib_path)
-        print(f"🔊 Manual Opus load with '{lib_path}':", discord.opus.is_loaded())
-    except Exception as e:
-        print("🔊 Manual Opus load failed:", e)
+    lib_path = ctypes.util.find_library('opus')  # 'opus' 라이브러리 탐색
+    if lib_path:
+        try:
+            discord.opus.load_opus(lib_path)
+            print(f"🔊 Manual Opus load with '{lib_path}':", discord.opus.is_loaded())
+        except Exception as e:
+            print("🔊 Manual Opus load failed:", e)
+    else:
+        print("🔊 Could not find opus library via ctypes.util.find_library")
+
 
 
 load_dotenv()
