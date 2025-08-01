@@ -1876,6 +1876,32 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
     await interaction.followup.send("\n".join(explanation_lines), ephemeral=True)
 
 
+@전적해설.autocomplete("닉네임")
+async def 닉네임_자동완성(interaction: discord.Interaction, current: str):
+    guild = interaction.guild
+    if not guild:
+        return []
+
+    choices = []
+    for member in guild.members:
+        if member.bot or not member.nick:
+            continue
+
+        parts = member.nick.split("/")
+        if len(parts) >= 2:
+            nickname = parts[1].strip()
+            full_nick = member.nick.strip()
+
+            # current 검색어가 닉네임 전체 또는 PUBG ID에 포함될 때만
+            if current.lower() in full_nick.lower() or current.lower() in nickname.lower():
+                choices.append(app_commands.Choice(
+                    name=full_nick,  # 자동완성에 보이는 항목 예) 토끼 / N_cafe24_A / 90
+                    value=nickname    # 실제 입력될 값: N_cafe24_A
+                ))
+
+    return choices[:25]
+
+
 
 
 
