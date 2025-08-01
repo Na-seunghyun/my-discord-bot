@@ -9613,6 +9613,9 @@ async def init_song_cache_table():
 async def on_ready():
     global oduk_pool_cache, invites_cache
 
+        # Opus 로드 여부 확인
+    print("🔊 Opus loaded:", discord.opus.is_loaded())
+
     await process_overdue_loans_on_startup(bot)
     init_building_db()
     auto_repay_check.start()
