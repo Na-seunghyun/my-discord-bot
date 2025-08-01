@@ -9291,6 +9291,28 @@ async def search_best_by_lavalink(query: str, limit: int = 10) -> wavelink.Playa
             best_score, best = sc, t
     return best
 
+async def get_or_connect_player(interaction: discord.Interaction) -> wavelink.Player:
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        raise ValueError("❌ 먼저 음성 채널에 접속해주세요!")
+
+    channel = interaction.user.voice.channel
+
+    # Lavalink 노드 가져오기 (기본 노드)
+    node = wavelink.Pool.get_node()
+    if not node:
+        raise RuntimeError("❌ Lavalink 노드가 아직 연결되지 않았습니다.")
+
+    # Player 가져오기 또는 생성
+    player: wavelink.Player = node.get_player(interaction.guild.id)
+    if not player:
+        player: wavelink.Player = await node.connect(interaction.guild.id, channel.id)
+
+    elif player.channel.id != channel.id:
+        await player.connect(channel.id)
+
+    return player
+
+
 class SongSearchModal(discord.ui.Modal, title="노래 검색"):
     artist = discord.ui.TextInput(label="가수", placeholder="예: IU", max_length=80)
     title_ = discord.ui.TextInput(label="제목", placeholder="예: Love wins all", max_length=100)
@@ -9306,9 +9328,16 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
         query_norm = _norm_query(artist, title)
         query = f"{artist} {title}".strip()
 
-        player = await get_or_connect_player(interaction)
+        # ✅ 안전한 플레이어 연결 처리
+        try:
+            player = await get_or_connect_player(interaction)
+        except ValueError as ve:
+            return await interaction.followup.send(str(ve), ephemeral=True)
+        except Exception as e:
+            return await interaction.followup.send(f"❌ 플레이어 연결 실패: {e}", ephemeral=True)
+
         if not player:
-            return
+            return await interaction.followup.send("❌ 플레이어 생성 실패", ephemeral=True)
 
         track = None
 
@@ -9339,6 +9368,7 @@ class SongSearchModal(discord.ui.Modal, title="노래 검색"):
             await player.play(player.queue.get())
             msg = f"▶️ 재생 시작: **{track.title}**"
         await interaction.followup.send(msg)
+
 
 class MusicControlView(discord.ui.View):
     def __init__(self, *, timeout: float = 300):
