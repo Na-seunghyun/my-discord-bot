@@ -9483,6 +9483,20 @@ async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
 
 
 
+# 2) song_cache 테이블이 없으면 생성해 주는 함수
+async def init_song_cache_table():
+    """
+    song_cache 테이블이 없으면 아래 스키마로 생성합니다.
+    query_norm 을 PRIMARY KEY 로, video_url 을 TEXT NOT NULL 로 정의합니다.
+    """
+    async with aiosqlite.connect(SONG_DB_PATH) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS song_cache (
+                query_norm TEXT PRIMARY KEY,
+                video_url  TEXT    NOT NULL
+            );
+        """)
+        await db.commit()
 
 
 
@@ -9503,7 +9517,8 @@ async def on_ready():
     init_building_db()
     auto_repay_check.start()
     accumulate_building_rewards.start()
-    
+    # → 이 부분 바로 아래에 추가
+    await init_song_cache_table()    
     print(f"🤖 봇 로그인됨: {bot.user}")
 
     # ✅ Lavalink 연결 디버깅 시작
