@@ -9138,12 +9138,9 @@ def init_building_db():
 
 # ── 추가 import (중복되면 생략) ─────────────────────────────
 import os, re, math, asyncio
-import aiohttp
+
 import aiosqlite
 import wavelink
-import discord
-from discord import app_commands
-from discord.ext import commands
 
 # ── 음악 채널 (원하면 그대로 사용) ─────────────────────────
 MUSIC_TEXT_CHANNEL_ID = 1400712729001721877
@@ -9157,32 +9154,65 @@ LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "yoursecret")
 # ── SQLite 캐시 DB 파일 경로 ─────────────────────────────
 MUSIC_CACHE_DB = os.path.join(os.path.dirname(__file__), "music_cache.db")
 
-@bot.tree.command(name="노드체크", description="Lavalink 노드 연결 상태 확인")
-async def node_check(interaction: discord.Interaction):
+@tree.command(name="노드체크", description="Lavalink 노드 연결 상태 확인", guild=discord.Object(id=GUILD_ID))
+async def 노드체크(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
-    if not wavelink.Pool.nodes:
-        return await interaction.followup.send("❌ 노드 없음")
 
-    node = list(wavelink.Pool.nodes.values())[0]
+    node = next(iter(wavelink.Pool.nodes.values()), None)
+    if node is None:
+        return await interaction.followup.send("❌ 노드가 없습니다. (Pool.nodes 비어 있음)")
+
+    # wavelink Node에 연결/가용성 체크
+    if not getattr(node, "available", True):
+        return await interaction.followup.send("❌ 노드가 연결되지 않았습니다.")
+
     stats = getattr(node, "stats", None)
-    if not stats:
-        return await interaction.followup.send("노드 연결됨(통계 미수신).")
 
-    msg = (
-        f"✅ 노드 연결 OK\n"
-        f"- Uptime: {getattr(stats, 'uptime', 'N/A')}\n"
-        f"- Players: {getattr(stats, 'players', 'N/A')}\n"
-        f"- Playing: {getattr(stats, 'playing', 'N/A')}\n"
-    )
-    await interaction.followup.send(msg)
+    embed = discord.Embed(title="Lavalink 노드 상태", color=discord.Color.green())
+    embed.add_field(name="URI", value=getattr(node, "uri", "N/A"), inline=False)
 
+    if stats:
+        # 속성 이름은 버전에 따라 다를 수 있어 getattr로 안전 접근
+        uptime = getattr(stats, "uptime", None)
+        players = getattr(stats, "players", None)
+        playing = getattr(stats, "playing", None)
+        cpu_cores = getattr(getattr(stats, "cpu", object()), "cores", None)
+        mem_used = getattr(getattr(stats, "memory", object()), "used", None)
+        mem_res = getattr(getattr(stats, "memory", object()), "reservable", None)
+
+        embed.add_field(name="Players", value=str(players if players is not None else "N/A"))
+        embed.add_field(name="Playing", value=str(playing if playing is not None else "N/A"))
+        embed.add_field(name="Uptime(ms)", value=str(uptime if uptime is not None else "N/A"), inline=False)
+
+        if cpu_cores is not None:
+            embed.add_field(name="CPU Cores", value=str(cpu_cores))
+        if mem_used is not None and mem_res is not None:
+            embed.add_field(name="Memory", value=f"{mem_used} / {mem_res}")
+    else:
+        embed.description = "노드 연결됨 (통계 미수신)."
+
+    await interaction.followup.send(embed=embed)
+
+# ─────────────────────────────────────────────────────────
+# 쿼리 정규화 (캐시 키)
+# ─────────────────────────────────────────────────────────
 def _norm_query(artist: str, title: str) -> str:
     base = f"{(artist or '').strip()} {(title or '').strip()}".lower()
-    # 공백/특수문자 정리
-    return re.sub(r"\s+", " ", re.sub(r"[\[\]\(\)\|\-_/]+", " ", base)).strip()
+    # 특수문자 제거 → 공백 정규화
+    base = re.sub(r"[\[\]\(\)\|\-_/]+", " ", base)
+    return re.sub(r"\s+", " ", base).strip()
 
+# ─────────────────────────────────────────────────────────
+# SQLite 캐시 DB 초기화 (인덱스/PRAGMA 보강)
+# ─────────────────────────────────────────────────────────
 async def init_music_cache_db():
+    # DB 파일 위치 디렉터리 보장 (보통 __file__ 경로는 이미 존재하지만 안전차원)
+    os.makedirs(os.path.dirname(MUSIC_CACHE_DB), exist_ok=True)
     async with aiosqlite.connect(MUSIC_CACHE_DB) as db:
+        # I/O 성능 및 동시성 안정성 향상
+        await db.execute("PRAGMA journal_mode=WAL;")
+        await db.execute("PRAGMA synchronous=NORMAL;")
+
         await db.execute("""
         CREATE TABLE IF NOT EXISTS song_cache (
             query_norm   TEXT PRIMARY KEY,
@@ -9192,6 +9222,8 @@ async def init_music_cache_db():
             created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """)
+        # 조회/정렬에 필요한 보조 인덱스(선택)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_song_cache_hits ON song_cache(hit_count);")
         await db.commit()
 
 async def cache_get_video_url(query_norm: str) -> str | None:
