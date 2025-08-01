@@ -9483,13 +9483,11 @@ async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
 
 
 
-# 2) song_cache 테이블이 없으면 생성해 주는 함수
 async def init_song_cache_table():
     """
-    song_cache 테이블이 없으면 아래 스키마로 생성합니다.
-    query_norm 을 PRIMARY KEY 로, video_url 을 TEXT NOT NULL 로 정의합니다.
+    music_cache.db 에 song_cache 테이블이 없으면 생성합니다.
     """
-    async with aiosqlite.connect(SONG_DB_PATH) as db:
+    async with aiosqlite.connect(MUSIC_CACHE_DB) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS song_cache (
                 query_norm TEXT PRIMARY KEY,
@@ -9497,7 +9495,6 @@ async def init_song_cache_table():
             );
         """)
         await db.commit()
-
 
 
 
