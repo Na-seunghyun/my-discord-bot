@@ -9742,7 +9742,9 @@ async def playtest(interaction: discord.Interaction):
 
 @bot.event
 async def on_wavelink_track_start(payload: wavelink.TrackStartEventPayload):
-    print(f"🎶 Track started in guild {payload.guild_id}: {payload.track.title}")
+    guild_id = payload.player.guild.id
+    track_title = payload.track.title
+    print(f"🎶 Track started in guild {guild_id}: {track_title}")
 
 
 
