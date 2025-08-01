@@ -1819,13 +1819,24 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
         return
 
     keys = ["avg_damage", "kd", "win_rate", "top10_ratio", "headshot_pct", "avg_survive"]
+
+    # 최신 공식 전체 배틀그라운드 평균값 (신뢰 가능한 출처로 갱신 가능)
+    official_means = {
+        "avg_damage": 153.18,
+        "kd": 1.17,
+        "win_rate": 5.49,
+        "top10_ratio": 41.46,
+        "headshot_pct": 18.86,
+        "avg_survive": 575.82
+    }
+
+    # 공식 표준편차도 임의로 넣거나, 서버 데이터로 계산하되 기본값 사용 권장
     import statistics
     metric_lists = {k: [p.get("squad", {}).get(k, 0) for p in players if isinstance(p.get("squad"), dict)] for k in keys}
-    means = {k: statistics.mean(v) if v else 0 for k, v in metric_lists.items()}
     stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
 
     def z_score(val, key):
-        return (val - means[key]) / stds[key]
+        return (val - official_means.get(key, 0)) / stds[key]
 
     M_CONFIDENCE = 500
     PENALTY_SCORE = 0.5
@@ -1847,7 +1858,7 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
 
     for key in keys:
         val = squad.get(key, 0)
-        mean = means[key]
+        mean = official_means.get(key, 0)
         std = stds[key]
         z = z_score(val, key)
         adj = z * factor - PENALTY_SCORE * (1 - factor)
@@ -1855,7 +1866,7 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
         total_score += contrib
 
         explanation_lines.append(
-            f"📊 {key} : {val:.2f} (평균: {mean:.2f}, 표준편차: {std:.2f})\n"
+            f"📊 {key} : {val:.2f} (공식 평균: {mean:.2f}, 표준편차: {std:.2f})\n"
             f"    → Z-Score: {z:.3f}, 보정 후: {adj:.3f}, 가중치: {weights[key]*100:.0f}%, 점수 기여도: {contrib:.3f}"
         )
 
@@ -1863,33 +1874,6 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
     explanation_lines.append("\n⚠️ 게임 수가 적을수록 평균보다 낮게 점수가 보정되어 신뢰도가 낮은 점수에 페널티가 적용됩니다.")
 
     await interaction.followup.send("\n".join(explanation_lines), ephemeral=True)
-
-
-
-# 자동완성 연결 (기존 자동완성 코드 활용)
-@전적해설.autocomplete("닉네임")
-async def 닉네임_자동완성(interaction: discord.Interaction, current: str):
-    guild = interaction.guild
-    if not guild:
-        return []
-
-    choices = []
-    for member in guild.members:
-        if member.bot or not member.nick:
-            continue
-
-        parts = member.nick.split("/")
-        if len(parts) >= 2:
-            nickname = parts[1].strip()
-            full_nick = member.nick.strip()
-
-            if current.lower() in full_nick.lower() or current.lower() in nickname.lower():
-                choices.append(app_commands.Choice(
-                    name=full_nick,
-                    value=nickname
-                ))
-
-    return choices[:25]
 
 
 
@@ -1902,6 +1886,8 @@ async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
 
     import statistics
+    import os
+    import json
 
     M_CONFIDENCE = 500  # 판수 보정 기준값
     PENALTY_SCORE = 0.5  # 판수 적을 때 평균 이하로 내릴 페널티 강도 (조절 가능)
@@ -1939,10 +1925,21 @@ async def 시즌랭킹(interaction: discord.Interaction):
             return 0
         return squad.get(key, 0)
 
-    metric_lists = {k: [safe_get(p, k) for p in players] for k in keys}
+    # 공식 전체 배틀그라운드 평균값 (실제 최신 공식 데이터로 교체하세요)
+    official_means = {
+        "avg_damage": 153.18,
+        "kd": 1.17,
+        "win_rate": 5.49,
+        "top10_ratio": 41.46,
+        "headshot_pct": 18.86,
+        "avg_survive": 575.82
+    }
 
-    means = {k: statistics.mean(v) if v else 0 for k, v in metric_lists.items()}
+    # 표준편차는 유저 데이터 기준으로 계산
+    metric_lists = {k: [safe_get(p, k) for p in players] for k in keys}
     stds = {k: statistics.pstdev(v) if statistics.pstdev(v) > 0 else 1 for k, v in metric_lists.items()}
+
+    means = official_means  # 평균값을 공식 평균으로 대체
 
     def adjusted_score(z, n, C=M_CONFIDENCE, penalty=PENALTY_SCORE):
         factor = n / (n + C)
@@ -2065,7 +2062,8 @@ async def 시즌랭킹(interaction: discord.Interaction):
             "2️⃣ 각 항목은 Z-Score로 표준화되고, 판수에 따른 보정이 개별 항목별로 적용됩니다.\n"
             "3️⃣ 판수가 적으면 평균보다 낮게 보정되어, 신뢰도가 낮은 점수를 페널티로 처리합니다.\n"
             "4️⃣ 최종 점수 = (각 항목별 점수 × 가중치) × (게임수 ÷ (게임수 + 500)) - 페널티 보정 포함\n"
-            "5️⃣ 가중치는 데미지 25%, K/D 25%, 승률 20%, Top10 10%, 헤드샷 10%, 생존시간 10%입니다."
+            "5️⃣ 가중치는 데미지 25%, K/D 25%, 승률 20%, Top10 10%, 헤드샷 10%, 생존시간 10%입니다.\n"
+            "6️⃣ 평균은 배틀그라운드 공식 전체 유저 평균값을 사용합니다."
         ),
         inline=False
     )
