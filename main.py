@@ -9746,30 +9746,27 @@ async def on_ready():
     await init_song_cache_table()
     print(f"🤖 봇 로그인됨: {bot.user}")
 
-    # ✅ Lavalink 연결 디버깅 시작
+    # ✅ Lavalink 노드 연결 디버깅 시작
     nodes = wavelink.Pool.nodes
     print("🔌 Lavalink 노드 연결 시도 중...")
     print(f"🔌 현재 연결된 Lavalink 노드 수: {len(nodes)}")
 
     if not nodes:
         try:
-            await wavelink.Pool.connect(
-                client=bot,
-                nodes=[
-                    wavelink.Node(
-                        uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
-                        password=LAVALINK_PASSWORD
-                        # stats_port=2334      # 필요 시 추가
-                    )
-                ]
+            # ← 여기를 Pool.connect 대신 NodePool.create_node 로 변경
+            await wavelink.NodePool.create_node(
+                bot=bot,
+                host=LAVALINK_HOST,
+                port=LAVALINK_PORT,
+                password=LAVALINK_PASSWORD,
+                # region="asia"   # 필요 시 추가
             )
-            print("🎧 Lavalink 노드 연결 성공 ✅")
-            print("🔌 Pool.nodes 상태:", wavelink.Pool.nodes)
+            print("🎧 Lavalink 노드 생성 성공 ✅")
         except Exception as e:
-            print(f"❌ Lavalink 연결 실패: {type(e).__name__}: {e}")
-    else:
-        print("✅ 이미 Lavalink 노드가 연결되어 있습니다.")
-        print("🔌 Pool.nodes 상태:", wavelink.Pool.nodes)
+            print(f"❌ Lavalink 노드 생성 실패: {type(e).__name__}: {e}")
+
+    print("🔌 Pool.nodes 상태:", wavelink.Pool.nodes)
+
 
 
 
