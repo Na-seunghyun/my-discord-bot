@@ -408,53 +408,88 @@ MAINTENANCE_TIERS = [
 DOKDO_CHANNEL_ID = 1394331814642057418  # 오덕도박장
 
 
-DISCORD_MESSAGE_LIMIT = 4000        # 디스코드 메시지 본문 최대 길이
-EMBED_DESCRIPTION_LIMIT = 2048      # 임베드 description 권장 최대
-FILE_FALLBACK_THRESHOLD = 4000 * 6  # 이 길이를 넘으면 파일로 전달
+import io
+import discord
 
-async def send_long_message(channel: discord.abc.Messageable, lines: list[str], limit: int = DISCORD_MESSAGE_LIMIT):
+# 디스코드 제한 관련 상수
+DISCORD_MESSAGE_LIMIT = 2000          # 디스코드 메시지 본문 최대 길이(절대 2000 초과 금지)
+EMBED_DESCRIPTION_LIMIT = 2048        # 임베드 description 권장 최대(참고용)
+FILE_FALLBACK_THRESHOLD = 6000        # 이 길이를 넘으면 파일로 전달(필요시 조정)
+
+async def send_long_message(
+    channel: discord.abc.Messageable,
+    lines: list[str],
+    limit: int = DISCORD_MESSAGE_LIMIT
+):
     """
-    lines(list[str])를 메시지 길이 제한에 맞춰 여러 번 나눠서 순차 전송합니다.
+    lines(list[str])를 메시지 길이 제한(limit)에 맞춰 여러 번 나눠서 순차 전송합니다.
     각 줄이 단독으로도 limit를 초과할 수 있으므로, 그 경우 줄 자체를 여러 조각으로 분할합니다.
+    - 전체 텍스트가 너무 길면 파일로 전송으로 우회합니다.
+    - 모든 전송은 try/except로 감싸 안정성을 높였습니다.
     """
     if not lines:
         return
+
+    # 혹시 limit이 잘못 들어오면 2000 이하로 보정
+    limit = min(int(limit or DISCORD_MESSAGE_LIMIT), DISCORD_MESSAGE_LIMIT)
+    # 여유를 두고 싶다면 아래와 같이 살짝 낮춰도 됩니다.
+    # limit = min(limit, 1990)
 
     # 전체 텍스트가 지나치게 길면 파일로 전송하는 우회
     full_text = "\n".join(lines)
     if len(full_text) > FILE_FALLBACK_THRESHOLD:
         fp = io.BytesIO(full_text.encode("utf-8"))
         fp.seek(0)
-        await channel.send(
-            content="📄 내용이 길어 파일로 전달합니다.",
-            file=discord.File(fp, filename="maintenance_report.txt")
-        )
+        try:
+            await channel.send(
+                content="📄 내용이 길어 파일로 전달합니다.",
+                file=discord.File(fp, filename="maintenance_report.txt")
+            )
+        except Exception as e:
+            print(f"❌ 파일 전송 실패: {e}")
         return
 
     chunk = ""
     for line in lines:
-        # 한 줄이 limit보다 긴 특수 케이스 처리
+        # 단일 줄이 limit보다 긴 특수 케이스 처리
         if len(line) > limit:
             # 남아있던 chunk 먼저 전송
             if chunk:
-                await channel.send(chunk)
+                try:
+                    await channel.send(chunk)
+                except Exception as e:
+                    print(f"❌ 메시지 전송 실패: {e} (길이: {len(chunk)})")
                 chunk = ""
+
             # line을 limit 사이즈로 쪼개서 전송
             i = 0
             while i < len(line):
-                await channel.send(line[i:i+limit])
+                piece = line[i:i+limit]
+                try:
+                    await channel.send(piece)
+                except Exception as e:
+                    print(f"❌ 메시지 전송 실패(쪼개진 줄): {e} (부분 길이: {len(piece)})")
                 i += limit
             continue
 
         # 현재 줄 추가 시 제한 초과면 먼저 전송
+        # +1은 개행 문자 고려
         if len(chunk) + len(line) + 1 > limit:
-            await channel.send(chunk)
-            chunk = ""
+            if chunk:
+                try:
+                    await channel.send(chunk)
+                except Exception as e:
+                    print(f"❌ 메시지 전송 실패: {e} (길이: {len(chunk)})")
+            chunk = line + "\n"
+        else:
+            chunk += line + "\n"
 
-        chunk += (line + "\n")
-
+    # 마지막 남은 chunk 전송
     if chunk:
-        await channel.send(chunk)
+        try:
+            await channel.send(chunk)
+        except Exception as e:
+            print(f"❌ 마지막 메시지 전송 실패: {e} (길이: {len(chunk)})")
 
 
 async def apply_maintenance_costs(bot):
