@@ -9480,8 +9480,7 @@ async def on_ready():
                 client=bot,
                 nodes=[wavelink.Node(
                     uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
-                    password=LAVALINK_PASSWORD,
-                    secure=False,
+                    password=LAVALINK_PASSWORD,                    
                 )]
             )
             print("🎧 Lavalink 노드 연결 성공 ✅")
