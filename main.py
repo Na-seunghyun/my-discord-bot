@@ -9576,11 +9576,14 @@ async def init_song_cache_table():
     async with aiosqlite.connect(MUSIC_CACHE_DB) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS song_cache (
-                query_norm TEXT PRIMARY KEY,
-                video_url  TEXT    NOT NULL
+                query_norm TEXT    PRIMARY KEY,
+                video_url  TEXT    NOT NULL,
+                title      TEXT,
+                hit_count  INTEGER DEFAULT 0
             );
         """)
         await db.commit()
+
 
 
 
