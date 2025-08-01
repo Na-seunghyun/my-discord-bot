@@ -1849,13 +1849,14 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
 
     # 지표별 보정판수(C) – 신뢰도 기준
     C_MAP = {
-        "avg_damage": 700,
-        "kd": 700,
-        "win_rate": 700,
-        "top10_ratio": 500,
-        "avg_survive": 500,
+        "avg_damage": 1200,
+        "kd": 1200,
+        "win_rate": 1500,
+        "top10_ratio": 700,
+        "avg_survive": 600,
         "headshot_pct": 300
     }
+
 
     # 신뢰 하한 + 유지난이도 보정 (z>0 && n>C에서만 보너스)
     def compute_final_score(raw_value, mean, std, n, C, confidence=0.95, bonus_cap=0.15, bonus_slope=0.10):
@@ -2012,11 +2013,11 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
     # 지표별 보정판수(C) – 신뢰도 기준
     C_MAP = {
-        "avg_damage": 700,
-        "kd": 700,
-        "win_rate": 700,
-        "top10_ratio": 500,
-        "avg_survive": 500,
+        "avg_damage": 1200,
+        "kd": 1200,
+        "win_rate": 1500,
+        "top10_ratio": 700,
+        "avg_survive": 600,
         "headshot_pct": 300
     }
 
