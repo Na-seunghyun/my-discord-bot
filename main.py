@@ -9718,21 +9718,17 @@ async def playtest(interaction: discord.Interaction):
         print("[PlayTest] 채널 연결 예외:", e)
         return await interaction.followup.send(f"❌ 플레이어 연결 실패: {e}", ephemeral=True)
 
-    # 5) 테스트 트랙 검색 (HTTP REST → URI 재검색)
+    # 5) 테스트 트랙 검색 (직접 URI 입력)
     try:
-        item = await lavalink_search_http("IU LILAC")
-        if not item:
-            return await interaction.followup.send("❌ 테스트 트랙을 찾을 수 없습니다.", ephemeral=True)
-        uri = item["info"]["uri"]
-
-        results = await wavelink.Playable.search(uri)
+        results = await wavelink.Playable.search("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         if not results:
-            return await interaction.followup.send("❌ URI 재검색 실패", ephemeral=True)
+            return await interaction.followup.send("❌ 테스트 트랙을 찾을 수 없습니다.", ephemeral=True)
         track = results[0]
         print("[PlayTest] 재생할 트랙:", track)
     except Exception as e:
         print("[PlayTest] 검색 중 예외:", e)
         return await interaction.followup.send(f"❌ 트랙 검색 실패: {e}", ephemeral=True)
+
 
     # 6) 재생
     try:
