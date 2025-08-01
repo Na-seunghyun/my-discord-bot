@@ -9425,15 +9425,22 @@ class MusicControlView(discord.ui.View):
         player.queue.clear()
         await interaction.followup.send("⏹️ 정지 및 대기열 초기화", ephemeral=True)
 
-@bot.tree.command(name="오덕송", description="오덕봇 음악 컨트롤 패널을 엽니다.")
-async def odok_song(interaction: discord.Interaction):
+@tree.command(name="오덕송", description="오덕봇 음악 컨트롤 패널을 엽니다.", guild=discord.Object(id=GUILD_ID))
+async def 오덕송(interaction: discord.Interaction):
     await interaction.response.defer(thinking=False)
+
     embed = discord.Embed(
         title="🎵 오덕송 컨트롤",
-        description="노래 검색 → 재생/일시정지/스킵/반복/볼륨/대기열",
-        color=discord.Color.blue()
+        description="노래 검색 → 재생 / 일시정지 / 스킵 / 반복 / 볼륨 / 대기열 관리",
+        color=discord.Color.blurple()
     )
-    await interaction.followup.send(embed=embed, view=MusicControlView())
+
+    view = MusicControlView()
+    if hasattr(view, "start"):
+        await view.start()  # ❓ 비동기 초기화가 필요하다면 호출됨
+
+    await interaction.followup.send(embed=embed, view=view)
+
 
 @bot.event
 async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
