@@ -8903,9 +8903,10 @@ YDL_OPTS = {
     "format": "bestaudio/best",
     "noplaylist": True,
     "quiet": True,
-    "cookiefile": "cookies.txt",  # ✅ 유튜브 로그인 쿠키 사용
-    "extractor_args": {"youtube": {"player_client": ["android"]}},  # (옵션) 우회율 높이기
+    "cookiefile": "/home/ubuntu/my-discord-bot/cookies.txt",   # ← 절대경로
+    "extractor_args": {"youtube": {"player_client": ["android"]}},  # 우회율↑
 }
+
 FFMPEG_OPTS = {"options": "-vn"}
 YOUTUBE_URL_RE = re.compile(r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/")
 
