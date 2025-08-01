@@ -1423,7 +1423,7 @@ import time
 recent_saves = {}
 
 
-def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None, discord_id=None, source="기본"):
+def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None, discord_id=None, pubg_id=None, source="기본"):
     key = f"{nickname}_{discord_id}"
     now = time.time()
 
@@ -1436,6 +1436,7 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None,
     data_to_save = {
         "nickname": nickname,
         "discord_id": str(discord_id),
+        "pubg_id": pubg_id.strip().lower() if pubg_id else "",
         "timestamp": datetime.now().isoformat()
     }
 
@@ -1507,14 +1508,16 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats=None,
         leaderboard = [
             p for p in leaderboard
             if not (p.get("nickname") == nickname and p.get("discord_id") == str(discord_id))
-]
+        ]
         leaderboard.append(data_to_save)
 
         with open(leaderboard_path, "w", encoding="utf-8") as f:
             json.dump({"season_id": season_id, "players": leaderboard}, f, ensure_ascii=False, indent=2)
-        print(f"✅ 저장 성공 ({source}): {nickname}")
+
+        print(f"✅ 저장 성공 ({source}): {nickname} ({pubg_id})")
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
+
 
 
 
