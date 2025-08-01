@@ -9690,11 +9690,13 @@ async def playtest(interaction: discord.Interaction):
         player = await channel.connect(cls=wavelink.Player)
     print("[PlayTest] Player 객체:", player)
 
-    # 3) 테스트 트랙 검색
-    search = await wavelink.Playable.search("ytsearch:IU LILAC", limit=1)
-    if not search:
+    # 3) 테스트 트랙 검색 (limit 제거)
+    print("[PlayTest] Playable.search 호출")
+    results = await wavelink.Playable.search("ytsearch:IU LILAC")
+    print(f"[PlayTest] Playable.search 결과: {results!r}")
+    if not results:
         return await interaction.followup.send("❌ 테스트 트랙을 찾을 수 없습니다.", ephemeral=True)
-    track = search[0]
+    track = results[0]
     print("[PlayTest] 트랙 URI:", track.uri)
 
     # 4) 재생
