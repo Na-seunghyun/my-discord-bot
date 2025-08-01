@@ -9136,6 +9136,290 @@ def init_building_db():
     conn.close()
 
 
+# ── 추가 import (중복되면 생략) ─────────────────────────────
+import os, re, math, asyncio
+import aiohttp
+import aiosqlite
+import wavelink
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+# ── 음악 채널 (원하면 그대로 사용) ─────────────────────────
+MUSIC_TEXT_CHANNEL_ID = 1400712729001721877
+MUSIC_VOICE_CHANNEL_ID = 1400712268932583435
+
+# ── Lavalink 연결 정보 (환경변수) ─────────────────────────
+LAVALINK_HOST = os.getenv("LAVALINK_HOST", "127.0.0.1")
+LAVALINK_PORT = int(os.getenv("LAVALINK_PORT", "2333"))
+LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "yoursecret")
+
+# ── SQLite 캐시 DB 파일 경로 ─────────────────────────────
+MUSIC_CACHE_DB = os.path.join(os.path.dirname(__file__), "music_cache.db")
+
+@bot.tree.command(name="노드체크", description="Lavalink 노드 연결 상태 확인")
+async def node_check(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True, ephemeral=True)
+    if not wavelink.Pool.nodes:
+        return await interaction.followup.send("❌ 노드 없음")
+
+    node = list(wavelink.Pool.nodes.values())[0]
+    stats = getattr(node, "stats", None)
+    if not stats:
+        return await interaction.followup.send("노드 연결됨(통계 미수신).")
+
+    msg = (
+        f"✅ 노드 연결 OK\n"
+        f"- Uptime: {getattr(stats, 'uptime', 'N/A')}\n"
+        f"- Players: {getattr(stats, 'players', 'N/A')}\n"
+        f"- Playing: {getattr(stats, 'playing', 'N/A')}\n"
+    )
+    await interaction.followup.send(msg)
+
+def _norm_query(artist: str, title: str) -> str:
+    base = f"{(artist or '').strip()} {(title or '').strip()}".lower()
+    # 공백/특수문자 정리
+    return re.sub(r"\s+", " ", re.sub(r"[\[\]\(\)\|\-_/]+", " ", base)).strip()
+
+async def init_music_cache_db():
+    async with aiosqlite.connect(MUSIC_CACHE_DB) as db:
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS song_cache (
+            query_norm   TEXT PRIMARY KEY,
+            video_url    TEXT NOT NULL,
+            title        TEXT,
+            hit_count    INTEGER DEFAULT 0,
+            created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        await db.commit()
+
+async def cache_get_video_url(query_norm: str) -> str | None:
+    async with aiosqlite.connect(MUSIC_CACHE_DB) as db:
+        async with db.execute("SELECT video_url FROM song_cache WHERE query_norm = ?;", (query_norm,)) as cur:
+            row = await cur.fetchone()
+            if row and row[0]:
+                # 히트 카운트 증가
+                await db.execute("UPDATE song_cache SET hit_count = hit_count + 1 WHERE query_norm = ?;", (query_norm,))
+                await db.commit()
+                return row[0]
+    return None
+
+async def cache_set_video_url(query_norm: str, video_url: str, title: str | None = None):
+    async with aiosqlite.connect(MUSIC_CACHE_DB) as db:
+        await db.execute("""
+        INSERT INTO song_cache (query_norm, video_url, title, hit_count)
+        VALUES (?, ?, ?, 1)
+        ON CONFLICT(query_norm) DO UPDATE SET
+            video_url=excluded.video_url,
+            title=excluded.title,
+            hit_count=song_cache.hit_count + 1
+        ;""", (query_norm, video_url, title or None))
+        await db.commit()
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[\s\-\_\|\[\]\(\)]+", " ", (s or "").lower()).strip()
+
+_EXCLUDE_IF_NOT_REQUESTED = ["live", "cover", "instrumental", "remix", "sped up", "nightcore"]
+
+def _score_track(track: wavelink.Playable, want_tokens: set[str], prefer_official=True) -> float:
+    title = _norm(track.title)
+    author = _norm(getattr(track, "author", "") or "")
+    duration_ms = int(getattr(track, "length", 0) or 0)  # ms
+    duration_sec = duration_ms // 1000
+
+    t_tokens = set(title.split())
+    overlap = len(want_tokens & t_tokens)
+
+    len_penalty = 1.0
+    if duration_sec == 0 or duration_sec > 15 * 60:
+        len_penalty = 0.6
+
+    excl_penalty = 1.0
+    if any(kw in title for kw in _EXCLUDE_IF_NOT_REQUESTED):
+        excl_penalty = 0.7
+
+    ch_bonus = 1.0
+    if prefer_official and any(k in author for k in ["official", "vevo", "topic"]):
+        ch_bonus = 1.15
+
+    score = (overlap * 2.0 + math.log1p(len(title))) * len_penalty * excl_penalty * ch_bonus
+    return score
+
+async def search_best_by_lavalink(query: str, limit: int = 10) -> wavelink.Playable | None:
+    results = await wavelink.Playable.search(f"ytsearch:{query}")
+    if not results:
+        return None
+    want_tokens = set(_norm(query).split())
+    best, best_score = None, -1.0
+    for t in results[:limit]:
+        sc = _score_track(t, want_tokens)
+        if sc > best_score:
+            best_score, best = sc, t
+    return best
+
+class SongSearchModal(discord.ui.Modal, title="노래 검색"):
+    artist = discord.ui.TextInput(label="가수", placeholder="예: IU", max_length=80)
+    title_ = discord.ui.TextInput(label="제목", placeholder="예: Love wins all", max_length=100)
+
+    def __init__(self, parent_view: "MusicControlView"):
+        super().__init__(timeout=180)
+        self.parent_view = parent_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+        artist = str(self.artist).strip()
+        title = str(self.title_).strip()
+        query_norm = _norm_query(artist, title)
+        query = f"{artist} {title}".strip()
+
+        player = await get_or_connect_player(interaction)
+        if not player:
+            return
+
+        track = None
+
+        # 1) 캐시 조회
+        cached_url = await cache_get_video_url(query_norm)
+        if cached_url:
+            try:
+                ts = await wavelink.Playable.search(cached_url)
+                if ts:
+                    track = ts[0]
+            except Exception:
+                track = None
+
+        # 2) Fast‑Path: ytsearch + 로컬 스코어링
+        if not track:
+            track = await search_best_by_lavalink(query)
+
+        # 3) 캐시 저장
+        if track and getattr(track, "uri", None):
+            await cache_set_video_url(query_norm, track.uri, track.title)
+
+        if not track:
+            return await interaction.followup.send("검색 결과를 찾지 못했어요. 키워드를 조금 바꿔볼까요?")
+
+        player.queue.put(track)
+        msg = f"➕ 대기열 추가: **{track.title}**"
+        if not player.playing:
+            await player.play(player.queue.get())
+            msg = f"▶️ 재생 시작: **{track.title}**"
+        await interaction.followup.send(msg)
+
+class MusicControlView(discord.ui.View):
+    def __init__(self, *, timeout: float = 300):
+        super().__init__(timeout=timeout)
+
+    @discord.ui.button(label="노래 검색", style=discord.ButtonStyle.primary)
+    async def search_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(SongSearchModal(self))
+
+    @discord.ui.button(emoji="⏯️", style=discord.ButtonStyle.secondary)
+    async def pause_resume(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        player = interaction.guild.voice_client
+        if not player or not isinstance(player, wavelink.Player):
+            return await interaction.followup.send("플레이어가 없습니다.", ephemeral=True)
+        if player.paused:
+            await player.resume()
+            return await interaction.followup.send("▶️ 재개", ephemeral=True)
+        else:
+            await player.pause()
+            return await interaction.followup.send("⏸️ 일시정지", ephemeral=True)
+
+    @discord.ui.button(emoji="⏭️", style=discord.ButtonStyle.secondary)
+    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        player = interaction.guild.voice_client
+        if not player or not isinstance(player, wavelink.Player):
+            return await interaction.followup.send("플레이어가 없습니다.", ephemeral=True)
+        if player.queue:
+            await player.play(player.queue.get())
+            return await interaction.followup.send("⏭️ 다음 곡", ephemeral=True)
+        else:
+            await player.stop()
+            return await interaction.followup.send("⏹️ 대기열이 비어 종료", ephemeral=True)
+
+    @discord.ui.button(emoji="🔁", style=discord.ButtonStyle.secondary)
+    async def loop_toggle(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        player = interaction.guild.voice_client
+        if not player or not isinstance(player, wavelink.Player):
+            return await interaction.followup.send("플레이어가 없습니다.", ephemeral=True)
+        flag = getattr(player, "loop", False)
+        player.loop = not flag
+        await interaction.followup.send(f"🔁 반복: {'ON' if player.loop else 'OFF'}", ephemeral=True)
+
+    @discord.ui.button(emoji="🔊", style=discord.ButtonStyle.secondary)
+    async def volume_up(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        player = interaction.guild.voice_client
+        if not player or not isinstance(player, wavelink.Player):
+            return await interaction.followup.send("플레이어가 없습니다.", ephemeral=True)
+        vol = min((player.volume or 100) + 10, 150)
+        await player.set_volume(vol)
+        await interaction.followup.send(f"🔊 볼륨: {vol}%", ephemeral=True)
+
+    @discord.ui.button(emoji="🔉", style=discord.ButtonStyle.secondary)
+    async def volume_down(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        player = interaction.guild.voice_client
+        if not player or not isinstance(player, wavelink.Player):
+            return await interaction.followup.send("플레이어가 없습니다.", ephemeral=True)
+        vol = max((player.volume or 100) - 10, 10)
+        await player.set_volume(vol)
+        await interaction.followup.send(f"🔉 볼륨: {vol}%", ephemeral=True)
+
+    @discord.ui.button(emoji="🧾", style=discord.ButtonStyle.secondary)
+    async def show_queue(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        player = interaction.guild.voice_client
+        if not player or not isinstance(player, wavelink.Player):
+            return await interaction.followup.send("플레이어가 없습니다.", ephemeral=True)
+        if not player.queue:
+            return await interaction.followup.send("대기열이 비었습니다.", ephemeral=True)
+        lines = [f"{i}. {t.title}" for i, t in enumerate(list(player.queue)[:10], 1)]
+        await interaction.followup.send("**대기열**\n" + "\n".join(lines), ephemeral=True)
+
+    @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger)
+    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        player = interaction.guild.voice_client
+        if not player or not isinstance(player, wavelink.Player):
+            return await interaction.followup.send("플레이어가 없습니다.", ephemeral=True)
+        await player.stop()
+        player.queue.clear()
+        await interaction.followup.send("⏹️ 정지 및 대기열 초기화", ephemeral=True)
+
+@bot.tree.command(name="오덕송", description="오덕봇 음악 컨트롤 패널을 엽니다.")
+async def odok_song(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=False)
+    embed = discord.Embed(
+        title="🎵 오덕송 컨트롤",
+        description="노래 검색 → 재생/일시정지/스킵/반복/볼륨/대기열",
+        color=discord.Color.blue()
+    )
+    await interaction.followup.send(embed=embed, view=MusicControlView())
+
+@bot.event
+async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
+    player: wavelink.Player = payload.player
+    if getattr(player, "loop", False) and payload.track:
+        player.queue.put(payload.track)
+    if player.queue:
+        await player.play(player.queue.get())
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -9154,7 +9438,22 @@ async def on_ready():
     accumulate_building_rewards.start()  # ✅ 반드시 루프 시작 필요
     
     print(f"🤖 봇 로그인됨: {bot.user}")
-
+    # ✅ (추가) Lavalink 노드 연결: 이미 연결돼 있으면 건너뜀
+    # ────────────────────────────────────────────────────────
+    if not wavelink.Pool.nodes:
+        try:
+            await wavelink.Pool.connect(
+                client=bot,
+                nodes=[wavelink.Node(
+                    uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
+                    password=LAVALINK_PASSWORD,
+                    secure=False,
+                )]
+            )
+            print("🎧 Lavalink 노드 연결 성공")
+        except Exception as e:
+            print(f"❌ Lavalink 연결 실패: {e}")
+    # ────────────────────────────────────────────────────────
 
     if not auto_apply_maintenance.is_running():
         auto_apply_maintenance.start()
