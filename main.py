@@ -8889,15 +8889,145 @@ async def accumulate_building_rewards():
         set_user_building(user_id, info)
 
 
+import yt_dlp
+import asyncio
+import re
+from discord import ui, Interaction
+
+MUSIC_TEXT_CHANNEL_ID = 1400712729001721877
+MUSIC_VOICE_CHANNEL_ID = 1400712268932583435
+
+current_playing = {}  # guild_id: {"title": ..., "url": ...}
+
+YDL_OPTS = {"format": "bestaudio/best", "noplaylist": True, "quiet": True}
+FFMPEG_OPTS = {"options": "-vn"}
+YOUTUBE_URL_RE = re.compile(r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/")
+
+def search_youtube_videos(query: str, max_results: int = 5):
+    with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
+        info = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
+        return [
+            {"title": e.get("title"), "url": e.get("url"), "webpage_url": e.get("webpage_url")}
+            for e in info.get("entries", []) if e
+        ]
 
 
+class SongResultView(ui.View):
+    def __init__(self, interaction: Interaction, results):
+        super().__init__(timeout=60)
+        self.interaction = interaction
+        self.results = results
+
+        for idx, song in enumerate(results):
+            self.add_item(self.SongButton(idx, song, self))
+
+    class SongButton(ui.Button):
+        def __init__(self, idx, song, parent):
+            super().__init__(label=f"{idx+1}. {song['title'][:70]}", style=discord.ButtonStyle.secondary)
+            self.idx = idx
+            self.song = song
+            self.parent_view = parent
+
+        async def callback(self, interaction: Interaction):
+            voice_channel = interaction.client.get_channel(MUSIC_VOICE_CHANNEL_ID)
+            if not voice_channel:
+                return await interaction.response.send_message("❌ 음성 채널을 찾을 수 없습니다.", ephemeral=True)
+
+            vc = discord.utils.get(interaction.guild.voice_clients)
+            if not vc:
+                vc = await voice_channel.connect(self_deaf=True)
+
+            if vc.is_playing():
+                vc.stop()
+
+            source = await discord.FFmpegOpusAudio.from_probe(self.song["url"], **FFMPEG_OPTS)
+            vc.play(source)
+            current_playing[interaction.guild.id] = {
+                "title": self.song["title"],
+                "url": self.song["webpage_url"]
+            }
+            await interaction.response.send_message(f"✅ **{self.song['title']}** 재생 시작!", ephemeral=True)
+            self.stop()
+
+class SongSearchModal(ui.Modal, title="🎵 노래 검색"):
+    query = ui.TextInput(label="검색어", placeholder="아티스트 또는 곡 제목", required=True)
+
+    def __init__(self):
+        super().__init__()
+
+    async def on_submit(self, interaction: Interaction):
+        results = search_youtube_videos(self.query.value, 5)
+        if not results:
+            return await interaction.response.send_message("❌ 검색 결과가 없습니다.", ephemeral=True)
+
+        desc = "\n".join([f"{i+1}. {r['title']}" for i, r in enumerate(results)])
+        embed = discord.Embed(title=f"🔍 '{self.query.value}' 검색 결과", description=desc, color=discord.Color.blue())
+        await interaction.response.send_message(embed=embed, view=SongResultView(interaction, results))
+
+class OdeokMusicControlView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @ui.button(label="🔍 노래 검색", style=discord.ButtonStyle.primary)
+    async def search_button(self, interaction: Interaction, button: ui.Button):
+        await interaction.response.send_modal(SongSearchModal())
+
+    @ui.button(label="⏸️ 일시정지", style=discord.ButtonStyle.secondary)
+    async def pause_button(self, interaction: Interaction, button: ui.Button):
+        vc = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.pause()
+            await interaction.response.send_message("⏸️ 일시정지되었습니다.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ 재생 중인 곡이 없습니다.", ephemeral=True)
+
+    @ui.button(label="▶️ 재개", style=discord.ButtonStyle.secondary)
+    async def resume_button(self, interaction: Interaction, button: ui.Button):
+        vc = interaction.guild.voice_client
+        if vc and vc.is_paused():
+            vc.resume()
+            await interaction.response.send_message("▶️ 다시 재생합니다.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ 일시정지된 곡이 없습니다.", ephemeral=True)
+
+    @ui.button(label="⏭️ 스킵", style=discord.ButtonStyle.secondary)
+    async def skip_button(self, interaction: Interaction, button: ui.Button):
+        vc = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.stop()
+            current_playing.pop(interaction.guild.id, None)
+            await interaction.response.send_message("⏭️ 곡을 스킵했습니다.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ 재생 중인 곡이 없습니다.", ephemeral=True)
+
+    @ui.button(label="🛑 정지 및 퇴장", style=discord.ButtonStyle.danger)
+    async def stop_button(self, interaction: Interaction, button: ui.Button):
+        vc = interaction.guild.voice_client
+        if vc:
+            await vc.disconnect()
+        current_playing.pop(interaction.guild.id, None)
+        await interaction.response.send_message("🛑 재생을 중지하고 퇴장했습니다.", ephemeral=True)
+
+    @ui.button(label="🎵 현재곡", style=discord.ButtonStyle.success)
+    async def now_button(self, interaction: Interaction, button: ui.Button):
+        info = current_playing.get(interaction.guild.id)
+        if not info:
+            return await interaction.response.send_message("🎵 현재 재생 중인 곡이 없습니다.", ephemeral=True)
+        embed = discord.Embed(
+            title="🎶 현재 재생 중",
+            description=f"[{info['title']}]({info['url']})",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+@tree.command(name="오덕송", description="오덕송 음악 제어 패널을 불러옵니다.", guild=discord.Object(id=GUILD_ID))
+async def 오덕송(interaction: discord.Interaction):
+    if interaction.channel.id != MUSIC_TEXT_CHANNEL_ID:
+        return await interaction.response.send_message("❌ 이 명령어는 음악 채팅 채널에서만 사용 가능합니다.", ephemeral=True)
 
-
-
-
-
+    embed = discord.Embed(title="🎼 오덕송 음악 제어 패널", description="버튼을 사용해 음악을 검색하고 재생을 제어하세요.", color=discord.Color.purple())
+    await interaction.response.send_message(embed=embed, view=OdeokMusicControlView())
 
 
 
