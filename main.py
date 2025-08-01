@@ -3104,6 +3104,9 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             ephemeral=True
         )
 
+    # 여기부터 defer 처리
+    await interaction.response.defer()
+
     # 💸 베팅 차감
     balance -= 베팅액
 
@@ -3191,7 +3194,8 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             user_id
         )
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
+
 
   
 
