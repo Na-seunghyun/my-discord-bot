@@ -6892,7 +6892,8 @@ async def 예금(interaction: discord.Interaction, 금액: int):
 @예금.autocomplete("금액")
 async def 예금_자동완성(interaction: discord.Interaction, current: str):
     user_id = str(interaction.user.id)
-    balance = await get_balance(user_id)
+    balance_data = await get_balance(user_id)
+    balance = balance_data if isinstance(balance_data, int) else balance_data.get("amount", 0)
 
     if balance <= 0:
         return [app_commands.Choice(name="❌ 예금 가능한 금액 없음", value="0")]
@@ -6901,6 +6902,7 @@ async def 예금_자동완성(interaction: discord.Interaction, current: str):
         app_commands.Choice(name=f"💰 전액 예금 ({balance:,}원)", value=str(balance)),
         app_commands.Choice(name=f"🌓 절반 예금 ({balance // 2:,}원)", value=str(balance // 2))
     ]
+
 
 # ✅ /출금 커맨드
 @tree.command(name="출금", description="은행에서 지갑으로 돈을 출금합니다.", guild=discord.Object(id=GUILD_ID))
