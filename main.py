@@ -204,22 +204,33 @@ async def update_user_data(user_id, modifier_func):
         data = load_balances()
         uid = str(user_id)
 
-        # 기본값 채우기
         user_data = data.get(uid, {
             "amount": 0,
             "gamble": {"win": 0, "lose": 0},
             "last_updated": datetime.utcnow().isoformat()
         })
 
-        # 외부 함수로 수정
+        # modifier_func는 user_data를 직접 수정하는 함수여야 합니다
         modifier_func(user_data)
 
-        # 갱신 시간 갱신
         user_data["last_updated"] = datetime.utcnow().isoformat()
         data[uid] = user_data
         save_balances(data)
         return user_data
 
+async def read_user_data(user_id, reader_func):
+    async with balance_lock:
+        data = load_balances()
+        uid = str(user_id)
+
+        user_data = data.get(uid, {
+            "amount": 0,
+            "gamble": {"win": 0, "lose": 0},
+            "last_updated": datetime.utcnow().isoformat()
+        })
+
+        # reader_func는 user_data에서 원하는 값을 반환하는 함수입니다
+        return reader_func(user_data)
 
 
 
@@ -244,11 +255,10 @@ def save_balances(data):
         json.dump(data, f, indent=4)
 
 async def get_balance(user_id: str) -> int:
-    async def getter(user_data):
+    def getter(user_data):
         return user_data.get("amount", 0)
-    amount = await update_user_data(user_id, getter, read_only=True)
+    amount = await read_user_data(user_id, getter)
     return amount
-
 
 
 
@@ -265,7 +275,7 @@ async def record_gamble_result(user_id, success: bool):
             user_data["gamble"]["win"] += 1
         else:
             user_data["gamble"]["lose"] += 1
-    return await update_user_data(user_id, modifier)
+    await update_user_data(user_id, modifier)
 
 def get_gamble_title(user_data: dict, success: bool) -> str:
     stats = user_data.get("gamble", {})
@@ -342,8 +352,8 @@ def get_gamble_title(user_data: dict, success: bool) -> str:
 async def add_balance(user_id, amount):
     async def modifier(user_data):
         user_data["amount"] = user_data.get("amount", 0) + amount
-    return await update_user_data(user_id, modifier)
-
+    await update_user_data(user_id, modifier)
+    
 @tasks.loop(hours=1)
 async def auto_update_valid_ids():
     for guild in bot.guilds:
