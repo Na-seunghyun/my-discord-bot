@@ -3415,17 +3415,18 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
     building = get_user_building(user_id)
     stat_gain_text = ""
 
-    # ✅ 도박 성공
     if roll <= success_chance:
         jackpot_chance = get_jackpot_chance(user_id, 0.01)
         is_jackpot = random.random() < jackpot_chance
         multiplier = 4 if is_jackpot else 2
+
+        # apply_gamble_bonus 동기 함수면 이렇게
         reward = apply_gamble_bonus(user_id, 베팅액 * multiplier)
 
         # 💰 보상 추가
         await add_balance(user_id, reward)
 
-        # 상태치 증가
+        # 상태치 증가 (동기 함수라면 await 없이 호출)
         if building:
             gained_stats = []
             for stat in ["stability", "risk", "labor", "tech"]:
@@ -3435,9 +3436,13 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             if gained_stats:
                 stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
 
-        # ✅ 기록 저장
+        # 기록 저장 (비동기 함수)
         await record_gamble_result(user_id, True)
-        title = get_gamble_title(load_balances().get(user_id, {}), True)
+
+        # balances 딕셔너리 동기 함수라면
+        balances = load_balances()
+        title = get_gamble_title(balances.get(user_id, {}), True)
+
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
         final_balance = await get_balance(user_id)
 
@@ -3449,13 +3454,14 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             user_id
         )
 
-    # ❌ 도박 실패
     else:
+        # 실패 시 오덕로또 풀에 적립 (동기 함수라면 await 제거)
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
 
         await record_gamble_result(user_id, False)
-        title = get_gamble_title(load_balances().get(user_id, {}), False)
+        balances = load_balances()
+        title = get_gamble_title(balances.get(user_id, {}), False)
         final_balance = await get_balance(user_id)
 
         embed = create_embed(
@@ -3470,6 +3476,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
 
     await interaction.followup.send(embed=embed)
+
 
 
 
@@ -6923,7 +6930,7 @@ async def 예금_자동완성(interaction: discord.Interaction, current: str):
 @app_commands.describe(금액="출금할 금액")
 async def 출금(interaction: discord.Interaction, 금액: int):
     user_id = str(interaction.user.id)
-    bank_balance = await get_total_bank_balance(user_id)  # await 추가
+    bank_balance = get_total_bank_balance(user_id)  # 동기 함수, await 제거
 
     if 금액 <= 0 or 금액 > bank_balance:
         return await interaction.response.send_message(
@@ -6931,21 +6938,20 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    # await 붙여야 하는 경우
-    net_interest, tax = await process_bank_withdraw(user_id, 금액)
+    net_interest, tax = await process_bank_withdraw(user_id, 금액)  # 비동기 함수이므로 await 필요
 
     original_interest = net_interest + tax  # 세전 이자
 
-    await add_balance(user_id, 금액 + net_interest)
+    await add_balance(user_id, 금액 + net_interest)  # 비동기 함수이므로 await 필요
 
     if tax > 0:
-        add_oduk_pool(tax)
+        add_oduk_pool(tax)  # 동기 함수라 await 제거
 
-    pool_amt = get_oduk_pool_amount()
+    pool_amt = get_oduk_pool_amount()  # 동기 함수라 await 제거
 
-    # 이자 한도 초과 안내
+    # 이자 한도 초과 안내 (출금 명령어 내 별도 메시지)
     if original_interest > 500_000:
-        await interaction.channel.send(
+        await interaction.response.send_message(
             f"⚠️ **이자 지급 한도 초과 안내**\n"
             f"원래 계산된 이자는 **{original_interest:,}원**이었지만,\n"
             f"시스템 상 하루 최대 이자 지급 한도는 **500,000원**입니다.\n"
@@ -6953,12 +6959,12 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    current_wallet = await get_balance(user_id)
-    remaining_bank = await get_total_bank_balance(user_id)
+    current_wallet = await get_balance(user_id)  # 비동기 함수이므로 await 필요
+    remaining_bank = get_total_bank_balance(user_id)  # 동기 함수
 
-    await interaction.response.send_message(embed=create_embed(
-        "🏧 출금 완료",
-        (
+    embed = create_embed(
+        title="🏧 출금 완료",
+        description=(
             f"🏛️ 은행 → 지갑: **{금액:,}원** 출금됨\n"
             f"💵 순이자 지급: **{net_interest:,}원** (세금 {tax:,}원 → 오덕로또 적립)\n"
             f"💰 현재 지갑 잔액: **{current_wallet:,}원**\n"
@@ -6966,9 +6972,12 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             f"🎯 현재 오덕로또 상금: **{pool_amt:,}원**\n"
             f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
         ),
-        discord.Color.green(),
-        user_id
-    ))
+        color=discord.Color.green(),
+        balance=current_wallet  # 잔액 인자로 명확히 전달
+    )
+
+    await interaction.response.send_message(embed=embed)
+
 
 
 
