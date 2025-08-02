@@ -6867,7 +6867,7 @@ async def apply_bank_depreciation(bot):
 @app_commands.describe(금액="예금할 금액")
 async def 예금(interaction: discord.Interaction, 금액: int):
     user_id = str(interaction.user.id)
-    wallet = await get_balance(user_id)
+    wallet = await get_balance(user_id)  # get_balance는 비동기라 await 필요
 
     if 금액 <= 0 or 금액 > wallet:
         return await interaction.response.send_message(
@@ -6875,17 +6875,15 @@ async def 예금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    await add_balance(user_id, -금액)
-    # add_bank_deposit가 비동기면 await 추가
-    add_bank_deposit(user_id, 금액)  
+    await add_balance(user_id, -금액)  # add_balance가 비동기면 await 필요
+    add_bank_deposit(user_id, 금액)   # 동기 함수이므로 await 없음
 
-    # bank_balance가 비동기 함수면 await 붙이세요
-    bank_balance = get_total_bank_balance(user_id)  
+    bank_balance = get_total_bank_balance(user_id)  # 동기 함수이므로 await 없음
 
     next_time = get_next_interest_time(user_id)
     next_time_str = next_time.strftime("%Y-%m-%d %H:%M:%S") if next_time else "없음"
 
-    current_wallet = await get_balance(user_id)  # 한 번 더 조회해서 최신 잔액
+    current_wallet = await get_balance(user_id)  # 다시 잔액 조회 (비동기)
 
     await interaction.response.send_message(embed=create_embed(
         "🏦 예금 완료",
@@ -6898,6 +6896,7 @@ async def 예금(interaction: discord.Interaction, 금액: int):
         discord.Color.blue(),
         user_id
     ))
+
 
 # ✅ 예금 자동완성
 @예금.autocomplete("금액")
