@@ -246,7 +246,9 @@ def save_balances(data):
 async def get_balance(user_id):
     async def getter(user_data):
         return user_data.get("amount", 0)
-    return await update_user_data(user_id, getter, read_only=True)
+    # read_only 제거
+    return await update_user_data(user_id, getter)
+
 
 
 async def set_balance(user_id, amount):
