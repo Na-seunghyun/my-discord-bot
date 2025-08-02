@@ -3857,11 +3857,14 @@ async def 도박왕(interaction: discord.Interaction):
 
     await interaction.followup.send(embed=embed)
 
-def create_embed(title: str, description: str, color: discord.Color, balance: int = None) -> discord.Embed:
+def create_embed(title: str, description: str, color: discord.Color, user_id: str = None, balance: int | None = None) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, color=color)
     if balance is not None:
         embed.set_footer(text=f"현재 잔액: {balance:,}원")
+    elif user_id is not None:
+        embed.set_footer(text=f"유저 ID: {user_id}")
     return embed
+
 
 
 
