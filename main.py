@@ -210,13 +210,18 @@ async def update_user_data(user_id, modifier_func):
             "last_updated": datetime.utcnow().isoformat()
         })
 
-        # modifier_func는 user_data를 직접 수정하는 함수여야 합니다
-        modifier_func(user_data)
+        # async modifier_func 호출 시 await 필요
+        if asyncio.iscoroutinefunction(modifier_func):
+            await modifier_func(user_data)
+        else:
+            modifier_func(user_data)
 
         user_data["last_updated"] = datetime.utcnow().isoformat()
         data[uid] = user_data
         save_balances(data)
         return user_data
+
+
 
 async def read_user_data(user_id, reader_func):
     async with balance_lock:
@@ -3518,6 +3523,7 @@ async def 베팅액_자동완성(interaction: discord.Interaction, current: str)
 
 
 
+
 @tree.command(name="송금", description="다른 유저에게 금액을 보냅니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="금액을 보낼 유저", 금액="최소 100원 이상")
 async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액: int):
@@ -3553,13 +3559,15 @@ async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액:
     await add_balance(받는이, 금액)
     log_transfer(보낸이, 받는이, 금액)
 
+    balance = await get_balance(보낸이)
     embed = discord.Embed(
         title="✅ 송금 완료",
         description=f"{대상.mention}님에게 **{금액:,}원**을 송금했습니다.",
         color=discord.Color.green()
     )
-    embed.set_footer(text=f"보낸 사람 잔액: {await get_balance(보낸이):,}원")
+    embed.set_footer(text=f"보낸 사람 잔액: {balance:,}원")
     await interaction.response.send_message(embed=embed)
+
 
 
 from discord.ui import View, Button
@@ -3590,7 +3598,7 @@ class LotteryButton(Button):
                 await add_balance(self.user_id, reward)
                 await record_gamble_result(self.user_id, True)
 
-                titles = get_gamble_title(self.user_id, True)
+                titles = get_gamble_title(await load_balances().get(self.user_id, {}), True)
                 title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
                 title = "🎉 당첨!"
                 desc = (
@@ -3606,7 +3614,7 @@ class LotteryButton(Button):
                 await record_gamble_result(self.user_id, False)
 
                 pool_amt = get_oduk_pool_amount()
-                titles = get_gamble_title(self.user_id, False)
+                titles = get_gamble_title(await load_balances().get(self.user_id, {}), False)
                 title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
                 title = "💔 꽝!"
                 desc = (
@@ -3628,8 +3636,6 @@ class LotteryButton(Button):
                 await interaction.response.send_message("⚠️ 오류가 발생했습니다.", ephemeral=True)
 
 
-
-
 # 🎯 복권 인터페이스 (버튼 3개)
 class LotteryView(View):
     def __init__(self, user_id, 베팅액):
@@ -3642,7 +3648,6 @@ class LotteryView(View):
     def stop(self):
         self.stopped = True
         return super().stop()
-
 
 
 # 🎯 복권 명령어 슬래시 커맨드
@@ -3684,7 +3689,6 @@ async def 복권(interaction: discord.Interaction, 베팅액: int):
         ephemeral=False
     )
 
-
 @복권.autocomplete("베팅액")
 async def 복권_배팅액_자동완성(interaction: discord.Interaction, current: str):
     from discord import app_commands
@@ -3694,18 +3698,17 @@ async def 복권_배팅액_자동완성(interaction: discord.Interaction, curren
     balance = balances.get(user_id, {}).get("amount", 0)
 
     if balance < 1000:
-        return [app_commands.Choice(name="❌ 최소 베팅금 부족", value="0")]
+        return [app_commands.Choice(name="❌ 최소 베팅금 부족", value=0)]
 
     half = balance // 2
     allin = balance
 
     choices = [
-        app_commands.Choice(name=f"🔥 전액 배팅 ({allin:,}원)", value=str(allin)),
-        app_commands.Choice(name=f"💸 절반 배팅 ({half:,}원)", value=str(half)),
+        app_commands.Choice(name=f"🔥 전액 배팅 ({allin:,}원)", value=allin),
+        app_commands.Choice(name=f"💸 절반 배팅 ({half:,}원)", value=half),
     ]
 
     return choices
-
 
 
 
@@ -3722,7 +3725,7 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
 
     user_id = str(interaction.user.id)
     symbols = ["🍒", "🍋", "🍇", "🍉", "💎"]
-    balance = await get_balance(user_id)
+    balance = await get_balance(user_id)  # 최신 잔액 조회
 
     if 베팅액 < 1000:
         return await interaction.response.send_message(
@@ -3756,12 +3759,15 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         else:
             cur_streak = 1
 
+    balances = load_balances()  # 동기 함수이므로 await 없음
+    user_data = balances.get(user_id, {})
+
     if max_streak == 5:
         winnings = 베팅액 * 10
         winnings = apply_gamble_bonus(user_id, winnings)
         await add_balance(user_id, winnings)
         await record_gamble_result(user_id, True)
-        titles = get_gamble_title(user_id, True)
+        titles = get_gamble_title(user_data, True)
         title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
         outcome = f"🎉 **5개 연속 일치! +{winnings:,}원 획득!**{title_str}"
         color = discord.Color.green()
@@ -3771,7 +3777,7 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         winnings = apply_gamble_bonus(user_id, winnings)
         await add_balance(user_id, winnings)
         await record_gamble_result(user_id, True)
-        titles = get_gamble_title(user_id, True)
+        titles = get_gamble_title(user_data, True)
         title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
         outcome = f"✨ **{max_streak}개 연속 일치! +{winnings:,}원 획득!**{title_str}"
         color = discord.Color.green()
@@ -3780,7 +3786,7 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         add_oduk_pool(베팅액)
         await record_gamble_result(user_id, False)
         pool_amt = get_oduk_pool_amount()
-        titles = get_gamble_title(user_id, False)
+        titles = get_gamble_title(user_data, False)
         title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
         outcome = (
             f"😢 **꽝! 다음 기회를 노려보세요.\n-{베팅액:,}원 손실**\n\n"
@@ -3790,21 +3796,22 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
         )
         color = discord.Color.red()
 
+    # 최신 잔액 다시 조회해서 표시
+    current_balance = await get_balance(user_id)
+
     await message.edit(
         content=(
             f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n"
-            f"{outcome}\n💵 현재 잔액: {balance:,}원"
+            f"{outcome}\n💵 현재 잔액: {current_balance:,}원"
         )
     )
-
-
 
 
 @슬롯.autocomplete("베팅액")
 async def 슬롯_배팅액_자동완성(interaction: discord.Interaction, current: str):
     from discord import app_commands
 
-    balances = load_balances()
+    balances = load_balances()  # 동기 함수이므로 await 없음
     user_id = str(interaction.user.id)
     balance = balances.get(user_id, {}).get("amount", 0)
 
@@ -3820,6 +3827,8 @@ async def 슬롯_배팅액_자동완성(interaction: discord.Interaction, curren
     ]
 
     return choices
+
+
 
 
 
