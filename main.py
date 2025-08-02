@@ -6937,12 +6937,11 @@ async def 예금_자동완성(interaction: discord.Interaction, current: str):
     ]
 
 
-# ✅ /출금 커맨드
 @tree.command(name="출금", description="은행에서 지갑으로 돈을 출금합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(금액="출금할 금액")
 async def 출금(interaction: discord.Interaction, 금액: int):
     user_id = str(interaction.user.id)
-    bank_balance = get_total_bank_balance(user_id)  # 동기 함수, await 제거
+    bank_balance = get_total_bank_balance(user_id)  # 동기 함수
 
     if 금액 <= 0 or 금액 > bank_balance:
         return await interaction.response.send_message(
@@ -6950,20 +6949,20 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    net_interest, tax = await process_bank_withdraw(user_id, 금액)  # 비동기 함수이므로 await 필요
+    net_interest, tax = await process_bank_withdraw(user_id, 금액)  # 비동기 함수
 
     original_interest = net_interest + tax  # 세전 이자
 
-    await add_balance(user_id, 금액 + net_interest)  # 비동기 함수이므로 await 필요
+    await add_balance(user_id, 금액 + net_interest)
 
     if tax > 0:
-        add_oduk_pool(tax)  # 동기 함수라 await 제거
+        add_oduk_pool(tax)  # 동기 함수
 
-    pool_amt = get_oduk_pool_amount()  # 동기 함수라 await 제거
+    pool_amt = get_oduk_pool_amount()  # 동기 함수
 
-    # 이자 한도 초과 안내 (출금 명령어 내 별도 메시지)
+    # 이자 한도 초과 안내 (첫 응답 이후 메시지)
     if original_interest > 500_000:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"⚠️ **이자 지급 한도 초과 안내**\n"
             f"원래 계산된 이자는 **{original_interest:,}원**이었지만,\n"
             f"시스템 상 하루 최대 이자 지급 한도는 **500,000원**입니다.\n"
@@ -6971,7 +6970,7 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    current_wallet = await get_balance(user_id)  # 비동기 함수이므로 await 필요
+    current_wallet = await get_balance(user_id)  # 비동기 함수
     remaining_bank = get_total_bank_balance(user_id)  # 동기 함수
 
     embed = create_embed(
@@ -6985,10 +6984,11 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
         ),
         color=discord.Color.green(),
-        balance=current_wallet  # 잔액 인자로 명확히 전달
+        user_id=user_id  # 잔액 표시 위해 user_id 전달
     )
 
     await interaction.response.send_message(embed=embed)
+
 
 
 
