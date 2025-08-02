@@ -8749,7 +8749,7 @@ async def can_level_up(user_id: str, data: dict) -> tuple[bool, str]:
 
     # 자금 조건
     cost = get_levelup_cost(lv)
-    wallet = await await get_balance(user_id)  # ✅ 비동기 호출
+    wallet = await get_balance(user_id)  # ✅ 비동기 호출
     if wallet < cost:
         messages.append(f"💸 자금 부족: {wallet:,} / {cost:,}")
         ok = False
@@ -8790,7 +8790,7 @@ async def perform_level_up(user_id: str):
 
     # ✅ 자금 체크
     cost = get_levelup_cost(level)
-    user_money = await await get_balance(user_id)  # 🔁 비동기 호출
+    user_money = await get_balance(user_id)  # 🔁 비동기 호출
     if user_money < cost:
         messages.append(f"💸 잔액 부족: {user_money:,} / 필요 {cost:,}원")
         can_upgrade = False
@@ -8890,7 +8890,7 @@ async def 건물_자동완성(interaction: discord.Interaction, current: str):
 @app_commands.describe(건물="구매할 건물")
 async def 건물구입(interaction: discord.Interaction, 건물: str):
     user_id = str(interaction.user.id)
-    balance = await await get_balance(user_id)  # ✅ 비동기 호출
+    balance = await get_balance(user_id)  # ✅ 비동기 호출
 
     if get_user_building(user_id):
         return await interaction.response.send_message("❌ 이미 건물을 보유 중입니다. `/건물정보`를 확인하세요.", ephemeral=True)
