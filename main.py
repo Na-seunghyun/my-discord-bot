@@ -3772,7 +3772,7 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
     await message.edit(
         content=(
             f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n"
-            f"{outcome}\n💵 현재 잔액: {await get_balance(user_id):,}원"
+            f"{outcome}\n💵 현재 잔액: {balance:,}원"
         )
     )
 
@@ -3840,7 +3840,7 @@ def create_embed(title: str, description: str, color: discord.Color, user_id: st
     embed = discord.Embed(title=title, description=description, color=color)
     if user_id:
         
-        embed.set_footer(text=f"현재 잔액: {await get_balance(user_id):,}원")
+        embed.set_footer(text=f"현재 잔액: {balance:,}원")
     return embed
 
 
@@ -4329,9 +4329,17 @@ async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
     실제구매가 = 단가 * 수량
     수수료 = 총액 - 실제구매가
 
-    if await get_balance(user_id) < 총액:
+    balance = await get_balance(user_id)
+    if balance < 총액:
         return await interaction.response.send_message(
-            embed=create_embed("💸 잔액 부족", f"보유 잔액: **{await get_balance(user_id):,}원**\n필요 금액 (수수료 포함): **{총액:,}원**", discord.Color.red()), ephemeral=False)
+            embed=create_embed(
+                "💸 잔액 부족",
+                f"보유 잔액: **{balance:,}원**\n필요 금액 (수수료 포함): **{총액:,}원**",
+                discord.Color.red()
+            ),
+            ephemeral=False
+        )
+
 
     # ✅ 수수료 적립
     add_oduk_pool(수수료)
@@ -5558,7 +5566,8 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
         )
 
     cost = 수량 * 2000
-    if await get_balance(user_id) < cost:
+    balance = await get_balance(user_id)  # ← 여기에서 비동기 잔액 조회
+    if balance < cost:
         return await interaction.response.send_message(
             content=f"💸 잔액 부족: {수량}조합 × 2,000원 = **{cost:,}원** 필요",
             ephemeral=True
@@ -5608,7 +5617,7 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
         f"⏰ 다음 추첨: <t:{int(draw_end.timestamp())}:F>\n"
         f"🕓 제한 초기화까지: <t:{int(draw_end.timestamp())}:R>\n"
         f"🎯 매일 오전 9시에 자동 추첨됩니다!\n"
-        f"\n💰 현재 잔액: {await get_balance(user_id):,}원"
+        f"\n💰 현재 잔액: {balance:,}원"
     )
 
 
@@ -6853,17 +6862,22 @@ async def 예금(interaction: discord.Interaction, 금액: int):
         )
 
     await add_balance(user_id, -금액)
-    add_bank_deposit(user_id, 금액)
+    # add_bank_deposit가 비동기면 await 추가
+    add_bank_deposit(user_id, 금액)  
 
-    bank_balance = get_total_bank_balance(user_id)
+    # bank_balance가 비동기 함수면 await 붙이세요
+    bank_balance = get_total_bank_balance(user_id)  
+
     next_time = get_next_interest_time(user_id)
     next_time_str = next_time.strftime("%Y-%m-%d %H:%M:%S") if next_time else "없음"
+
+    current_wallet = await get_balance(user_id)  # 한 번 더 조회해서 최신 잔액
 
     await interaction.response.send_message(embed=create_embed(
         "🏦 예금 완료",
         (
             f"💸 지갑 → 은행: **{금액:,}원** 예금됨\n"
-            f"💰 현재 지갑 잔액: **{await get_balance(user_id):,}원**\n"
+            f"💰 현재 지갑 잔액: **{current_wallet:,}원**\n"
             f"🏛️ 현재 은행 잔고: **{bank_balance:,}원**\n"
             f"⏰ 가장 빠른 이자 수령 가능 시각 (KST): {next_time_str}"
         ),
@@ -6890,7 +6904,7 @@ async def 예금_자동완성(interaction: discord.Interaction, current: str):
 @app_commands.describe(금액="출금할 금액")
 async def 출금(interaction: discord.Interaction, 금액: int):
     user_id = str(interaction.user.id)
-    bank_balance = get_total_bank_balance(user_id)
+    bank_balance = await get_total_bank_balance(user_id)  # await 추가
 
     if 금액 <= 0 or 금액 > bank_balance:
         return await interaction.response.send_message(
@@ -6898,8 +6912,9 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    # ✅ 출금 처리 및 이자 계산
-    net_interest, tax = process_bank_withdraw(user_id, 금액)
+    # await 붙여야 하는 경우
+    net_interest, tax = await process_bank_withdraw(user_id, 금액)
+
     original_interest = net_interest + tax  # 세전 이자
 
     await add_balance(user_id, 금액 + net_interest)
@@ -6909,7 +6924,7 @@ async def 출금(interaction: discord.Interaction, 금액: int):
 
     pool_amt = get_oduk_pool_amount()
 
-    # ✅ 이자 한도 초과 안내 (500,000원 이상 → 컷팅됨)
+    # 이자 한도 초과 안내
     if original_interest > 500_000:
         await interaction.channel.send(
             f"⚠️ **이자 지급 한도 초과 안내**\n"
@@ -6919,19 +6934,23 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
+    current_wallet = await get_balance(user_id)
+    remaining_bank = await get_total_bank_balance(user_id)
+
     await interaction.response.send_message(embed=create_embed(
         "🏧 출금 완료",
         (
             f"🏛️ 은행 → 지갑: **{금액:,}원** 출금됨\n"
             f"💵 순이자 지급: **{net_interest:,}원** (세금 {tax:,}원 → 오덕로또 적립)\n"
-            f"💰 현재 지갑 잔액: **{await get_balance(user_id):,}원**\n"
-            f"🏦 남은 은행 잔고: **{get_total_bank_balance(user_id):,}원**\n\n"
+            f"💰 현재 지갑 잔액: **{current_wallet:,}원**\n"
+            f"🏦 남은 은행 잔고: **{remaining_bank:,}원**\n\n"
             f"🎯 현재 오덕로또 상금: **{pool_amt:,}원**\n"
             f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
         ),
         discord.Color.green(),
         user_id
     ))
+
 
 
 
