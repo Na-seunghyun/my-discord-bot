@@ -245,9 +245,9 @@ def save_balances(data):
 
 async def get_balance(user_id):
     async def getter(user_data):
-        return user_data.get("amount", 0)
-    # read_only 제거
+        return user_data.get("amount", 0)  # 숫자만 리턴
     return await update_user_data(user_id, getter)
+
 
 
 
@@ -3335,12 +3335,13 @@ async def 돈줘통계(interaction: discord.Interaction):
 
 
 
-# ✅ 잔액
 @tree.command(name="잔액", description="유저의 현재 보유 금액을 확인합니다", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(대상="조회할 유저 (선택사항)")
 async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     user = 대상 or interaction.user
-    balance = await get_balance(user.id)
+    balance_data = await get_balance(user.id)
+    # balance_data가 dict일 수 있으니 숫자만 추출
+    balance = balance_data if isinstance(balance_data, int) else balance_data.get("amount", 0)
 
     embed = discord.Embed(
         title="💵 잔액 확인",
