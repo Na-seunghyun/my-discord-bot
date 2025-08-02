@@ -3575,6 +3575,7 @@ import random
 import discord
 
 # 🎯 복권 버튼
+# 🎯 복권 버튼
 class LotteryButton(Button):
     def __init__(self, label, correct_slot, 베팅액, user_id):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
@@ -3591,6 +3592,10 @@ class LotteryButton(Button):
         self.view.stop()
 
         try:
+            # load_balances()는 동기 함수이므로 await 빼고 호출
+            balances = load_balances()
+            user_data = balances.get(self.user_id, {})
+
             if self.label == self.correct_slot:
                 # ✅ 당첨 처리
                 reward = self.베팅액 * 3
@@ -3598,7 +3603,7 @@ class LotteryButton(Button):
                 await add_balance(self.user_id, reward)
                 await record_gamble_result(self.user_id, True)
 
-                titles = get_gamble_title(await load_balances().get(self.user_id, {}), True)
+                titles = get_gamble_title(user_data, True)  # user_data 전달
                 title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
                 title = "🎉 당첨!"
                 desc = (
@@ -3614,7 +3619,7 @@ class LotteryButton(Button):
                 await record_gamble_result(self.user_id, False)
 
                 pool_amt = get_oduk_pool_amount()
-                titles = get_gamble_title(await load_balances().get(self.user_id, {}), False)
+                titles = get_gamble_title(user_data, False)  # user_data 전달
                 title_str = "\n🏅 칭호: " + ", ".join(titles) if titles else ""
                 title = "💔 꽝!"
                 desc = (
@@ -3635,7 +3640,6 @@ class LotteryButton(Button):
             if not interaction.response.is_done():
                 await interaction.response.send_message("⚠️ 오류가 발생했습니다.", ephemeral=True)
 
-
 # 🎯 복권 인터페이스 (버튼 3개)
 class LotteryView(View):
     def __init__(self, user_id, 베팅액):
@@ -3648,7 +3652,6 @@ class LotteryView(View):
     def stop(self):
         self.stopped = True
         return super().stop()
-
 
 # 🎯 복권 명령어 슬래시 커맨드
 @tree.command(name="복권", description="복권 3개 중 하나를 선택해보세요", guild=discord.Object(id=GUILD_ID))
@@ -3689,11 +3692,12 @@ async def 복권(interaction: discord.Interaction, 베팅액: int):
         ephemeral=False
     )
 
+# 복권 베팅액 자동완성
 @복권.autocomplete("베팅액")
 async def 복권_배팅액_자동완성(interaction: discord.Interaction, current: str):
     from discord import app_commands
 
-    balances = load_balances()
+    balances = load_balances()  # 동기 함수
     user_id = str(interaction.user.id)
     balance = balances.get(user_id, {}).get("amount", 0)
 
