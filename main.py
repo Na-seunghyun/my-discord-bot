@@ -3425,13 +3425,10 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         is_jackpot = random.random() < jackpot_chance
         multiplier = 4 if is_jackpot else 2
 
-        # apply_gamble_bonus 동기 함수면 이렇게
         reward = apply_gamble_bonus(user_id, 베팅액 * multiplier)
-
-        # 💰 보상 추가
         await add_balance(user_id, reward)
 
-        # 상태치 증가 (동기 함수라면 await 없이 호출)
+        # 상태치 증가
         if building:
             gained_stats = []
             for stat in ["stability", "risk", "labor", "tech"]:
@@ -3441,10 +3438,8 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             if gained_stats:
                 stat_gain_text = f"\n📈 상태치 증가: {', '.join(gained_stats)}"
 
-        # 기록 저장 (비동기 함수)
         await record_gamble_result(user_id, True)
 
-        # balances 딕셔너리 동기 함수라면
         balances = load_balances()
         title = get_gamble_title(balances.get(user_id, {}), True)
 
@@ -3458,9 +3453,9 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             discord.Color.gold() if is_jackpot else discord.Color.green(),
             user_id
         )
+        embed.set_footer(text=f"💰 현재 잔액: {final_balance:,}원")
 
     else:
-        # 실패 시 오덕로또 풀에 적립 (동기 함수라면 await 제거)
         add_oduk_pool(베팅액)
         pool_amt = get_oduk_pool_amount()
 
@@ -3479,8 +3474,10 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
             discord.Color.red(),
             user_id
         )
+        embed.set_footer(text=f"💰 현재 잔액: {final_balance:,}원")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
@@ -8925,7 +8922,7 @@ async def 건물레벨업(interaction: discord.Interaction):
     if not data:
         return await interaction.response.send_message("🏚️ 건물을 보유하고 있지 않습니다.", ephemeral=True)
 
-    result = perform_level_up(user_id)
+    result = await perform_level_up(user_id)  # ✅ 여기에 await 추가
 
     color = discord.Color.gold() if "달성" in result else discord.Color.red()
     await interaction.response.send_message(embed=discord.Embed(
