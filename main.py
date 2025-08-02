@@ -6949,18 +6949,17 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    net_interest, tax = await process_bank_withdraw(user_id, 금액)  # 비동기 함수
+    net_interest, tax = process_bank_withdraw(user_id, 금액)  # 동기 함수
 
     original_interest = net_interest + tax  # 세전 이자
 
-    await add_balance(user_id, 금액 + net_interest)
+    await add_balance(user_id, 금액 + net_interest)  # 비동기 함수
 
     if tax > 0:
         add_oduk_pool(tax)  # 동기 함수
 
     pool_amt = get_oduk_pool_amount()  # 동기 함수
 
-    # 이자 한도 초과 안내 (첫 응답 이후 메시지)
     if original_interest > 500_000:
         await interaction.followup.send(
             f"⚠️ **이자 지급 한도 초과 안내**\n"
@@ -6984,7 +6983,7 @@ async def 출금(interaction: discord.Interaction, 금액: int):
             f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
         ),
         color=discord.Color.green(),
-        user_id=user_id  # 잔액 표시 위해 user_id 전달
+        user_id=user_id
     )
 
     await interaction.response.send_message(embed=embed)
