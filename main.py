@@ -243,7 +243,7 @@ def save_balances(data):
     with open(BALANCE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
-async def await get_balance(user_id):
+async def get_balance(user_id):
     async def getter(user_data):
         return user_data.get("amount", 0)
     return await update_user_data(user_id, getter, read_only=True)
