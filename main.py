@@ -3850,12 +3850,13 @@ async def 도박왕(interaction: discord.Interaction):
 
     await interaction.followup.send(embed=embed)
 
-def create_embed(title: str, description: str, color: discord.Color, user_id: str = None) -> discord.Embed:
+async def create_embed(title: str, description: str, color: discord.Color, user_id: str = None) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, color=color)
     if user_id:
-        
+        balance = await get_balance(user_id)
         embed.set_footer(text=f"현재 잔액: {balance:,}원")
     return embed
+
 
 
 
