@@ -243,7 +243,7 @@ def save_balances(data):
     with open(BALANCE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
-async def get_balance(user_id):
+async def await get_balance(user_id):
     async def getter(user_data):
         return user_data.get("amount", 0)
     return await update_user_data(user_id, getter, read_only=True)
@@ -3338,7 +3338,7 @@ async def 돈줘통계(interaction: discord.Interaction):
 @app_commands.describe(대상="조회할 유저 (선택사항)")
 async def 잔액(interaction: discord.Interaction, 대상: discord.User = None):
     user = 대상 or interaction.user
-    balance = get_balance(user.id)
+    balance = await get_balance(user.id)
 
     embed = discord.Embed(
         title="💵 잔액 확인",
@@ -3363,7 +3363,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         )
 
     user_id = str(interaction.user.id)
-    balance = get_balance(user_id)
+    balance = await get_balance(user_id)
 
     if 베팅액 < 100:
         return await interaction.response.send_message(
@@ -3424,7 +3424,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
         await record_gamble_result(user_id, True)
         title = get_gamble_title(load_balances().get(user_id, {}), True)
         jackpot_msg = "💥 **🎉 잭팟! 4배 당첨!** 💥\n" if is_jackpot else ""
-        final_balance = get_balance(user_id)
+        final_balance = await get_balance(user_id)
 
         embed = create_embed(
             "🎉 도박 성공!",
@@ -3441,7 +3441,7 @@ async def 도박(interaction: discord.Interaction, 베팅액: int):
 
         await record_gamble_result(user_id, False)
         title = get_gamble_title(load_balances().get(user_id, {}), False)
-        final_balance = get_balance(user_id)
+        final_balance = await get_balance(user_id)
 
         embed = create_embed(
             "💀 도박 실패!",
@@ -3519,7 +3519,7 @@ async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액:
         )
         return await interaction.response.send_message(embed=embed)
 
-    if get_balance(보낸이) < 금액:
+    if await get_balance(보낸이) < 금액:
         embed = discord.Embed(
             title="💸 잔액 부족",
             description="송금할 만큼의 잔액이 부족합니다.",
@@ -3537,7 +3537,7 @@ async def 송금(interaction: discord.Interaction, 대상: discord.User, 금액:
         description=f"{대상.mention}님에게 **{금액:,}원**을 송금했습니다.",
         color=discord.Color.green()
     )
-    embed.set_footer(text=f"보낸 사람 잔액: {get_balance(보낸이):,}원")
+    embed.set_footer(text=f"보낸 사람 잔액: {await get_balance(보낸이):,}원")
     await interaction.response.send_message(embed=embed)
 
 
@@ -3574,7 +3574,7 @@ class LotteryButton(Button):
                 title = "🎉 당첨!"
                 desc = (
                     f"축하합니다! **{reward:,}원**을 획득했습니다!"
-                    f"\n💰 잔액: **{get_balance(self.user_id):,}원**"
+                    f"\n💰 잔액: **{await get_balance(self.user_id):,}원**"
                     f"{title_str}"
                 )
                 color = discord.Color.green()
@@ -3642,9 +3642,9 @@ async def 복권(interaction: discord.Interaction, 베팅액: int):
             ephemeral=False
         )
 
-    if get_balance(user_id) < 베팅액:
+    if await get_balance(user_id) < 베팅액:
         return await interaction.response.send_message(
-            embed=create_embed("💸 잔액 부족", f"잔액: **{get_balance(user_id):,}원**", discord.Color.red()),
+            embed=create_embed("💸 잔액 부족", f"잔액: **{await get_balance(user_id):,}원**", discord.Color.red()),
             ephemeral=False
         )
 
@@ -3701,7 +3701,7 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
 
     user_id = str(interaction.user.id)
     symbols = ["🍒", "🍋", "🍇", "🍉", "💎"]
-    balance = get_balance(user_id)
+    balance = await get_balance(user_id)
 
     if 베팅액 < 1000:
         return await interaction.response.send_message(
@@ -3772,7 +3772,7 @@ async def 슬롯(interaction: discord.Interaction, 베팅액: int):
     await message.edit(
         content=(
             f"🎰 **슬롯머신 결과**\n| {result_str} |\n\n"
-            f"{outcome}\n💵 현재 잔액: {get_balance(user_id):,}원"
+            f"{outcome}\n💵 현재 잔액: {await get_balance(user_id):,}원"
         )
     )
 
@@ -3840,7 +3840,7 @@ def create_embed(title: str, description: str, color: discord.Color, user_id: st
     embed = discord.Embed(title=title, description=description, color=color)
     if user_id:
         
-        embed.set_footer(text=f"현재 잔액: {get_balance(user_id):,}원")
+        embed.set_footer(text=f"현재 잔액: {await get_balance(user_id):,}원")
     return embed
 
 
@@ -3949,7 +3949,7 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
                 return await interaction.response.send_message("❌ 이 버튼은 도전 대상만 누를 수 있습니다.", ephemeral=True)
 
             # ✅ 잔액 재확인
-            if get_balance(str(self.caller.id)) < self.amount or get_balance(str(self.target.id)) < self.amount:
+            if await get_balance(str(self.caller.id)) < self.amount or await get_balance(str(self.target.id)) < self.amount:
                 self.stop()
                 await interaction.response.send_message("❌ 한쪽 유저의 잔액이 부족해 배틀이 취소되었습니다.", ephemeral=True)
                 try:
@@ -4010,8 +4010,8 @@ async def 도박배틀(interaction: discord.Interaction, 대상: discord.Member,
                 pass
 
             # ✅ 현재 잔액
-            caller_amount = get_balance(str(self.caller.id))
-            target_amount = get_balance(str(self.target.id))
+            caller_amount = await get_balance(str(self.caller.id))
+            target_amount = await get_balance(str(self.target.id))
 
             await interaction.channel.send(
                 f"🎲 도박 배틀 결과: {self.caller.mention} vs {self.target.mention}\n"
@@ -4329,9 +4329,9 @@ async def 투자(interaction: discord.Interaction, 종목: str, 수량: int):
     실제구매가 = 단가 * 수량
     수수료 = 총액 - 실제구매가
 
-    if get_balance(user_id) < 총액:
+    if await get_balance(user_id) < 총액:
         return await interaction.response.send_message(
-            embed=create_embed("💸 잔액 부족", f"보유 잔액: **{get_balance(user_id):,}원**\n필요 금액 (수수료 포함): **{총액:,}원**", discord.Color.red()), ephemeral=False)
+            embed=create_embed("💸 잔액 부족", f"보유 잔액: **{await get_balance(user_id):,}원**\n필요 금액 (수수료 포함): **{총액:,}원**", discord.Color.red()), ephemeral=False)
 
     # ✅ 수수료 적립
     add_oduk_pool(수수료)
@@ -4392,7 +4392,7 @@ async def 수량_자동완성(interaction: discord.Interaction, current: int):
     단가 = stocks[selected_stock]["price"]
     수수료율 = 0.01  # ✅ 수수료 반영
     실단가 = int(단가 * (1 + 수수료율))
-    잔액 = get_balance(user_id)
+    잔액 = await get_balance(user_id)
 
     최대_수량 = 잔액 // 실단가
     if 최대_수량 < 1:
@@ -4420,7 +4420,7 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
         )
 
     user_id = str(interaction.user.id)
-    balance = get_balance(user_id)
+    balance = await get_balance(user_id)
 
     if 금액 < 1000:
         return await interaction.followup.send(
@@ -4544,7 +4544,7 @@ async def 자동투자(interaction: discord.Interaction, 금액: int):
 @자동투자.autocomplete("금액")
 async def 자동투자_금액_자동완성(interaction: discord.Interaction, current: int):
     user_id = str(interaction.user.id)
-    잔액 = get_balance(user_id)
+    잔액 = await get_balance(user_id)
 
     if 잔액 < 1000:
         return [
@@ -5558,7 +5558,7 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
         )
 
     cost = 수량 * 2000
-    if get_balance(user_id) < cost:
+    if await get_balance(user_id) < cost:
         return await interaction.response.send_message(
             content=f"💸 잔액 부족: {수량}조합 × 2,000원 = **{cost:,}원** 필요",
             ephemeral=True
@@ -5608,7 +5608,7 @@ async def 오덕로또참여(interaction: discord.Interaction, 수량: int, 수�
         f"⏰ 다음 추첨: <t:{int(draw_end.timestamp())}:F>\n"
         f"🕓 제한 초기화까지: <t:{int(draw_end.timestamp())}:R>\n"
         f"🎯 매일 오전 9시에 자동 추첨됩니다!\n"
-        f"\n💰 현재 잔액: {get_balance(user_id):,}원"
+        f"\n💰 현재 잔액: {await get_balance(user_id):,}원"
     )
 
 
@@ -6844,7 +6844,7 @@ async def apply_bank_depreciation(bot):
 @app_commands.describe(금액="예금할 금액")
 async def 예금(interaction: discord.Interaction, 금액: int):
     user_id = str(interaction.user.id)
-    wallet = get_balance(user_id)
+    wallet = await get_balance(user_id)
 
     if 금액 <= 0 or 금액 > wallet:
         return await interaction.response.send_message(
@@ -6863,7 +6863,7 @@ async def 예금(interaction: discord.Interaction, 금액: int):
         "🏦 예금 완료",
         (
             f"💸 지갑 → 은행: **{금액:,}원** 예금됨\n"
-            f"💰 현재 지갑 잔액: **{get_balance(user_id):,}원**\n"
+            f"💰 현재 지갑 잔액: **{await get_balance(user_id):,}원**\n"
             f"🏛️ 현재 은행 잔고: **{bank_balance:,}원**\n"
             f"⏰ 가장 빠른 이자 수령 가능 시각 (KST): {next_time_str}"
         ),
@@ -6875,7 +6875,7 @@ async def 예금(interaction: discord.Interaction, 금액: int):
 @예금.autocomplete("금액")
 async def 예금_자동완성(interaction: discord.Interaction, current: str):
     user_id = str(interaction.user.id)
-    balance = get_balance(user_id)
+    balance = await get_balance(user_id)
 
     if balance <= 0:
         return [app_commands.Choice(name="❌ 예금 가능한 금액 없음", value="0")]
@@ -6924,7 +6924,7 @@ async def 출금(interaction: discord.Interaction, 금액: int):
         (
             f"🏛️ 은행 → 지갑: **{금액:,}원** 출금됨\n"
             f"💵 순이자 지급: **{net_interest:,}원** (세금 {tax:,}원 → 오덕로또 적립)\n"
-            f"💰 현재 지갑 잔액: **{get_balance(user_id):,}원**\n"
+            f"💰 현재 지갑 잔액: **{await get_balance(user_id):,}원**\n"
             f"🏦 남은 은행 잔고: **{get_total_bank_balance(user_id):,}원**\n\n"
             f"🎯 현재 오덕로또 상금: **{pool_amt:,}원**\n"
             f"🎟️ `/오덕로또참여`로 오늘의 행운에 도전해보세요!"
@@ -7078,7 +7078,7 @@ class RealEstateView(ui.View):
             if region in self.disabled_regions:
                 return await interaction.response.send_message("이미 선택한 지역입니다.", ephemeral=True)
 
-            balance = get_balance(self.user.id)
+            balance = await get_balance(self.user.id)
             if balance < self.invest_amount:
                 return await interaction.response.send_message(f"❌ 잔액 부족\n현재 잔액: **{balance:,}원**", ephemeral=True)
 
@@ -7121,7 +7121,7 @@ class RealEstateView(ui.View):
             receive = self.invest_amount + net_gain
 
             await add_balance(user_id, receive - self.invest_amount)
-            final_balance = get_balance(user_id)
+            final_balance = await get_balance(user_id)
 
             if tax > 0:
                 add_oduk_pool(tax)
@@ -7222,7 +7222,7 @@ async def 부동산투자(interaction: Interaction, 투자금: int):
 @부동산투자.autocomplete("투자금")
 async def 투자금_자동완성(interaction: Interaction, current: str):
     user_id = str(interaction.user.id)
-    balance = get_balance(user_id)
+    balance = await get_balance(user_id)
     if balance < 20000:
         return [app_commands.Choice(name="❌ 최소 투자금 부족", value="20000")]
 
@@ -7868,7 +7868,7 @@ async def try_repay(user_id, member, *, force=False):
     if total_due <= 0:
         return None
 
-    wallet = get_balance(user_id)
+    wallet = await get_balance(user_id)
     bank = get_total_bank_balance(user_id)
 
     loans = load_loans()
@@ -8749,7 +8749,7 @@ async def can_level_up(user_id: str, data: dict) -> tuple[bool, str]:
 
     # 자금 조건
     cost = get_levelup_cost(lv)
-    wallet = await get_balance(user_id)  # ✅ 비동기 호출
+    wallet = await await get_balance(user_id)  # ✅ 비동기 호출
     if wallet < cost:
         messages.append(f"💸 자금 부족: {wallet:,} / {cost:,}")
         ok = False
@@ -8790,7 +8790,7 @@ async def perform_level_up(user_id: str):
 
     # ✅ 자금 체크
     cost = get_levelup_cost(level)
-    user_money = await get_balance(user_id)  # 🔁 비동기 호출
+    user_money = await await get_balance(user_id)  # 🔁 비동기 호출
     if user_money < cost:
         messages.append(f"💸 잔액 부족: {user_money:,} / 필요 {cost:,}원")
         can_upgrade = False
@@ -8890,7 +8890,7 @@ async def 건물_자동완성(interaction: discord.Interaction, current: str):
 @app_commands.describe(건물="구매할 건물")
 async def 건물구입(interaction: discord.Interaction, 건물: str):
     user_id = str(interaction.user.id)
-    balance = await get_balance(user_id)  # ✅ 비동기 호출
+    balance = await await get_balance(user_id)  # ✅ 비동기 호출
 
     if get_user_building(user_id):
         return await interaction.response.send_message("❌ 이미 건물을 보유 중입니다. `/건물정보`를 확인하세요.", ephemeral=True)
