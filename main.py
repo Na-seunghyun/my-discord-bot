@@ -3850,12 +3850,12 @@ async def 도박왕(interaction: discord.Interaction):
 
     await interaction.followup.send(embed=embed)
 
-async def create_embed(title: str, description: str, color: discord.Color, user_id: str = None) -> discord.Embed:
+def create_embed(title: str, description: str, color: discord.Color, balance: int = None) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, color=color)
-    if user_id:
-        balance = await get_balance(user_id)
+    if balance is not None:
         embed.set_footer(text=f"현재 잔액: {balance:,}원")
     return embed
+
 
 
 
@@ -6863,12 +6863,11 @@ async def apply_bank_depreciation(bot):
 
 
 
-# ✅ /예금 커맨드
 @tree.command(name="예금", description="지갑에서 은행으로 돈을 예금합니다.", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(금액="예금할 금액")
 async def 예금(interaction: discord.Interaction, 금액: int):
     user_id = str(interaction.user.id)
-    wallet = await get_balance(user_id)  # get_balance는 비동기라 await 필요
+    wallet = await get_balance(user_id)  # 비동기 함수 호출, await 필수
 
     if 금액 <= 0 or 금액 > wallet:
         return await interaction.response.send_message(
@@ -6876,27 +6875,31 @@ async def 예금(interaction: discord.Interaction, 금액: int):
             ephemeral=True
         )
 
-    await add_balance(user_id, -금액)  # add_balance가 비동기면 await 필요
-    add_bank_deposit(user_id, 금액)   # 동기 함수이므로 await 없음
+    await add_balance(user_id, -금액)  # 비동기 함수, await 필요
+    add_bank_deposit(user_id, 금액)   # 동기 함수라 await 없음
 
-    bank_balance = get_total_bank_balance(user_id)  # 동기 함수이므로 await 없음
+    bank_balance = get_total_bank_balance(user_id)  # 동기 함수
 
     next_time = get_next_interest_time(user_id)
     next_time_str = next_time.strftime("%Y-%m-%d %H:%M:%S") if next_time else "없음"
 
     current_wallet = await get_balance(user_id)  # 다시 잔액 조회 (비동기)
 
-    await interaction.response.send_message(embed=create_embed(
-        "🏦 예금 완료",
-        (
+    # 잔액을 인자로 명확히 넘겨주기
+    embed = create_embed(
+        title="🏦 예금 완료",
+        description=(
             f"💸 지갑 → 은행: **{금액:,}원** 예금됨\n"
             f"💰 현재 지갑 잔액: **{current_wallet:,}원**\n"
             f"🏛️ 현재 은행 잔고: **{bank_balance:,}원**\n"
             f"⏰ 가장 빠른 이자 수령 가능 시각 (KST): {next_time_str}"
         ),
-        discord.Color.blue(),
-        user_id
-    ))
+        color=discord.Color.blue(),
+        balance=current_wallet   # 잔액을 balance 키워드 인자로 넘김
+    )
+
+    await interaction.response.send_message(embed=embed)
+
 
 
 # ✅ 예금 자동완성
