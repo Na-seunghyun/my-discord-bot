@@ -9254,12 +9254,14 @@ async def 팀짜기투표(interaction: Interaction):
 
     await interaction.followup.send(embeds=[result_embed, voter_embed])
 
-    # ✅ 콘솔 출력 (디버깅용)
+    # ✅ 콘솔 출력 (디버깅용 - 닉네임 포함)
     print("📋 팀짜기 투표 결과")
     print(f"찬성: {yes_votes}명, 반대: {no_votes}명")
-    for uid, vote in view.votes.items():
-        print(f"- {uid}: {vote}")
 
+    for uid, vote in view.votes.items():
+        member = interaction.guild.get_member(int(uid))
+        name = member.display_name if member else f"(알 수 없음: {uid})"
+        print(f"- {name}: {vote}")
 
 
 
