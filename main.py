@@ -904,7 +904,7 @@ def load_invite_cache():
     if os.path.exists(INVITE_CACHE_FILE):
         with open(INVITE_CACHE_FILE, "r", encoding="utf-8") as f:
             invites_cache = json.load(f)
-        print(f"📂 [DEBUG] invites_cache.json 내용:\n{json.dumps(invites_cache, indent=2, ensure_ascii=False)}")
+        #print(f"📂 [DEBUG] invites_cache.json 내용:\n{json.dumps(invites_cache, indent=2, ensure_ascii=False)}")
     else:
         invites_cache = {}
         print("⚠️ invites_cache.json 파일이 존재하지 않음 (처음 실행이거나 삭제됨)")
