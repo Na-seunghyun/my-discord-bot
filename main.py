@@ -7603,7 +7603,7 @@ async def process_overdue_loans_on_startup(bot):
         try:
             created = datetime.fromisoformat(created_at_str)
         except ValueError:
-            print(f"❌ 유저 {user_id}의 created_at 형식 오류: {created_at_str}")
+            #print(f"❌ 유저 {user_id}의 created_at 형식 오류: {created_at_str}")
             continue
 
         elapsed = (now - created).total_seconds()
