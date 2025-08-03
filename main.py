@@ -9180,6 +9180,7 @@ def init_building_db():
     conn.commit()
     conn.close()
 
+from discord import Object
 
 class VoteButton(Button):
     def __init__(self, label: str, vote_type: str, view: View):
