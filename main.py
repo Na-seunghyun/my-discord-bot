@@ -9181,6 +9181,84 @@ def init_building_db():
     conn.close()
 
 
+class VoteButton(Button):
+    def __init__(self, label: str, vote_type: str, view: View):
+        super().__init__(label=label, style=discord.ButtonStyle.success if vote_type == "yes" else discord.ButtonStyle.danger)
+        self.vote_type = vote_type
+        self.parent_view = view
+
+    async def callback(self, interaction: Interaction):
+        user = interaction.user
+
+        if not user.voice or not user.voice.channel:
+            return await interaction.response.send_message("❌ 음성채널에 참여 중인 사용자만 투표할 수 있습니다.", ephemeral=True)
+
+        user_id = str(user.id)
+        if user_id in self.parent_view.votes:
+            return await interaction.response.send_message("❌ 이미 투표에 참여했습니다.", ephemeral=True)
+
+        self.parent_view.votes[user_id] = self.vote_type
+        self.parent_view.voters[user_id] = user.display_name
+        await interaction.response.send_message("✅ 투표가 완료되었습니다.", ephemeral=True)
+
+
+class EndVoteButton(Button):
+    def __init__(self, view, initiator_id):
+        super().__init__(label="🛑 투표마감", style=discord.ButtonStyle.secondary)
+        self.view_obj = view
+        self.initiator_id = initiator_id
+
+    async def callback(self, interaction: Interaction):
+        if interaction.user.id != self.initiator_id:
+            return await interaction.response.send_message("❌ 투표 시작자만 마감할 수 있습니다.", ephemeral=True)
+        await interaction.response.send_message("⏹️ 투표를 마감했습니다.", ephemeral=True)
+        self.view_obj.vote_ended.set()
+        self.view_obj.stop()
+
+
+class VoteView(View):
+    def __init__(self, initiator_id: int, timeout=20):
+        super().__init__(timeout=timeout)
+        self.votes = {}   # user_id -> "yes" or "no"
+        self.voters = {}  # user_id -> display_name
+        self.vote_ended = asyncio.Event()
+        self.initiator_id = initiator_id
+
+        self.add_item(VoteButton("찬성", "yes", self))
+        self.add_item(VoteButton("반대", "no", self))
+        self.add_item(EndVoteButton(self, initiator_id))
+
+    async def on_timeout(self):
+        self.vote_ended.set()
+
+
+@tree.command(name="팀짜기투표", description="음성채널 참가자만 투표 가능한 팀짜기 투표", guild=Object(id=GUILD_ID))
+async def 팀짜기투표(interaction: Interaction):
+    view = VoteView(initiator_id=interaction.user.id)
+    await interaction.response.send_message(
+        "🗳️ **팀짜기 투표가 시작됩니다!**\n20초 안에 아래 버튼을 눌러 투표하세요.\n(또는 명령어 실행자가 `🛑 투표마감`을 누르면 즉시 종료됩니다.)",
+        view=view
+    )
+
+    await view.vote_ended.wait()  # 종료 대기
+
+    yes_votes = sum(1 for v in view.votes.values() if v == "yes")
+    no_votes = sum(1 for v in view.votes.values() if v == "no")
+
+    result = "✅ 다수결로 **찬성**입니다!" if yes_votes > no_votes else "❌ 다수결로 **반대**입니다!"
+    result_embed = Embed(title="🗳️ 팀짜기 투표 결과", description=result, color=discord.Color.green() if yes_votes > no_votes else discord.Color.red())
+
+    voter_list = "\n".join(f"- {name}" for name in view.voters.values()) or "🙅 참여자 없음"
+    voter_embed = Embed(title="🙋 투표 참여자", description=voter_list, color=discord.Color.blurple())
+
+    await interaction.followup.send(embeds=[result_embed, voter_embed])
+
+    # ✅ 콘솔 출력 (디버깅용)
+    print("📋 팀짜기 투표 결과")
+    print(f"찬성: {yes_votes}명, 반대: {no_votes}명")
+    for uid, vote in view.votes.items():
+        print(f"- {uid}: {vote}")
+
 
 
 
