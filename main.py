@@ -9237,7 +9237,10 @@ class VoteView(View):
 async def 팀짜기투표(interaction: Interaction):
     view = VoteView(initiator_id=interaction.user.id)
     await interaction.response.send_message(
-        "🗳️ **팀짜기 투표가 시작됩니다!**\n20초 안에 아래 버튼을 눌러 투표하세요.\n(또는 명령어 실행자가 `🛑 투표마감`을 누르면 즉시 종료됩니다.)",
+        "🗳️ **팀짜기 투표가 시작됩니다!**\n"
+        "20초 안에 아래 버튼을 눌러 투표하세요.\n"
+        "(또는 명령어 실행자가 `🛑 투표마감`을 누르면 즉시 종료됩니다.)\n"
+        "⚠️ **익명 투표로 진행됩니다.**",
         view=view
     )
 
@@ -9245,19 +9248,34 @@ async def 팀짜기투표(interaction: Interaction):
 
     yes_votes = sum(1 for v in view.votes.values() if v == "yes")
     no_votes = sum(1 for v in view.votes.values() if v == "no")
+    total_votes = yes_votes + no_votes
 
-    result = "✅ 다수결로 **찬성**입니다!" if yes_votes > no_votes else "❌ 다수결로 **반대**입니다!"
-    result_embed = Embed(title="🗳️ 팀짜기 투표 결과", description=result, color=discord.Color.green() if yes_votes > no_votes else discord.Color.red())
+    if yes_votes > no_votes:
+        result_text = "✅ 과반수 **찬성**입니다!"
+        result_color = discord.Color.green()
+    elif no_votes > yes_votes:
+        result_text = "❌ 과반수 **반대**입니다!"
+        result_color = discord.Color.red()
+    else:
+        result_text = "⚖️ **찬반 동수**, 결론을 내릴 수 없습니다."
+        result_color = discord.Color.greyple()
 
-    voter_list = "\n".join(f"- {name}" for name in view.voters.values()) or "🙅 참여자 없음"
-    voter_embed = Embed(title="🙋 투표 참여자", description=voter_list, color=discord.Color.blurple())
+    result_embed = Embed(
+        title="🗳️ 팀짜기 투표 결과",
+        description=(
+            f"👥 총 투표 인원: **{total_votes}명**\n"
+            f"👍 찬성표: **{yes_votes}표**\n"
+            f"👎 반대표: **{no_votes}표**\n\n"
+            f"{result_text}"
+        ),
+        color=result_color
+    )
 
-    await interaction.followup.send(embeds=[result_embed, voter_embed])
+    await interaction.followup.send(embed=result_embed)
 
     # ✅ 콘솔 출력 (디버깅용 - 닉네임 포함)
     print("📋 팀짜기 투표 결과")
-    print(f"찬성: {yes_votes}명, 반대: {no_votes}명")
-
+    print(f"총 투표자: {total_votes}명, 찬성: {yes_votes}명, 반대: {no_votes}명")
     for uid, vote in view.votes.items():
         member = interaction.guild.get_member(int(uid))
         name = member.display_name if member else f"(알 수 없음: {uid})"
