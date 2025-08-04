@@ -3105,6 +3105,7 @@ async def run_pubg_collection(manual=False):
 
         channel = discord.utils.get(bot.get_all_channels(), name="자동수집")
         today_str = datetime.now(KST).strftime("%Y-%m-%d")
+        success_nicknames = []  # ✅ 성공 기록
 
         for i, m in enumerate(valid_members, start=1):
             nickname = m["game_id"].strip()
@@ -3120,7 +3121,7 @@ async def run_pubg_collection(manual=False):
 
                 # ✅ 정확한 닉네임 받기
                 player_id, corrected_name = get_player_id(nickname)
-                nickname = corrected_name  # 대소문자 포함 정확한 닉네임으로 덮어쓰기
+                nickname = corrected_name
 
                 season_id = get_season_id()
                 stats = get_player_stats(player_id, season_id)
@@ -3141,6 +3142,7 @@ async def run_pubg_collection(manual=False):
                     source="자동갱신"
                 )
 
+                success_nicknames.append(nickname)  # ✅ 성공한 닉네임 저장
                 print(f"✅ 저장 성공: {nickname}")
                 failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
 
@@ -3172,8 +3174,21 @@ async def run_pubg_collection(manual=False):
 
             await asyncio.sleep(60)
 
+        # ✅ 성공 유저 목록 기록
+        try:
+            with open("season_leaderboard.json", "r+", encoding="utf-8") as f:
+                data = json.load(f)
+                data["collected_nicknames"] = success_nicknames
+                data["collected_count"] = len(success_nicknames)
+                f.seek(0)
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                f.truncate()
+                print(f"📥 수집 성공 유저 {len(success_nicknames)}명 기록 완료")
+        except Exception as e:
+            print(f"⚠️ 수집 유저 기록 실패: {e}")
+
         if channel:
-            await channel.send(f"✅ `{today_str}` 기준, 총 {len(valid_members)}명의 전적 수집이 완료되었습니다.")
+            await channel.send(f"✅ `{today_str}` 기준, 총 {len(success_nicknames)}명의 전적 수집이 완료되었습니다.")
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
