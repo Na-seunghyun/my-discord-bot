@@ -2305,10 +2305,11 @@ async def 시즌랭킹(interaction: discord.Interaction):
     except Exception:
         return await interaction.followup.send("❌ 유효 PUBG ID 목록을 불러오지 못했습니다.", ephemeral=True)
 
-    valid_discord_ids = {
-        str(entry.get("discord_id")).strip()
+    # ✅ 수정된 필터 매핑: discord_id → game_id
+    valid_pubg_map = {
+        str(entry["discord_id"]).strip(): entry["game_id"].strip()
         for entry in valid_data
-        if entry.get("discord_id") and not entry.get("is_guest", False)
+        if entry.get("discord_id") and entry.get("game_id") and not entry.get("is_guest", False)
     }
 
     leaderboard_path = "season_leaderboard.json"
@@ -2328,8 +2329,11 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
         if "(게스트)" in nickname:
             continue
-        if discord_id not in valid_discord_ids:
-            print(f"❌ 제외: {nickname} (디스코드 ID 불일치)")
+
+        # ✅ 닉네임까지 매칭 확인
+        expected_game_id = valid_pubg_map.get(discord_id)
+        if expected_game_id != nickname:
+            print(f"❌ 제외: {nickname} (닉네임 불일치: {expected_game_id})")
             continue
 
         players.append(p)
