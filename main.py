@@ -2298,9 +2298,11 @@ async def 시즌랭킹(interaction: discord.Interaction):
         if "(게스트)" in nickname:
             continue
 
-        # ✅ 닉네임까지 매칭 확인
-        expected_game_id = valid_pubg_map.get(discord_id)
-        if expected_game_id != nickname:
+        # ✅ 대소문자/공백 무시한 정규화 비교
+        expected_game_id = valid_pubg_map.get(discord_id, "").strip().lower()
+        actual_nickname = nickname.strip().lower()
+
+        if expected_game_id and actual_nickname != expected_game_id:
             print(f"❌ 제외: {nickname} (닉네임 불일치: {expected_game_id})")
             continue
 
