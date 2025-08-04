@@ -2587,7 +2587,6 @@ async def 검사(interaction: discord.Interaction):
         raw_nick = member.nick or member.name
         parts = [p.strip() for p in raw_nick.strip().split("/")]
 
-        # 디버깅 로그
         print(f"[DEBUG] 처리 대상: {raw_nick} → parts: {parts}")
 
         if len(parts) != 3:
@@ -2599,28 +2598,29 @@ async def 검사(interaction: discord.Interaction):
             continue
 
         _, game_id, year = parts
-        if year.isdigit():
+        year = year.strip()
+        if year and year.isdigit():
             year_groups[year].append(member.display_name)
         else:
-            print(f"⚠️ 년도 형식 아님: {year} from {raw_nick}")
+            print(f"⚠️ 잘못된 년도 형식: '{year}' from {raw_nick}")
 
     await interaction.followup.send(f"🔍 검사 완료: {count}명 형식 오류 발견", ephemeral=True)
     await update_valid_pubg_ids(interaction.guild)
 
-    # 📊 년생별 유저 분포 Embed 전송
-    if not year_groups:
-        try:
-            await interaction.channel.send("⚠️ 올바른 닉네임 형식의 유저가 없습니다.")
-        except Exception as e:
-            print(f"❌ 안내 메시지 전송 실패: {e}")
-        return
-
+    # 📊 Embed 출력
     fields = []
     for year, members in sorted(year_groups.items(), key=lambda x: x[0]):
         member_list = ", ".join(members)
         if len(member_list) > 1024:
             member_list = member_list[:1021] + "..."
         fields.append((f"{year}년생 ({len(members)}명)", member_list))
+
+    if not fields:
+        try:
+            await interaction.channel.send("⚠️ 올바른 닉네임 형식의 유저가 없습니다.")
+        except Exception as e:
+            print(f"❌ 안내 메시지 전송 실패: {e}")
+        return
 
     for i in range(0, len(fields), 25):
         embed = discord.Embed(
