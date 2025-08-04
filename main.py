@@ -1525,45 +1525,23 @@ import time
 recent_saves = {}
 
 
-def save_player_stats_to_file(
-    nickname,
-    squad_metrics,
-    ranked_stats,
-    stats=None,
-    discord_id=None,
-    pubg_id=None,
-    source="기본"
-):
-    import os, json, time
-    from datetime import datetime
 
-    global recent_saves
-    if "recent_saves" not in globals():
-        recent_saves = {}
 
-    if discord_id is None:
-        print(f"❌ 저장 실패 ({source}): {nickname} | 이유: discord_id 없음")
-        return False
-
-    key = str(discord_id)
-    now = time.time()
-    if source != "자동갱신":
-        last = recent_saves.get(key)
-        if last and now - last < 30:
-            print(f"⏹ 중복 저장 방지: {nickname} ({source})")
-            return False
-        recent_saves[key] = now
-
+def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, discord_id=None, pubg_id=None, source="수동저장"):
     try:
-        season_id = get_season_id()
-    except Exception as e:
-        print(f"❌ 저장 실패 ({source}): {nickname} | 시즌 ID 조회 실패: {e}")
-        return False
+        leaderboard_path = "season_leaderboard.json"
+        if os.path.exists(leaderboard_path):
+            with open(leaderboard_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {
+                "players": [],
+                "collected_nicknames": [],
+                "collected_count": 0
+            }
 
-    try:
         rounds_played = kills = top10s = headshot_kills = 0
         time_survived = longest_kill = 0.0
-        avg_damage = kd = win_rate = 0.0
 
         if stats:
             squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
@@ -1573,35 +1551,37 @@ def save_player_stats_to_file(
             headshot_kills = int(squad_stats.get("headshotKills", 0))
             time_survived = float(squad_stats.get("timeSurvived", 0))
             longest_kill = float(squad_stats.get("longestKill", 0))
+        elif squad_metrics:
+            # fallback 값 적용 (최소한의 구조 보장)
+            rounds_played = 1  # 최소 1판 처리
+            kills = 1
+            top10s = 0
+            headshot_kills = 0
+            time_survived = 0.0
+            longest_kill = 0.0
 
-        if squad_metrics:
-            avg_damage, kd, win_rate = squad_metrics
-
-        top10_ratio = (top10s / rounds_played * 100) if rounds_played else 0.0
-        headshot_pct = (headshot_kills / kills * 100) if kills else 0.0
-        avg_survive = (time_survived / rounds_played) if rounds_played else 0.0
-
+        # 전적 기록 데이터
         player_data = {
             "nickname": nickname,
             "discord_id": str(discord_id),
-            "pubg_id": pubg_id.strip() if pubg_id else "",
+            "pubg_id": pubg_id,
             "timestamp": datetime.now().isoformat(),
             "squad": {
-                "avg_damage": float(avg_damage),
-                "kd": float(kd),
-                "win_rate": float(win_rate),
+                "avg_damage": float(squad_metrics[0]),
+                "kd": float(squad_metrics[1]),
+                "win_rate": float(squad_metrics[2]),
                 "rounds_played": rounds_played,
                 "kills": kills,
-                "top10_ratio": float(top10_ratio),
-                "headshot_pct": float(headshot_pct),
-                "avg_survive": float(avg_survive),
-                "longest_kill": float(longest_kill),
-            }
+                "top10_ratio": top10s / max(rounds_played, 1) * 100,
+                "headshot_pct": headshot_kills / max(kills, 1) * 100,
+                "avg_survive": time_survived / max(rounds_played, 1),
+                "longest_kill": longest_kill
+            },
+            "ranked": {}
         }
 
         if ranked_stats and "data" in ranked_stats:
-            ranked_modes = ranked_stats["data"]["attributes"].get("rankedGameModeStats", {})
-            squad_rank = ranked_modes.get("squad")
+            squad_rank = ranked_stats["data"]["attributes"].get("rankedGameModeStats", {}).get("squad")
             if squad_rank:
                 player_data["ranked"] = {
                     "tier": squad_rank.get("currentTier", {}).get("tier", "Unranked"),
@@ -1609,39 +1589,26 @@ def save_player_stats_to_file(
                     "points": squad_rank.get("currentRankPoint", 0),
                 }
 
-        leaderboard_path = "season_leaderboard.json"
-        if os.path.exists(leaderboard_path):
-            with open(leaderboard_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        else:
-            data = {}
+        # 중복 제거 후 병합
+        existing_players = data.get("players", [])
+        existing_players = [p for p in existing_players if str(p.get("discord_id")) != str(discord_id)]
+        existing_players.append(player_data)
 
-        stored_season_id = data.get("season_id")
-        leaderboard = data.get("players", [])
+        data["season_id"] = get_season_id()
+        data["players"] = existing_players
         collected_nicknames = set(data.get("collected_nicknames", []))
-
-        if stored_season_id != season_id:
-            leaderboard = []
-            collected_nicknames = set()
-
-        leaderboard = [p for p in leaderboard if p.get("discord_id") != str(discord_id)]
-        leaderboard.append(player_data)
         collected_nicknames.add(nickname)
-
-        json_to_save = {
-            "season_id": season_id,
-            "players": leaderboard,
-            "collected_nicknames": list(collected_nicknames),
-            "collected_count": len(collected_nicknames)
-        }
+        data["collected_nicknames"] = list(collected_nicknames)
+        data["collected_count"] = len(collected_nicknames)
 
         with open(leaderboard_path, "w", encoding="utf-8") as f:
-            json.dump(json_to_save, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, indent=2, ensure_ascii=False)
 
-        print(f"💾 저장 성공 ({source}): {nickname} ({pubg_id})")
+        print(f"💾 저장 완료 ({source}): {nickname}")
         return player_data
+
     except Exception as e:
-        print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
+        print(f"❌ save_player_stats_to_file 실패: {nickname} | {e}")
         return False
 
 
