@@ -3314,35 +3314,38 @@ async def run_pubg_collection(manual=False):
         try:
             leaderboard_path = "season_leaderboard.json"
             data = {}
+
             if os.path.exists(leaderboard_path):
                 with open(leaderboard_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
+            else:
+                data = {"players": [], "collected_nicknames": [], "collected_count": 0}
+
+            stored_players = data.get("players", [])
+            stored_nicknames = set(data.get("collected_nicknames", []))
+
+            # ✅ 기존 저장 유저 중 덮어쓰기 대상이 아닌 유저 유지
+            existing_discord_ids = {p["discord_id"] for p in collected_players}
+            merged_players = [p for p in stored_players if p["discord_id"] not in existing_discord_ids]
+            merged_players.extend(collected_players)
+
+            merged_nicknames = stored_nicknames.union(success_nicknames)
 
             data["season_id"] = get_season_id()
-            data["collected_nicknames"] = success_nicknames
-            data["collected_count"] = len(success_nicknames)
-            data["players"] = collected_players
+            data["players"] = merged_players
+            data["collected_nicknames"] = list(merged_nicknames)
+            data["collected_count"] = len(merged_nicknames)
 
-            print("💾 season_leaderboard 저장 직전:", json.dumps(data, indent=2, ensure_ascii=False))
+            print("💾 병합된 season_leaderboard 저장 직전:", json.dumps(data, indent=2, ensure_ascii=False))
 
             with open(leaderboard_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
-            print(f"📥 수집 성공 유저 {len(success_nicknames)}명 기록 완료")
+            print(f"📥 누적 포함 수집 유저 {len(merged_nicknames)}명 기록 완료")
+
         except Exception as e:
             print(f"⚠️ 수집 유저 기록 실패: {e}")
 
-        # 완료 메시지
-        if channel:
-            try:
-                await channel.send(f"✅ `{today_str}` 기준, 총 {len(success_nicknames)}명의 전적 수집이 완료되었습니다.")
-            except Exception as e:
-                print(f"❌ 최종 전송 실패: {e}")
-        else:
-            print("❗ 자동수집 채널을 찾지 못했습니다.")
-
-    except Exception as e:
-        print(f"💥 run_pubg_collection 전체 실패: {e}")
 
 
 
