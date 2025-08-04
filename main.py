@@ -3346,13 +3346,6 @@ async def run_pubg_collection(manual=False):
         except Exception as e:
             print(f"⚠️ 수집 유저 기록 실패: {e}")
 
-import discord
-from discord.ext import commands, tasks
-from discord import app_commands
-from datetime import datetime, timezone, timedelta
-import json
-import os
-import asyncio
 
 # 🕰️ 한국 시간대
 KST = timezone(timedelta(hours=9))
