@@ -2300,6 +2300,10 @@ from discord import app_commands
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
 
+    import os
+    import json
+    import statistics
+
     weights = {
         "avg_damage": 0.28,
         "kd": 0.28,
@@ -2339,14 +2343,14 @@ async def 시즌랭킹(interaction: discord.Interaction):
     except Exception:
         return await interaction.followup.send("❌ 유효 PUBG ID 목록을 불러오지 못했습니다.", ephemeral=True)
 
-    valid_pubg_ids = set()
+    valid_game_ids = set()
     valid_discord_ids = set()
     for entry in valid_data:
         if not entry.get("is_guest", False):
             game_id = entry.get("game_id", "").strip().lower()
             discord_id = str(entry.get("discord_id", "")).strip()
             if game_id:
-                valid_pubg_ids.add(game_id)
+                valid_game_ids.add(game_id)
             if discord_id:
                 valid_discord_ids.add(discord_id)
 
@@ -2363,12 +2367,11 @@ async def 시즌랭킹(interaction: discord.Interaction):
     players = []
     for p in raw_players:
         nickname = p.get("nickname", "")
-        pubg_id = p.get("pubg_id", "").strip().lower()
         discord_id = str(p.get("discord_id", "")).strip()
 
         if "(게스트)" in nickname:
             continue
-        if pubg_id not in valid_pubg_ids:
+        if nickname.strip().lower() not in valid_game_ids:
             continue
         if discord_id not in valid_discord_ids:
             continue
@@ -2506,6 +2509,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     embed.set_footer(text=f"※ 기준: 저장 유저 {total_saved_non_guest}명 / 유효 계정 {len(players)}명 (게스트 제외 + ID검사 통과)")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
