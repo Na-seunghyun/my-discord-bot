@@ -2162,12 +2162,12 @@ async def 전적해설(interaction: discord.Interaction, 닉네임: str):
     }
 
     C_MAP = {
-        "avg_damage": 1200,
-        "kd": 1200,
-        "win_rate": 1500,
-        "top10_ratio": 700,
-        "avg_survive": 600,
-        "headshot_pct": 300
+        "avg_damage": 2000,
+        "kd": 2000,
+        "win_rate": 2000,
+        "top10_ratio": 1400,
+        "avg_survive": 1400,
+        "headshot_pct": 1400
     }
 
     def compute_final_score(raw_value, mean, std, n, C, bonus_cap=0.15):
@@ -2307,12 +2307,12 @@ async def 시즌랭킹(interaction: discord.Interaction):
     }
 
     C_MAP = {
-        "avg_damage": 1500,
-        "kd": 1500,
+        "avg_damage": 2000,
+        "kd": 2000,
         "win_rate": 2000,
-        "top10_ratio": 1000,
-        "avg_survive": 1000,
-        "headshot_pct": 1000
+        "top10_ratio": 1400,
+        "avg_survive": 1400,
+        "headshot_pct": 1400
     }
 
     def compute_final_score(raw_value, mean, std, n, C, bonus_cap=0.15):
