@@ -1534,9 +1534,7 @@ def save_player_stats_to_file(
     pubg_id=None,
     source="기본"
 ):
-    import os
-    import json
-    import time
+    import os, json, time
     from datetime import datetime
 
     global recent_saves
@@ -1547,13 +1545,15 @@ def save_player_stats_to_file(
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: discord_id 없음")
         return False
 
+    # ✅ 자동 저장인 경우에는 중복 저장 방지 생략
     key = str(discord_id)
     now = time.time()
-    last = recent_saves.get(key)
-    if last is not None and now - last < 30:
-        print(f"⏹ 중복 저장 방지: {nickname} ({source})")
-        return False
-    recent_saves[key] = now
+    if source != "자동갱신":
+        last = recent_saves.get(key)
+        if last is not None and now - last < 30:
+            print(f"⏹ 중복 저장 방지: {nickname} ({source})")
+            return False
+        recent_saves[key] = now
 
     try:
         season_id = get_season_id()
@@ -1561,10 +1561,6 @@ def save_player_stats_to_file(
         print(f"❌ 저장 실패 ({source}): {nickname} | 시즌 ID 조회 실패: {e}")
         return False
 
-    if not pubg_id:
-        print(f"⚠️ pubg_id 누락됨: {nickname} / discord_id: {discord_id}")
-
-    # 기본 스탯 준비
     rounds_played = kills = top10s = headshot_kills = 0
     time_survived = longest_kill = 0.0
     avg_damage = kd = win_rate = 0.0
@@ -1572,12 +1568,12 @@ def save_player_stats_to_file(
     if stats:
         try:
             squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
-            rounds_played = int(squad_stats.get("roundsPlayed", 0) or 0)
-            kills = int(squad_stats.get("kills", 0) or 0)
-            top10s = int(squad_stats.get("top10s", 0) or 0)
-            headshot_kills = int(squad_stats.get("headshotKills", 0) or 0)
-            time_survived = float(squad_stats.get("timeSurvived", 0) or 0.0)
-            longest_kill = float(squad_stats.get("longestKill", 0) or 0.0)
+            rounds_played = int(squad_stats.get("roundsPlayed", 0))
+            kills = int(squad_stats.get("kills", 0))
+            top10s = int(squad_stats.get("top10s", 0))
+            headshot_kills = int(squad_stats.get("headshotKills", 0))
+            time_survived = float(squad_stats.get("timeSurvived", 0))
+            longest_kill = float(squad_stats.get("longestKill", 0))
         except Exception:
             pass
 
@@ -1617,31 +1613,28 @@ def save_player_stats_to_file(
                 player_data["ranked"] = {
                     "tier": squad_rank.get("currentTier", {}).get("tier", "Unranked"),
                     "subTier": squad_rank.get("currentTier", {}).get("subTier", ""),
-                    "points": squad_rank.get("currentRankPoint", 0) or 0,
+                    "points": squad_rank.get("currentRankPoint", 0),
                 }
         except Exception:
             pass
 
-    # 저장 처리
     leaderboard_path = "season_leaderboard.json"
     try:
-        stored_season_id = None
-        leaderboard = []
-        collected_nicknames = set()
-
         if os.path.exists(leaderboard_path):
             with open(leaderboard_path, "r", encoding="utf-8") as f:
-                file_data = json.load(f) or {}
-                stored_season_id = file_data.get("season_id")
-                leaderboard = file_data.get("players", []) or []
-                collected_nicknames = set(file_data.get("collected_nicknames", []))
+                data = json.load(f)
+        else:
+            data = {}
 
-        # 시즌 바뀌었으면 초기화
+        stored_season_id = data.get("season_id")
+        leaderboard = data.get("players", [])
+        collected_nicknames = set(data.get("collected_nicknames", []))
+
         if stored_season_id != season_id:
             leaderboard = []
             collected_nicknames = set()
 
-        # 기존 유저 제거 후 새로 추가
+        # ✅ 기존 유저 제거 후 갱신
         leaderboard = [p for p in leaderboard if p.get("discord_id") != str(discord_id)]
         leaderboard.append(player_data)
         collected_nicknames.add(nickname)
@@ -1656,36 +1649,12 @@ def save_player_stats_to_file(
         with open(leaderboard_path, "w", encoding="utf-8") as f:
             json.dump(json_to_save, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ 저장 성공 ({source}): {nickname} ({pubg_id})")
-
-        # ✅ valid_pubg_ids.json 자동 저장
-        try:
-            valid_path = "valid_pubg_ids.json"
-            valid_data = []
-            if os.path.exists(valid_path):
-                with open(valid_path, "r", encoding="utf-8") as f:
-                    valid_data = json.load(f)
-
-            if not any(d.get("game_id") == nickname for d in valid_data):
-                valid_data.append({
-                    "name": nickname,
-                    "game_id": nickname,
-                    "discord_id": str(discord_id),
-                    "is_guest": False
-                })
-                with open(valid_path, "w", encoding="utf-8") as f:
-                    json.dump(valid_data, f, ensure_ascii=False, indent=2)
-                print(f"💾 valid_pubg_ids.json에 저장됨: {nickname}")
-
-        except Exception as e:
-            print(f"⚠️ valid_pubg_ids 저장 실패: {e}")
-
+        print(f"💾 저장 성공 ({source}): {nickname} ({pubg_id})")
         return True
 
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
         return False
-
 
 
 
