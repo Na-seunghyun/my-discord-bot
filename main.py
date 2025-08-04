@@ -3009,29 +3009,32 @@ if os.path.exists("failed_members.json"):
 # ✅ slash command: 저장 실패한 유저 확인
 @tree.command(name="저장실패", description="저장에 실패한 멤버들을 조회합니다.", guild=discord.Object(id=GUILD_ID))
 async def 저장실패(interaction: discord.Interaction):
-    await interaction.response.defer(thinking=True)
-
-    print(f"🔍 현재 실패 멤버 수: {len(failed_members)}")
+    await interaction.response.defer(thinking=False)
 
     if not failed_members:
-        await interaction.followup.send("✅ 현재 저장에 실패한 멤버는 없습니다.", ephemeral=False)
-        return
+        return await interaction.followup.send("✅ 현재 저장에 실패한 멤버는 없습니다.")
 
+    # 길이 제한 대비
     mentions = []
     for m in failed_members:
         try:
             user = await bot.fetch_user(m["discord_id"])
             mentions.append(f"{user.mention} (`{m['name']}`)")
-        except Exception as e:
-            print(f"⚠️ 유저 로딩 실패: {e}")
+        except Exception:
             mentions.append(f"`{m['name']}` (ID: {m['discord_id']})")
 
-    embed = discord.Embed(
-        title="❌ 저장 실패한 멤버 리스트",
-        description="\n".join(mentions),
-        color=discord.Color.red()
-    )
-    await interaction.followup.send(embed=embed)
+    # 메시지 분할 (한 embed당 25명씩)
+    CHUNK_SIZE = 25
+    chunks = [mentions[i:i + CHUNK_SIZE] for i in range(0, len(mentions), CHUNK_SIZE)]
+
+    for i, chunk in enumerate(chunks, start=1):
+        embed = discord.Embed(
+            title=f"❌ 저장 실패한 멤버 리스트 ({i}/{len(chunks)})",
+            description="\n".join(chunk),
+            color=discord.Color.red()
+        )
+        await interaction.followup.send(embed=embed)
+
 
 # ✅ 자동 수집 메인 루프
 async def start_pubg_collection():
