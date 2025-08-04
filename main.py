@@ -1567,7 +1567,7 @@ def save_player_stats_to_file(
     data_to_save = {
         "nickname": nickname,
         "discord_id": str(discord_id),
-        "pubg_id": pubg_id.strip() if pubg_id else "",  # ✅ 대소문자 보존!
+        "pubg_id": pubg_id.strip() if pubg_id else "",
         "timestamp": datetime.now().isoformat()
     }
 
@@ -1635,24 +1635,26 @@ def save_player_stats_to_file(
 
     leaderboard_path = "season_leaderboard.json"
     try:
+        # 기본값 초기화
+        stored_season_id = None
+        leaderboard = []
+        collected_nicknames = set()
+
         if os.path.exists(leaderboard_path):
             with open(leaderboard_path, "r", encoding="utf-8") as f:
                 file_data = json.load(f) or {}
                 stored_season_id = file_data.get("season_id")
                 leaderboard = file_data.get("players", []) or []
-        else:
-            stored_season_id = None
-            leaderboard = []
-            file_data = {}
+                collected_nicknames = set(file_data.get("collected_nicknames", []))
 
+        # 시즌 변경되면 초기화
         if stored_season_id != season_id:
             leaderboard = []
-            file_data = {}
+            collected_nicknames = set()
 
+        # 기존 기록 제거 후 새로 추가
         leaderboard = [p for p in leaderboard if p.get("discord_id") != str(discord_id)]
         leaderboard.append(data_to_save)
-
-        collected_nicknames = set(file_data.get("collected_nicknames", []))
         collected_nicknames.add(nickname)
 
         json_to_save = {
@@ -1671,6 +1673,7 @@ def save_player_stats_to_file(
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
         return False
+
 
 
 
