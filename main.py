@@ -3237,6 +3237,7 @@ async def run_pubg_collection(manual=False):
                     print(f"⚠️ 전적 없음 → 스킵됨: {nickname} ({reason})")
                     raise ValueError(reason)
 
+                # ✅ 전적 기록 시도
                 save_successful = save_player_stats_to_file(
                     nickname,
                     squad_metrics,
@@ -3247,21 +3248,21 @@ async def run_pubg_collection(manual=False):
                     source="자동갱신"
                 )
 
+                # ✅ 무조건 기록 (조건: squad_metrics 존재)
+                collected_players.append({
+                    "nickname": nickname,
+                    "discord_id": m["discord_id"],
+                    "pubg_id": player_id,
+                    "squad": squad_metrics,
+                    "ranked": ranked_stats
+                })
+
                 if save_successful:
                     success_nicknames.append(nickname)
                     print(f"✅ 저장 성공: {nickname}")
                     failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
 
-                    # ✅ 랭킹용 데이터 추가
-                    collected_players.append({
-                        "nickname": nickname,
-                        "discord_id": m["discord_id"],
-                        "pubg_id": player_id,
-                        "squad": squad_metrics,
-                        "ranked": ranked_stats
-                    })
-
-                    # valid_pubg_ids.json 최신화
+                    # valid_pubg_ids.json 갱신
                     try:
                         with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                             valid_list = json.load(f)
@@ -3347,6 +3348,7 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
