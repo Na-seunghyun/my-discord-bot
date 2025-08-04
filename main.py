@@ -1678,35 +1678,6 @@ def save_player_stats_to_file(
 
 
 
-async def refresh_valid_pubg_ids(bot):
-    import json
-
-    guild = bot.get_guild(GUILD_ID)
-    if guild is None:
-        print("❌ 서버 정보를 찾을 수 없습니다.")
-        return
-
-    members = await guild.fetch_members(limit=None).flatten()
-
-    if not os.path.exists("valid_pubg_ids.json"):
-        return
-
-    with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
-        current_data = json.load(f)
-
-    current_ids = {str(m.id) for m in members}
-    updated_data = [
-        entry for entry in current_data
-        if str(entry.get("discord_id", "")) in current_ids
-    ]
-
-    with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
-        json.dump(updated_data, f, indent=2, ensure_ascii=False)
-
-    print(f"🔄 유효 PUBG ID 갱신 완료: {len(updated_data)}명 남음")
-
-
-
 
 
 
@@ -3223,8 +3194,7 @@ async def run_pubg_collection(manual=False):
     mode = "즉시 수동 실행" if manual else "새벽 4시 자동 실행"
     print(f"🔄 [{mode}] PUBG 전적 수집 시작")
     
-    await refresh_valid_pubg_ids(bot)
-
+ 
     try:
         if not os.path.exists("valid_pubg_ids.json"):
             with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
