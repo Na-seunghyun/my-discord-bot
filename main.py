@@ -2574,6 +2574,8 @@ import discord
 
 from collections import defaultdict
 
+from collections import defaultdict
+
 @tree.command(name="검사", description="닉네임 검사", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
@@ -2586,24 +2588,23 @@ async def 검사(interaction: discord.Interaction):
             continue
 
         parts = [p.strip() for p in (member.nick or member.name).strip().split("/")]
-        if len(parts) != 3 or not nickname_pattern.fullmatch("/".join(parts)):
+        joined = "/".join(parts)
+
+        if len(parts) != 3 or not nickname_pattern.fullmatch(joined):
             count += 1
             try:
                 await interaction.channel.send(f"{member.mention} 닉네임 형식이 올바르지 않아요.")
             except Exception as e:
-                print(f"❗ 메시지 전송 오류: {member.name} - {e}")
+                print(f"❗ 닉네임 경고 메시지 전송 실패: {member.name} - {e}")
         else:
             name, game_id, year = parts
             if year.isdigit():
                 year_groups[year].append(member.display_name)
 
-    # 형식 오류 안내 (ephemeral)
     await interaction.followup.send(f"🔍 검사 완료: {count}명 형식 오류 발견", ephemeral=True)
-
-    # valid_pubg_ids 갱신
     await update_valid_pubg_ids(interaction.guild)
 
-    # 📊 년생별 유저 분포 Embed
+    # 📊 년생별 유저 분포 Embed 전송 (channel.send)
     fields = []
     for year, members in sorted(year_groups.items(), key=lambda x: x[0]):
         member_list = ", ".join(members)
@@ -2611,7 +2612,6 @@ async def 검사(interaction: discord.Interaction):
             member_list = member_list[:1021] + "..."
         fields.append((f"{year}년생 ({len(members)}명)", member_list))
 
-    # Embed 여러 개로 나눠서 followup.send 사용
     for i in range(0, len(fields), 25):
         embed = discord.Embed(
             title="📊 년생별 유저 분포",
@@ -2621,7 +2621,11 @@ async def 검사(interaction: discord.Interaction):
         for name, value in fields[i:i+25]:
             embed.add_field(name=name, value=value, inline=False)
 
-        await interaction.followup.send(embed=embed)  # ✅ 안전하게 followup 사용
+        try:
+            await interaction.channel.send(embed=embed)
+        except Exception as e:
+            print(f"❌ Embed 전송 실패: {e}")
+
 
 
 
