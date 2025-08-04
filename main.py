@@ -1994,24 +1994,49 @@ def generate_ranked_embed(ranked_stats, nickname="플레이어"):
 async def 전적(interaction: discord.Interaction, 닉네임: str):
     await interaction.response.defer()
     try:
-        # ✅ 언패킹 필요!!
+        # ✅ 플레이어 정보 수집
         player_id, corrected_name = get_player_id(닉네임)
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
         ranked = get_player_ranked_stats(player_id, season_id)
 
+        # ✅ squad 전적 추출 및 저장
         squad_metrics, error = extract_squad_metrics(stats)
         if squad_metrics:
             save_player_stats_to_file(
-                corrected_name,              # ✅ 대소문자 보존된 닉네임
+                corrected_name,
                 squad_metrics,
                 ranked,
                 stats=stats,
                 discord_id=interaction.user.id,
-                pubg_id=player_id,           # ✅ 고유 pubg_id 저장
+                pubg_id=player_id,
                 source="전적명령"
             )
 
+            # ✅ valid_pubg_ids.json 자동 등록
+            try:
+                with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
+                    valid_data = json.load(f)
+                    exists = any(
+                        str(entry.get("discord_id")) == str(interaction.user.id)
+                        for entry in valid_data
+                    )
+                    if not exists:
+                        valid_data.append({
+                            "name": interaction.user.display_name,
+                            "game_id": corrected_name,
+                            "discord_id": interaction.user.id,
+                            "pubg_id": player_id,
+                            "is_guest": False
+                        })
+                        f.seek(0)
+                        json.dump(valid_data, f, ensure_ascii=False, indent=2)
+                        f.truncate()
+                        print(f"✅ valid_pubg_ids에 추가됨: {corrected_name}")
+            except Exception as e:
+                print(f"⚠️ valid_pubg_ids 추가 실패: {e}")
+
+        # ✅ 전적 출력
         embed = generate_mode_embed(stats, "squad", corrected_name)
         view = ModeSwitchView(nickname=corrected_name, stats=stats, ranked_stats=ranked)
         await interaction.followup.send(embed=embed, view=view)
