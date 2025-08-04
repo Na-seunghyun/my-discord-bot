@@ -3243,7 +3243,6 @@ async def run_pubg_collection(manual=False):
                 else:
                     print(f"❌ 저장 실패: {nickname} → save_player_stats_to_file() 리턴 False")
 
-                    # ✅ squad_metrics 없으면 저장 안함
                     if squad_metrics:
                         fallback_data = {
                             "nickname": nickname,
@@ -3257,8 +3256,6 @@ async def run_pubg_collection(manual=False):
                     else:
                         print(f"⛔ squad_metrics 없음 → 저장 스킵됨: {nickname}")
 
-
-                # valid_pubg_ids.json 갱신
                 try:
                     with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                         valid_list = json.load(f)
@@ -3282,7 +3279,6 @@ async def run_pubg_collection(manual=False):
                 except Exception as e:
                     print(f"⚠️ valid_pubg_ids.json 갱신 실패: {e}")
 
-                # 알림
                 if channel:
                     try:
                         user = await bot.fetch_user(m["discord_id"])
@@ -3315,7 +3311,6 @@ async def run_pubg_collection(manual=False):
         try:
             leaderboard_path = "season_leaderboard.json"
 
-            # 기존 season_leaderboard.json 로드
             if os.path.exists(leaderboard_path):
                 with open(leaderboard_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -3326,19 +3321,15 @@ async def run_pubg_collection(manual=False):
                     "collected_count": 0
                 }
 
-            # 기존 저장된 유저 데이터
             stored_players = data.get("players", [])
             stored_nicknames = set(data.get("collected_nicknames", []))
 
-            # 새로 수집된 유저 중 중복되는 discord_id 제거 후 병합
             existing_discord_ids = {p.get("discord_id") for p in collected_players}
             merged_players = [p for p in stored_players if p.get("discord_id") not in existing_discord_ids]
             merged_players.extend(collected_players)
 
-            # 닉네임도 병합
             merged_nicknames = stored_nicknames.union(success_nicknames)
 
-            # 갱신된 데이터 저장
             data["season_id"] = get_season_id()
             data["players"] = merged_players
             data["collected_nicknames"] = list(merged_nicknames)
@@ -3353,6 +3344,9 @@ async def run_pubg_collection(manual=False):
 
         except Exception as e:
             print(f"⚠️ 수집 유저 기록 실패: {e}")
+
+    except Exception as e:
+        print(f"🚨 전체 수집 루틴 실패: {e}")
 
 
 
