@@ -1834,6 +1834,8 @@ def pick_best_rank_tier(ranked_stats):
 
 @tree.command(name="닉네임자동갱신", description="현재 PUBG 닉네임을 자동으로 갱신합니다", guild=discord.Object(id=GUILD_ID))
 async def 닉네임자동갱신(interaction: discord.Interaction):
+    import time
+
     await interaction.response.defer(thinking=True)
 
     file_path = "season_leaderboard.json"
@@ -1849,27 +1851,34 @@ async def 닉네임자동갱신(interaction: discord.Interaction):
     failed = 0
 
     for player in players:
-        pubg_id = player.get("pubg_id", "").strip()  # ✅ 여기만 수정!
-        if not pubg_id:
+        pubg_id = player.get("pubg_id", "").strip().lower()
+        if not pubg_id.startswith("account."):
+            print(f"⚠️ 잘못된 pubg_id 형식: {pubg_id}")
             failed += 1
             continue
 
         try:
-            # ✅ PUBG ID로 유저 정보 요청
+            # ✅ PUBG ID로 정확히 유저 정보 요청
             url = f"https://api.pubg.com/shards/{PLATFORM}/players/{pubg_id}"
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             info = response.json()
+
             new_name = info["data"]["attributes"]["name"]
 
-            if player["nickname"] != new_name:
+            if player.get("nickname") != new_name:
+                print(f"🔄 변경됨: {player.get('nickname')} → {new_name}")
                 player["nickname"] = new_name
                 updated += 1
             else:
                 unchanged += 1
+
         except Exception as e:
             failed += 1
             print(f"❌ 닉네임 갱신 실패: {pubg_id} | 이유: {e}")
+
+        # ✅ 요청 간 딜레이로 429 방지
+        time.sleep(1)
 
     data["players"] = players
 
@@ -1883,6 +1892,7 @@ async def 닉네임자동갱신(interaction: discord.Interaction):
     embed.set_footer(text=f"총 {len(players)}명 대상")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
