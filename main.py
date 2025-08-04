@@ -3250,7 +3250,6 @@ async def run_pubg_collection(manual=False):
                     print(f"✅ 저장 성공: {nickname}")
                     failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
                 else:
-                    # ✅ 저장 실패여도 수집 리스트에는 포함
                     collected_players.append({
                         "nickname": nickname,
                         "discord_id": m["discord_id"],
@@ -3260,7 +3259,7 @@ async def run_pubg_collection(manual=False):
                     })
                     print(f"⚠️ 저장 실패 or 중복 무시됨: {nickname}")
 
-                # valid_pubg_ids.json 갱신
+                # ✅ valid_pubg_ids.json 갱신
                 try:
                     with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                         valid_list = json.load(f)
@@ -3284,6 +3283,7 @@ async def run_pubg_collection(manual=False):
                 except Exception as e:
                     print(f"⚠️ valid_pubg_ids.json 갱신 실패: {e}")
 
+                # ✅ 유저에게 알림 전송
                 if channel:
                     try:
                         user = await bot.fetch_user(m["discord_id"])
@@ -3312,7 +3312,7 @@ async def run_pubg_collection(manual=False):
 
             await asyncio.sleep(60)
 
-        # ✅ 시즌 리더보드 파일 저장
+        # ✅ season_leaderboard.json에 저장
         try:
             leaderboard_path = "season_leaderboard.json"
             data = {}
@@ -3332,7 +3332,7 @@ async def run_pubg_collection(manual=False):
         except Exception as e:
             print(f"⚠️ 수집 유저 기록 실패: {e}")
 
-        # ✅ 최종 결과 메시지 전송
+        # ✅ 완료 메시지
         if channel:
             try:
                 await channel.send(f"✅ `{today_str}` 기준, 총 {len(success_nicknames)}명의 전적 수집이 완료되었습니다.")
@@ -3343,6 +3343,7 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
