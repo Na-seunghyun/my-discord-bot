@@ -2282,7 +2282,6 @@ import os
 import discord
 from discord import app_commands
 
-GUILD_ID = 1234567890  # Replace with your actual guild ID
 
 @tree.command(name="시즌랭킹", description="현재 시즌의 항목별 TOP7을 확인합니다.", guild=discord.Object(id=GUILD_ID))
 async def 시즌랭킹(interaction: discord.Interaction):
