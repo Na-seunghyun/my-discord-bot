@@ -3253,15 +3253,22 @@ async def run_pubg_collection(manual=False):
                     global failed_members
                     failed_members = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
                 else:
-                    fallback_data = {
-                        "nickname": nickname,
-                        "discord_id": m["discord_id"],
-                        "pubg_id": player_id,
-                        "squad": squad_metrics or {},
-                        "ranked": ranked_stats or {}
-                    }
-                    collected_players.append(fallback_data)
-                    print(f"⚠️ 저장 실패 또는 무시됨: {nickname}")
+                    print(f"❌ 저장 실패: {nickname} → save_player_stats_to_file() 리턴 False")
+
+                    # ✅ squad_metrics 없으면 저장 안함
+                    if squad_metrics:
+                        fallback_data = {
+                            "nickname": nickname,
+                            "discord_id": m["discord_id"],
+                            "pubg_id": player_id,
+                            "squad": squad_metrics,
+                            "ranked": ranked_stats or {}
+                        }
+                        collected_players.append(fallback_data)
+                        print(f"⚠️ fallback 저장: {nickname}")
+                    else:
+                        print(f"⛔ squad_metrics 없음 → 저장 스킵됨: {nickname}")
+
 
                 # valid_pubg_ids.json 갱신
                 try:
