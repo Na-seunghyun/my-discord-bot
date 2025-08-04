@@ -3186,6 +3186,11 @@ async def start_pubg_collection():
         print("🌅 [정기 수집] 새벽 4시 자동 수집 실행 중...")
         await run_pubg_collection(manual=False)
 
+
+
+
+
+
 async def run_pubg_collection(manual=False):
     AUTO_CHANNEL_ID = 1394268206788775967  # 자동수집 채널 ID
     mode = "즉시 수동 실행" if manual else "새벽 4시 자동 실행"
@@ -3245,7 +3250,8 @@ async def run_pubg_collection(manual=False):
                     success_nicknames.append(nickname)
                     collected_players.append(player_data)
                     print(f"✅ 저장 성공: {nickname}")
-                    failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
+                    global failed_members
+                    failed_members = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
                 else:
                     fallback_data = {
                         "nickname": nickname,
@@ -3310,11 +3316,9 @@ async def run_pubg_collection(manual=False):
 
             await asyncio.sleep(60)
 
-        # 최종 저장
+        # ✅ 최종 저장
         try:
             leaderboard_path = "season_leaderboard.json"
-            data = {}
-
             if os.path.exists(leaderboard_path):
                 with open(leaderboard_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -3324,7 +3328,7 @@ async def run_pubg_collection(manual=False):
             stored_players = data.get("players", [])
             stored_nicknames = set(data.get("collected_nicknames", []))
 
-            # ✅ 기존 저장 유저 중 덮어쓰기 대상이 아닌 유저 유지
+            # 기존 저장 유저 중 덮어쓰기 대상이 아닌 유저 유지
             existing_discord_ids = {p["discord_id"] for p in collected_players}
             merged_players = [p for p in stored_players if p["discord_id"] not in existing_discord_ids]
             merged_players.extend(collected_players)
@@ -3345,6 +3349,25 @@ async def run_pubg_collection(manual=False):
 
         except Exception as e:
             print(f"⚠️ 수집 유저 기록 실패: {e}")
+
+    except Exception as e:
+        print(f"🚨 전체 수집 루틴 실패: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # 🕰️ 한국 시간대
