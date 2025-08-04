@@ -1657,11 +1657,35 @@ def save_player_stats_to_file(
             json.dump(json_to_save, f, ensure_ascii=False, indent=2)
 
         print(f"✅ 저장 성공 ({source}): {nickname} ({pubg_id})")
+
+        # ✅ valid_pubg_ids.json 자동 저장
+        try:
+            valid_path = "valid_pubg_ids.json"
+            valid_data = []
+            if os.path.exists(valid_path):
+                with open(valid_path, "r", encoding="utf-8") as f:
+                    valid_data = json.load(f)
+
+            if not any(d.get("game_id") == nickname for d in valid_data):
+                valid_data.append({
+                    "name": nickname,
+                    "game_id": nickname,
+                    "discord_id": str(discord_id),
+                    "is_guest": False
+                })
+                with open(valid_path, "w", encoding="utf-8") as f:
+                    json.dump(valid_data, f, ensure_ascii=False, indent=2)
+                print(f"💾 valid_pubg_ids.json에 저장됨: {nickname}")
+
+        except Exception as e:
+            print(f"⚠️ valid_pubg_ids 저장 실패: {e}")
+
         return True
 
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
         return False
+
 
 
 
