@@ -2239,9 +2239,7 @@ from discord import app_commands
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
 
-    import os
-    import json
-    import statistics
+    import os, json, statistics
 
     weights = {
         "avg_damage": 0.28,
@@ -2282,16 +2280,11 @@ async def 시즌랭킹(interaction: discord.Interaction):
     except Exception:
         return await interaction.followup.send("❌ 유효 PUBG ID 목록을 불러오지 못했습니다.", ephemeral=True)
 
-    valid_game_ids = set()
-    valid_discord_ids = set()
-    for entry in valid_data:
-        if not entry.get("is_guest", False):
-            game_id = entry.get("game_id", "").strip()
-            discord_id = str(entry.get("discord_id", "")).strip()
-            if game_id:
-                valid_game_ids.add(game_id)
-            if discord_id:
-                valid_discord_ids.add(discord_id)
+    valid_discord_ids = {
+        str(entry.get("discord_id")).strip()
+        for entry in valid_data
+        if entry.get("discord_id") and not entry.get("is_guest", False)
+    }
 
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
@@ -2303,17 +2296,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
     raw_players = data.get("players", [])
     total_saved_non_guest = sum(1 for p in raw_players if "(게스트)" not in p.get("nickname", ""))
 
-    # 🧪 로그: 닉네임 대조 테스트
-    print("🧪 닉네임 대조 로그 시작")
-    for p in raw_players:
-        nickname = p.get("nickname", "").strip()
-        for gid in valid_game_ids:
-            if nickname == gid.strip():
-                print(f"✅ 일치: {nickname} == {gid}")
-            else:
-                print(f"❌ 불일치: {nickname} != {gid}")
-    print("🧪 닉네임 대조 로그 끝")
-
     players = []
     for p in raw_players:
         nickname = p.get("nickname", "").strip()
@@ -2321,14 +2303,10 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
         if "(게스트)" in nickname:
             continue
-        if nickname not in valid_game_ids:
-            print(f"❌ 제외: {nickname} (게임 ID 불일치)")
-            continue
         if discord_id not in valid_discord_ids:
             print(f"❌ 제외: {nickname} (디스코드 ID 불일치)")
             continue
 
-        print(f"✅ 포함됨: {nickname}")
         players.append(p)
 
     if not players:
@@ -2447,7 +2425,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
             ) + "\n```",
             inline=False
         )
-
 
     embed.add_field(
         name="📌 점수 계산 방식",
