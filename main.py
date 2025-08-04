@@ -3229,6 +3229,20 @@ async def run_pubg_collection(manual=False):
             print("⚠️ 수집할 유저가 없습니다.")
             return
 
+        # ✅ valid_pubg_ids 불러오기
+        try:
+            with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
+                valid_pubg_ids = json.load(f)
+        except Exception as e:
+            print(f"❌ valid_pubg_ids.json 로딩 실패: {e}")
+            valid_pubg_ids = []
+
+        id_to_game_id = {
+            str(entry["discord_id"]): entry["game_id"]
+            for entry in valid_pubg_ids
+            if "discord_id" in entry and "game_id" in entry
+        }
+
         channel = bot.get_channel(AUTO_CHANNEL_ID)
         today_str = datetime.now(KST).strftime("%Y-%m-%d")
         success_nicknames = []
@@ -3241,8 +3255,8 @@ async def run_pubg_collection(manual=False):
                 print(f"❌ 닉네임에서 PUBG ID 추출 실패: {display_name}")
                 continue
 
-            nickname = segments[1].strip()
             discord_id = member.id
+            nickname = segments[1].strip()
             print(f"📌 ({i}/{len(members)}) 처리 중: {nickname}")
 
             try:
@@ -3253,7 +3267,9 @@ async def run_pubg_collection(manual=False):
 
                 register_request()
                 player_id, corrected_name = get_player_id(nickname)
-                nickname = corrected_name
+
+                # ✅ valid_pubg_ids 기준 nickname 정규화
+                nickname = id_to_game_id.get(str(discord_id), corrected_name)
 
                 season_id = get_season_id()
                 stats = get_player_stats(player_id, season_id)
@@ -3367,8 +3383,6 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"🚨 전체 수집 루틴 실패: {e}")
-
-
 
 
 
