@@ -1564,39 +1564,39 @@ def save_player_stats_to_file(
     if not pubg_id:
         print(f"⚠️ pubg_id 누락됨: {nickname} / discord_id: {discord_id}")
 
-    data_to_save = {
-        "nickname": nickname,
-        "discord_id": str(discord_id),
-        "pubg_id": pubg_id.strip() if pubg_id else "",
-        "timestamp": datetime.now().isoformat()
-    }
+    # 기본 스탯 준비
+    rounds_played = kills = top10s = headshot_kills = 0
+    time_survived = longest_kill = 0.0
+    avg_damage = kd = win_rate = 0.0
 
     if stats:
         try:
             squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
+            rounds_played = int(squad_stats.get("roundsPlayed", 0) or 0)
+            kills = int(squad_stats.get("kills", 0) or 0)
+            top10s = int(squad_stats.get("top10s", 0) or 0)
+            headshot_kills = int(squad_stats.get("headshotKills", 0) or 0)
+            time_survived = float(squad_stats.get("timeSurvived", 0) or 0.0)
+            longest_kill = float(squad_stats.get("longestKill", 0) or 0.0)
         except Exception:
-            squad_stats = {}
-
-        rounds_played = int(squad_stats.get("roundsPlayed", 0) or 0)
-        kills = int(squad_stats.get("kills", 0) or 0)
-        top10s = int(squad_stats.get("top10s", 0) or 0)
-        headshot_kills = int(squad_stats.get("headshotKills", 0) or 0)
-        time_survived = float(squad_stats.get("timeSurvived", 0) or 0.0)
-        longest_kill = float(squad_stats.get("longestKill", 0) or 0.0)
-    else:
-        rounds_played = kills = top10s = headshot_kills = 0
-        time_survived = longest_kill = 0.0
+            pass
 
     if squad_metrics:
         try:
             avg_damage, kd, win_rate = squad_metrics
         except Exception:
-            avg_damage, kd, win_rate = 0.0, 0.0, 0.0
-        top10_ratio = (top10s / rounds_played * 100) if rounds_played else 0.0
-        headshot_pct = (headshot_kills / kills * 100) if kills else 0.0
-        avg_survive = (time_survived / rounds_played) if rounds_played else 0.0
+            avg_damage = kd = win_rate = 0.0
 
-        data_to_save["squad"] = {
+    top10_ratio = (top10s / rounds_played * 100) if rounds_played else 0.0
+    headshot_pct = (headshot_kills / kills * 100) if kills else 0.0
+    avg_survive = (time_survived / rounds_played) if rounds_played else 0.0
+
+    player_data = {
+        "nickname": nickname,
+        "discord_id": str(discord_id),
+        "pubg_id": pubg_id.strip() if pubg_id else "",
+        "timestamp": datetime.now().isoformat(),
+        "squad": {
             "avg_damage": float(avg_damage),
             "kd": float(kd),
             "win_rate": float(win_rate),
@@ -1607,35 +1607,24 @@ def save_player_stats_to_file(
             "avg_survive": float(avg_survive),
             "longest_kill": float(longest_kill),
         }
-    else:
-        data_to_save["squad"] = {
-            "avg_damage": 0.0,
-            "kd": 0.0,
-            "win_rate": 0.0,
-            "rounds_played": rounds_played,
-            "kills": kills,
-            "top10_ratio": 0.0,
-            "headshot_pct": 0.0,
-            "avg_survive": 0.0,
-            "longest_kill": float(longest_kill),
-        }
+    }
 
-    try:
-        if ranked_stats and "data" in ranked_stats:
+    if ranked_stats and "data" in ranked_stats:
+        try:
             ranked_modes = ranked_stats["data"]["attributes"].get("rankedGameModeStats", {})
             squad_rank = ranked_modes.get("squad")
             if squad_rank:
-                data_to_save["ranked"] = {
+                player_data["ranked"] = {
                     "tier": squad_rank.get("currentTier", {}).get("tier", "Unranked"),
                     "subTier": squad_rank.get("currentTier", {}).get("subTier", ""),
                     "points": squad_rank.get("currentRankPoint", 0) or 0,
                 }
-    except Exception:
-        pass
+        except Exception:
+            pass
 
+    # 저장 처리
     leaderboard_path = "season_leaderboard.json"
     try:
-        # 기본값 초기화
         stored_season_id = None
         leaderboard = []
         collected_nicknames = set()
@@ -1647,14 +1636,14 @@ def save_player_stats_to_file(
                 leaderboard = file_data.get("players", []) or []
                 collected_nicknames = set(file_data.get("collected_nicknames", []))
 
-        # 시즌 변경되면 초기화
+        # 시즌 바뀌었으면 초기화
         if stored_season_id != season_id:
             leaderboard = []
             collected_nicknames = set()
 
-        # 기존 기록 제거 후 새로 추가
+        # 기존 유저 제거 후 새로 추가
         leaderboard = [p for p in leaderboard if p.get("discord_id") != str(discord_id)]
-        leaderboard.append(data_to_save)
+        leaderboard.append(player_data)
         collected_nicknames.add(nickname)
 
         json_to_save = {
@@ -1667,7 +1656,7 @@ def save_player_stats_to_file(
         with open(leaderboard_path, "w", encoding="utf-8") as f:
             json.dump(json_to_save, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ 저장 성공 ({source}): {nickname} ({data_to_save.get('pubg_id')})")
+        print(f"✅ 저장 성공 ({source}): {nickname} ({pubg_id})")
         return True
 
     except Exception as e:
