@@ -2572,6 +2572,7 @@ async def update_valid_pubg_ids(guild):
 from collections import defaultdict
 import discord
 
+nickname_pattern = re.compile(r"^[^/]+ / [^/]+ / \d{2}$")
 
 @tree.command(name="검사", description="닉네임 검사", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
@@ -2586,40 +2587,32 @@ async def 검사(interaction: discord.Interaction):
 
         raw_nick = member.nick or member.name
         parts = [p.strip() for p in raw_nick.strip().split("/")]
-
         print(f"[DEBUG] 처리 대상: {raw_nick} → parts: {parts}")
 
-        if len(parts) != 3:
+        if len(parts) != 3 or not nickname_pattern.fullmatch(" / ".join(parts)):
             count += 1
             try:
                 await interaction.channel.send(f"{member.mention} 닉네임 형식이 올바르지 않아요.")
             except Exception as e:
-                print(f"❗ 닉네임 경고 메시지 전송 실패: {member.name} - {e}")
-            continue
-
-        _, game_id, year = parts
-        year = year.strip()
-        if year and year.isdigit():
-            year_groups[year].append(member.display_name)
+                print(f"❗ 메시지 전송 오류: {member.name} - {e}")
         else:
-            print(f"⚠️ 잘못된 년도 형식: '{year}' from {raw_nick}")
+            name, game_id, year = parts
+            if year.isdigit():
+                year_groups[year].append(raw_nick)
 
     await interaction.followup.send(f"🔍 검사 완료: {count}명 형식 오류 발견", ephemeral=True)
-    await update_valid_pubg_ids(interaction.guild)
 
-    # 📊 Embed 출력
+    # 년생 분포 Embed 생성
     fields = []
-    for year, members in sorted(year_groups.items(), key=lambda x: x[0]):
+    for year, members in sorted(year_groups.items(), key=lambda x: int(x[0])):
         member_list = ", ".join(members)
         if len(member_list) > 1024:
             member_list = member_list[:1021] + "..."
         fields.append((f"{year}년생 ({len(members)}명)", member_list))
 
+    # 분할 전송
     if not fields:
-        try:
-            await interaction.channel.send("⚠️ 올바른 닉네임 형식의 유저가 없습니다.")
-        except Exception as e:
-            print(f"❌ 안내 메시지 전송 실패: {e}")
+        await interaction.channel.send("⚠️ 올바른 닉네임 형식의 유저가 없습니다.")
         return
 
     for i in range(0, len(fields), 25):
@@ -2630,11 +2623,8 @@ async def 검사(interaction: discord.Interaction):
         )
         for name, value in fields[i:i+25]:
             embed.add_field(name=name, value=value, inline=False)
+        await interaction.channel.send(embed=embed)
 
-        try:
-            await interaction.channel.send(embed=embed)
-        except Exception as e:
-            print(f"❌ Embed 전송 실패: {e}")
 
 
 
