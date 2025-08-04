@@ -2432,19 +2432,28 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
 
 
-
 async def update_valid_pubg_ids(guild):
     valid_members = []
+
     for member in guild.members:
         if member.bot:
             continue
+
         parts = (member.nick or member.name).strip().split("/")
         if len(parts) == 3 and nickname_pattern.fullmatch("/".join(p.strip() for p in parts)):
-            name, game_id, _ = [p.strip() for p in parts]
+            name, raw_game_id, _ = [p.strip() for p in parts]
             is_guest = "(게스트)" in (member.nick or member.name)
+
+            try:
+                # ✅ PUBG API로 정확한 대소문자 닉네임 확인
+                _, corrected_name = get_player_id(raw_game_id)
+            except Exception as e:
+                print(f"❌ {raw_game_id} 확인 실패: {e}")
+                continue  # 실패 시 스킵
+
             valid_members.append({
                 "name": name,
-                 "game_id": game_id.strip().lower(),  # ← 여기 꼭 추가!
+                "game_id": corrected_name,  # ✅ 정확한 대소문자 닉네임
                 "discord_id": member.id,
                 "is_guest": is_guest
             })
@@ -2453,6 +2462,7 @@ async def update_valid_pubg_ids(guild):
         json.dump(valid_members, f, ensure_ascii=False, indent=2)
 
     print(f"✅ valid_pubg_ids.json 자동 갱신 완료 (총 {len(valid_members)}명)")
+
 
 
 
