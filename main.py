@@ -2012,6 +2012,38 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 except Exception as e:
                     print(f"❌ /전적 저장 실패: {e}")
 
+        # ✅ valid_pubg_ids.json 자동 등록
+        try:
+            with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
+                valid_data = json.load(f)
+                exists = any(
+                    str(entry.get("discord_id")) == str(interaction.user.id)
+                    for entry in valid_data
+                )
+                if not exists:
+                    valid_data.append({
+                        "name": interaction.user.display_name,
+                        "game_id": corrected_name,
+                        "discord_id": interaction.user.id,
+                        "pubg_id": player_id,
+                        "is_guest": False
+                    })
+                    f.seek(0)
+                    json.dump(valid_data, f, ensure_ascii=False, indent=2)
+                    f.truncate()
+                    print(f"✅ valid_pubg_ids에 추가됨: {corrected_name}")
+        except Exception as e:
+            print(f"⚠️ valid_pubg_ids 추가 실패: {e}")
+
+        # ✅ 전적 출력
+        embed = generate_mode_embed(stats, "squad", corrected_name)
+        view = ModeSwitchView(nickname=corrected_name, stats=stats, ranked_stats=ranked)
+        await interaction.followup.send(embed=embed, view=view)
+
+    except Exception as e:
+        await interaction.followup.send(f"❌ 오류 발생: {e}", ephemeral=True)
+
+
 
 
 
