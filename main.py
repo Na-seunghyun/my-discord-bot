@@ -3179,6 +3179,35 @@ async def start_pubg_collection():
 
 
 
+def add_to_valid_pubg_ids(name, game_id, discord_id, pubg_id, is_guest=False):
+    try:
+        path = "valid_pubg_ids.json"
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = []
+
+        for entry in data:
+            if entry["discord_id"] == discord_id and entry["game_id"] == game_id:
+                return  # 이미 등록됨
+
+        data.append({
+            "name": name,
+            "game_id": game_id,
+            "discord_id": discord_id,
+            "pubg_id": pubg_id,
+            "is_guest": is_guest
+        })
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        print(f"✅ valid_pubg_ids에 추가됨: {game_id}")
+
+    except Exception as e:
+        print(f"⚠️ valid_pubg_ids 추가 중 오류: {e}")
+
 
 async def run_pubg_collection(manual=False):
     AUTO_CHANNEL_ID = 1394268206788775967
@@ -3192,7 +3221,6 @@ async def run_pubg_collection(manual=False):
             return
 
         members = [m for m in guild.members if not m.bot]
-
         if not members:
             print("⚠️ 수집할 유저가 없습니다.")
             return
@@ -3263,30 +3291,14 @@ async def run_pubg_collection(manual=False):
                     print(f"⛔ squad_metrics 없음 → 저장 스킵됨: {nickname}")
 
                 # ✅ valid_pubg_ids 갱신
-                try:
-                    with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
-                        valid_list = json.load(f)
-                        updated = False
-                        for entry in valid_list:
-                            if str(entry.get("discord_id")) == str(discord_id):
-                                entry["pubg_id"] = player_id
-                                entry["game_id"] = nickname
-                                updated = True
-                                break
-                        if not updated:
-                            valid_list.append({
-                                "name": display_name,
-                                "game_id": nickname,
-                                "discord_id": discord_id,
-                                "pubg_id": player_id
-                            })
-                        f.seek(0)
-                        json.dump(valid_list, f, indent=2, ensure_ascii=False)
-                        f.truncate()
-                except Exception as e:
-                    print(f"⚠️ valid_pubg_ids.json 갱신 실패: {e}")
+                add_to_valid_pubg_ids(
+                    name=display_name,
+                    game_id=nickname,
+                    discord_id=discord_id,
+                    pubg_id=player_id,
+                    is_guest=False
+                )
 
-                # 알림
                 if channel:
                     try:
                         embed = discord.Embed(
@@ -3314,7 +3326,7 @@ async def run_pubg_collection(manual=False):
 
             await asyncio.sleep(60)
 
-        # ✅ 최종 저장
+        # ✅ season_leaderboard 저장
         try:
             leaderboard_path = "season_leaderboard.json"
             if os.path.exists(leaderboard_path):
@@ -3329,8 +3341,8 @@ async def run_pubg_collection(manual=False):
 
             stored_players = data.get("players", [])
             stored_nicknames = set(data.get("collected_nicknames", []))
-
             existing_discord_ids = {p.get("discord_id") for p in collected_players}
+
             merged_players = [p for p in stored_players if p.get("discord_id") not in existing_discord_ids]
             merged_players.extend(collected_players)
 
@@ -3351,7 +3363,6 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"🚨 전체 수집 루틴 실패: {e}")
-
 
 
 
