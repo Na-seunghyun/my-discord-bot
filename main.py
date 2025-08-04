@@ -3036,57 +3036,87 @@ async def 저장실패(interaction: discord.Interaction):
         await interaction.followup.send(embed=embed)
 
 
-# ✅ 자동 수집 메인 루프
 async def start_pubg_collection():
     await bot.wait_until_ready()
+
     while True:
+        # ✅ [1] 즉시 실행
+        print("🚀 [즉시 수집] 봇 시작 시 1회 자동 수집 실행 중...")
+        await run_pubg_collection(manual=True)
+
+        # ✅ [2] 다음 새벽 4시까지 대기
         now = datetime.now(KST)
         target = now.replace(hour=4, minute=0, second=0, microsecond=0)
         if now >= target:
             target += timedelta(days=1)
         wait_seconds = (target - now).total_seconds()
-        print(f"🕓 {target.strftime('%Y-%m-%d %H:%M')}까지 대기 ({wait_seconds/60:.1f}분)")
+        print(f"🕓 [예약 대기] 다음 수집까지 대기: {target.strftime('%Y-%m-%d %H:%M')} ({wait_seconds/60:.1f}분)")
         await asyncio.sleep(wait_seconds)
 
-        # ✅ 수집 시작
-        try:
-            if not os.path.exists("valid_pubg_ids.json"):
-                with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
-                    json.dump([], f, ensure_ascii=False, indent=2)
+        # ✅ [3] 매일 새벽 4시 자동 수집
+        print("🌅 [정기 수집] 새벽 4시 자동 수집 실행 중...")
+        await run_pubg_collection(manual=False)
 
-            with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
-                members = json.load(f)
+async def run_pubg_collection(manual=False):
+    mode = "즉시 수동 실행" if manual else "새벽 4시 자동 실행"
+    print(f"🔄 [{mode}] PUBG 전적 수집 시작")
 
-            valid_members = [
-                m for m in members if m.get("game_id") and "(게스트)" not in m.get("name", "")
-            ]
+    try:
+        if not os.path.exists("valid_pubg_ids.json"):
+            with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
+                json.dump([], f, ensure_ascii=False, indent=2)
 
-            if not valid_members:
-                print("⚠️ 유효한 배그 닉네임이 없습니다.")
-                continue
+        with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
+            members = json.load(f)
 
-            channel = discord.utils.get(bot.get_all_channels(), name="자동수집")
-            today_str = datetime.now(KST).strftime("%Y-%m-%d")
+        valid_members = [
+            m for m in members if m.get("game_id") and "(게스트)" not in m.get("name", "")
+        ]
 
-            for m in valid_members:
-                nickname = m["game_id"].strip()
-                try:
-                    if not can_make_request():
-                        await asyncio.sleep(60)
-                        continue
+        if not valid_members:
+            print("⚠️ 유효한 배그 닉네임이 없습니다.")
+            return
 
-                    register_request()
-                    player_id = get_player_id(nickname)
-                    season_id = get_season_id()
-                    stats = get_player_stats(player_id, season_id)
-                    ranked_stats = get_player_ranked_stats(player_id, season_id)
-                    squad_metrics, _ = extract_squad_metrics(stats)
-                    save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, discord_id=m["discord_id"], pubg_id=nickname.strip(), source="자동갱신")
+        channel = discord.utils.get(bot.get_all_channels(), name="자동수집")
+        today_str = datetime.now(KST).strftime("%Y-%m-%d")
 
-                    print(f"✅ 저장 성공: {nickname}")
-                    failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
+        for i, m in enumerate(valid_members, start=1):
+            nickname = m["game_id"].strip()
+            print(f"📌 ({i}/{len(valid_members)}) 처리 중: {nickname}")
 
-                    if channel:
+            try:
+                if not can_make_request():
+                    print(f"⏳ API 제한 → 대기 후 재시도: {nickname}")
+                    await asyncio.sleep(60)
+                    continue
+
+                register_request()
+                player_id = get_player_id(nickname)
+                season_id = get_season_id()
+                stats = get_player_stats(player_id, season_id)
+                ranked_stats = get_player_ranked_stats(player_id, season_id)
+                squad_metrics, reason = extract_squad_metrics(stats)
+
+                if squad_metrics is None:
+                    print(f"⚠️ 전적 없음 → 스킵됨: {nickname} ({reason})")
+                    raise ValueError(reason)
+
+                save_player_stats_to_file(
+                    nickname,
+                    squad_metrics,
+                    ranked_stats,
+                    stats,
+                    discord_id=m["discord_id"],
+                    pubg_id=nickname,
+                    source="자동갱신"
+                )
+
+                print(f"✅ 저장 성공: {nickname}")
+                failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
+
+                if channel:
+                    try:
+                        user = await bot.fetch_user(m["discord_id"])
                         embed = discord.Embed(
                             title="📦 전적 자동 저장 완료!",
                             description=f"{m['name']}님의 전적 데이터가 저장되었습니다!",
@@ -3094,27 +3124,25 @@ async def start_pubg_collection():
                         )
                         embed.add_field(name="배그 닉네임", value=nickname, inline=True)
                         embed.set_footer(text="※ 오덕봇 자동 수집 기능")
+                        await channel.send(content=f"{user.mention}", embed=embed)
+                    except Exception as e:
+                        print(f"❌ 유저 멘션 실패 - {nickname}: {e}")
 
-                        try:
-                            user = await bot.fetch_user(m["discord_id"])
-                            await channel.send(content=f"{user.mention}", embed=embed)
-                        except Exception as e:
-                            print(f"❌ 유저 멘션 실패: {e}")
+            except Exception as e:
+                print(f"❌ 저장 실패: {nickname} | 이유: {e}")
+                if not any(fm["discord_id"] == m["discord_id"] for fm in failed_members):
+                    failed_members.append(m)
+                    with open("failed_members.json", "w", encoding="utf-8") as f:
+                        json.dump(failed_members, f, ensure_ascii=False, indent=2)
 
-                except Exception as e:
-                    print(f"❌ 저장 실패: {nickname} | 이유: {e}")
-                    if not any(fm["discord_id"] == m["discord_id"] for fm in failed_members):
-                        failed_members.append(m)
-                        with open("failed_members.json", "w", encoding="utf-8") as f:
-                            json.dump(failed_members, f, ensure_ascii=False, indent=2)
+            await asyncio.sleep(60)  # 1분 간격 처리
 
-                await asyncio.sleep(60)  # 1분 간격 처리
+        if channel:
+            await channel.send(f"✅ `{today_str}` 기준, 총 {len(valid_members)}명의 전적 수집이 완료되었습니다.")
 
-            if channel:
-                await channel.send(f"✅ `{today_str}` 기준, 총 {len(valid_members)}명의 전적 수집이 완료되었습니다.")
+    except Exception as e:
+        print(f"💥 run_pubg_collection 전체 실패: {e}")
 
-        except Exception as e:
-            print(f"auto_collect_pubg_stats 함수 에러: {e}")
 
 
 import discord
