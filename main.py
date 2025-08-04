@@ -1529,7 +1529,7 @@ recent_saves = {}
 
 def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, discord_id=None, pubg_id=None, source="수동저장"):
     try:
-        nickname = nickname.strip()  # 정규화
+        nickname = nickname.strip()
         leaderboard_path = "season_leaderboard.json"
 
         if os.path.exists(leaderboard_path):
@@ -1554,7 +1554,6 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, disc
             time_survived = float(squad_stats.get("timeSurvived", 0))
             longest_kill = float(squad_stats.get("longestKill", 0))
         elif squad_metrics:
-            # fallback 값 적용 (최소한의 구조 보장)
             rounds_played = 1
             kills = 1
             top10s = 0
@@ -1590,12 +1589,11 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, disc
                     "points": squad_rank.get("currentRankPoint", 0),
                 }
 
-        # 중복 제거 (discord_id 기반)
+        # ✅ nickname 기준으로 중복 제거 (대소문자/공백 구분 O)
         existing_players = data.get("players", [])
-        existing_players = [p for p in existing_players if str(p.get("discord_id")) != str(discord_id)]
+        existing_players = [p for p in existing_players if p.get("nickname") != nickname]
         existing_players.append(player_data)
 
-        # 저장
         data["season_id"] = get_season_id()
         data["players"] = existing_players
 
@@ -1613,7 +1611,6 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, disc
     except Exception as e:
         print(f"❌ save_player_stats_to_file 실패: {nickname} | {e}")
         return False
-
 
 
 
