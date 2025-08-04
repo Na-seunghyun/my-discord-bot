@@ -1567,7 +1567,7 @@ def save_player_stats_to_file(
     data_to_save = {
         "nickname": nickname,
         "discord_id": str(discord_id),
-        "pubg_id": pubg_id.strip().lower() if pubg_id else "",
+        "pubg_id": pubg_id.strip() if pubg_id else "",  # ✅ 대소문자 보존!
         "timestamp": datetime.now().isoformat()
     }
 
@@ -1849,7 +1849,7 @@ async def 닉네임자동갱신(interaction: discord.Interaction):
     failed = 0
 
     for player in players:
-        pubg_id = player.get("pubg_id")
+        pubg_id = player.get("pubg_id", "").strip()  # ✅ 여기만 수정!
         if not pubg_id:
             failed += 1
             continue
