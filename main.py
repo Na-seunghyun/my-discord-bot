@@ -2307,7 +2307,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     valid_discord_ids = set()
     for entry in valid_data:
         if not entry.get("is_guest", False):
-            game_id = entry.get("game_id", "").strip()  # ✅ 대소문자 구별 유지
+            game_id = entry.get("game_id", "").strip()
             discord_id = str(entry.get("discord_id", "")).strip()
             if game_id:
                 valid_game_ids.add(game_id)
@@ -2324,23 +2324,38 @@ async def 시즌랭킹(interaction: discord.Interaction):
     raw_players = data.get("players", [])
     total_saved_non_guest = sum(1 for p in raw_players if "(게스트)" not in p.get("nickname", ""))
 
+    # 🧪 로그: 닉네임 대조 테스트
+    print("🧪 닉네임 대조 로그 시작")
+    for p in raw_players:
+        nickname = p.get("nickname", "").strip()
+        for gid in valid_game_ids:
+            if nickname == gid.strip():
+                print(f"✅ 일치: {nickname} == {gid}")
+            else:
+                print(f"❌ 불일치: {nickname} != {gid}")
+    print("🧪 닉네임 대조 로그 끝")
+
     players = []
     for p in raw_players:
-        nickname = p.get("nickname", "")
+        nickname = p.get("nickname", "").strip()
         discord_id = str(p.get("discord_id", "")).strip()
 
         if "(게스트)" in nickname:
             continue
-        if nickname.strip() not in valid_game_ids:  # ✅ lower() 제거
+        if nickname not in valid_game_ids:
+            print(f"❌ 제외: {nickname} (게임 ID 불일치)")
             continue
         if discord_id not in valid_discord_ids:
+            print(f"❌ 제외: {nickname} (디스코드 ID 불일치)")
             continue
 
+        print(f"✅ 포함됨: {nickname}")
         players.append(p)
 
     if not players:
         return await interaction.followup.send("❌ 유효한 유저 전적이 없습니다. (게스트 제외 + ID검사 통과자 없음)", ephemeral=True)
 
+    # 💯 점수 계산
     keys = list(weights.keys())
     means = {
         "avg_damage": 150.00,
@@ -2453,6 +2468,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
             ) + "\n```",
             inline=False
         )
+
 
     embed.add_field(
         name="📌 점수 계산 방식",
