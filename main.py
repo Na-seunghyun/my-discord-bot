@@ -1549,7 +1549,7 @@ def save_player_stats_to_file(
     now = time.time()
     if source != "자동갱신":
         last = recent_saves.get(key)
-        if last is not None and now - last < 30:
+        if last and now - last < 30:
             print(f"⏹ 중복 저장 방지: {nickname} ({source})")
             return False
         recent_saves[key] = now
@@ -1560,12 +1560,12 @@ def save_player_stats_to_file(
         print(f"❌ 저장 실패 ({source}): {nickname} | 시즌 ID 조회 실패: {e}")
         return False
 
-    rounds_played = kills = top10s = headshot_kills = 0
-    time_survived = longest_kill = 0.0
-    avg_damage = kd = win_rate = 0.0
+    try:
+        rounds_played = kills = top10s = headshot_kills = 0
+        time_survived = longest_kill = 0.0
+        avg_damage = kd = win_rate = 0.0
 
-    if stats:
-        try:
+        if stats:
             squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
             rounds_played = int(squad_stats.get("roundsPlayed", 0))
             kills = int(squad_stats.get("kills", 0))
@@ -1573,39 +1573,33 @@ def save_player_stats_to_file(
             headshot_kills = int(squad_stats.get("headshotKills", 0))
             time_survived = float(squad_stats.get("timeSurvived", 0))
             longest_kill = float(squad_stats.get("longestKill", 0))
-        except Exception:
-            pass
 
-    if squad_metrics:
-        try:
+        if squad_metrics:
             avg_damage, kd, win_rate = squad_metrics
-        except Exception:
-            avg_damage = kd = win_rate = 0.0
 
-    top10_ratio = (top10s / rounds_played * 100) if rounds_played else 0.0
-    headshot_pct = (headshot_kills / kills * 100) if kills else 0.0
-    avg_survive = (time_survived / rounds_played) if rounds_played else 0.0
+        top10_ratio = (top10s / rounds_played * 100) if rounds_played else 0.0
+        headshot_pct = (headshot_kills / kills * 100) if kills else 0.0
+        avg_survive = (time_survived / rounds_played) if rounds_played else 0.0
 
-    player_data = {
-        "nickname": nickname,
-        "discord_id": str(discord_id),
-        "pubg_id": pubg_id.strip() if pubg_id else "",
-        "timestamp": datetime.now().isoformat(),
-        "squad": {
-            "avg_damage": float(avg_damage),
-            "kd": float(kd),
-            "win_rate": float(win_rate),
-            "rounds_played": rounds_played,
-            "kills": kills,
-            "top10_ratio": float(top10_ratio),
-            "headshot_pct": float(headshot_pct),
-            "avg_survive": float(avg_survive),
-            "longest_kill": float(longest_kill),
+        player_data = {
+            "nickname": nickname,
+            "discord_id": str(discord_id),
+            "pubg_id": pubg_id.strip() if pubg_id else "",
+            "timestamp": datetime.now().isoformat(),
+            "squad": {
+                "avg_damage": float(avg_damage),
+                "kd": float(kd),
+                "win_rate": float(win_rate),
+                "rounds_played": rounds_played,
+                "kills": kills,
+                "top10_ratio": float(top10_ratio),
+                "headshot_pct": float(headshot_pct),
+                "avg_survive": float(avg_survive),
+                "longest_kill": float(longest_kill),
+            }
         }
-    }
 
-    if ranked_stats and "data" in ranked_stats:
-        try:
+        if ranked_stats and "data" in ranked_stats:
             ranked_modes = ranked_stats["data"]["attributes"].get("rankedGameModeStats", {})
             squad_rank = ranked_modes.get("squad")
             if squad_rank:
@@ -1614,11 +1608,8 @@ def save_player_stats_to_file(
                     "subTier": squad_rank.get("currentTier", {}).get("subTier", ""),
                     "points": squad_rank.get("currentRankPoint", 0),
                 }
-        except Exception:
-            pass
 
-    leaderboard_path = "season_leaderboard.json"
-    try:
+        leaderboard_path = "season_leaderboard.json"
         if os.path.exists(leaderboard_path):
             with open(leaderboard_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -1648,13 +1639,10 @@ def save_player_stats_to_file(
             json.dump(json_to_save, f, ensure_ascii=False, indent=2)
 
         print(f"💾 저장 성공 ({source}): {nickname} ({pubg_id})")
-        print("🧾 저장 직전 player_data:", json.dumps(player_data, indent=2, ensure_ascii=False))
-
-        return player_data  # ✅ 저장된 데이터 반환
+        return player_data
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
         return False
-
 
 
 
@@ -3326,22 +3314,31 @@ async def run_pubg_collection(manual=False):
         # ✅ 최종 저장
         try:
             leaderboard_path = "season_leaderboard.json"
+
+            # 기존 season_leaderboard.json 로드
             if os.path.exists(leaderboard_path):
                 with open(leaderboard_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
             else:
-                data = {"players": [], "collected_nicknames": [], "collected_count": 0}
+                data = {
+                    "players": [],
+                    "collected_nicknames": [],
+                    "collected_count": 0
+                }
 
+            # 기존 저장된 유저 데이터
             stored_players = data.get("players", [])
             stored_nicknames = set(data.get("collected_nicknames", []))
 
-            # 기존 저장 유저 중 덮어쓰기 대상이 아닌 유저 유지
-            existing_discord_ids = {p["discord_id"] for p in collected_players}
-            merged_players = [p for p in stored_players if p["discord_id"] not in existing_discord_ids]
+            # 새로 수집된 유저 중 중복되는 discord_id 제거 후 병합
+            existing_discord_ids = {p.get("discord_id") for p in collected_players}
+            merged_players = [p for p in stored_players if p.get("discord_id") not in existing_discord_ids]
             merged_players.extend(collected_players)
 
+            # 닉네임도 병합
             merged_nicknames = stored_nicknames.union(success_nicknames)
 
+            # 갱신된 데이터 저장
             data["season_id"] = get_season_id()
             data["players"] = merged_players
             data["collected_nicknames"] = list(merged_nicknames)
@@ -3357,8 +3354,6 @@ async def run_pubg_collection(manual=False):
         except Exception as e:
             print(f"⚠️ 수집 유저 기록 실패: {e}")
 
-    except Exception as e:
-        print(f"🚨 전체 수집 루틴 실패: {e}")
 
 
 
