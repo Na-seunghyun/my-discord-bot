@@ -9703,6 +9703,11 @@ async def on_ready():
     try:
         asyncio.create_task(start_pubg_collection())
         print("📦 전적 자동 수집 태스크 시작됨 (매일 새벽 4시)")
+
+        # ✅ 즉시 한 번 수동 수집 실행
+        asyncio.create_task(run_pubg_collection(manual=True))
+        print("✅ run_pubg_collection() 수동 즉시 실행됨")
+        
     except Exception as e:
         print(f"❌ start_pubg_collection 실행 실패: {e}")
 
