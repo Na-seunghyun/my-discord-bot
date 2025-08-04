@@ -2517,8 +2517,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
 import asyncio
 
 async def update_valid_pubg_ids(guild):
-    valid_members = []
-
     for i, member in enumerate(guild.members, start=1):
         if member.bot:
             continue
@@ -2535,21 +2533,47 @@ async def update_valid_pubg_ids(guild):
                 print(f"❌ [{i}] {raw_game_id} 확인 실패: {e}")
                 continue
 
-            valid_members.append({
+            new_entry = {
                 "name": name,
-                "game_id": corrected_name,  # ✅ 대소문자 보정된 닉네임 저장
+                "game_id": corrected_name,
                 "discord_id": member.id,
                 "is_guest": is_guest
-            })
+            }
 
-            # ✅ 1분 대기 (API 제한 회피용)
+            # ✅ 기존 파일 불러오기
+            try:
+                if os.path.exists("valid_pubg_ids.json"):
+                    with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                else:
+                    data = []
+            except Exception as e:
+                print(f"⚠️ 기존 파일 읽기 실패: {e}")
+                data = []
+
+            # ✅ 같은 discord_id가 이미 있으면 갱신
+            updated = False
+            for j, entry in enumerate(data):
+                if str(entry.get("discord_id")) == str(member.id):
+                    data[j] = new_entry
+                    updated = True
+                    break
+            if not updated:
+                data.append(new_entry)
+
+            # ✅ 즉시 저장
+            try:
+                with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                print(f"💾 저장 완료: {corrected_name}")
+            except Exception as e:
+                print(f"❌ 저장 실패: {corrected_name} → {e}")
+
             print("⏳ 60초 대기 중...")
             await asyncio.sleep(60)
 
-    with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
-        json.dump(valid_members, f, ensure_ascii=False, indent=2)
+    print(f"✅ valid_pubg_ids.json 자동 갱신 완료 (총 {len(data)}명)")
 
-    print(f"✅ valid_pubg_ids.json 자동 갱신 완료 (총 {len(valid_members)}명)")
 
 
 
