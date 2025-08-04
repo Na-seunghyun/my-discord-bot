@@ -2429,13 +2429,12 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
 
 
-
-
+import asyncio
 
 async def update_valid_pubg_ids(guild):
     valid_members = []
 
-    for member in guild.members:
+    for i, member in enumerate(guild.members, start=1):
         if member.bot:
             continue
 
@@ -2445,18 +2444,22 @@ async def update_valid_pubg_ids(guild):
             is_guest = "(게스트)" in (member.nick or member.name)
 
             try:
-                # ✅ PUBG API로 정확한 대소문자 닉네임 확인
                 _, corrected_name = get_player_id(raw_game_id)
+                print(f"✅ [{i}] 확인 성공: {corrected_name}")
             except Exception as e:
-                print(f"❌ {raw_game_id} 확인 실패: {e}")
-                continue  # 실패 시 스킵
+                print(f"❌ [{i}] {raw_game_id} 확인 실패: {e}")
+                continue
 
             valid_members.append({
                 "name": name,
-                "game_id": corrected_name,  # ✅ 정확한 대소문자 닉네임
+                "game_id": corrected_name,  # ✅ 대소문자 보정된 닉네임 저장
                 "discord_id": member.id,
                 "is_guest": is_guest
             })
+
+            # ✅ 1분 대기 (API 제한 회피용)
+            print("⏳ 60초 대기 중...")
+            await asyncio.sleep(60)
 
     with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
         json.dump(valid_members, f, ensure_ascii=False, indent=2)
