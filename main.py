@@ -1660,7 +1660,32 @@ def save_player_stats_to_file(
 
 
 
+async def refresh_valid_pubg_ids(bot):
+    import json
 
+    guild = bot.get_guild(GUILD_ID)
+    if guild is None:
+        print("❌ 서버 정보를 찾을 수 없습니다.")
+        return
+
+    members = await guild.fetch_members(limit=None).flatten()
+
+    if not os.path.exists("valid_pubg_ids.json"):
+        return
+
+    with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
+        current_data = json.load(f)
+
+    current_ids = {str(m.id) for m in members}
+    updated_data = [
+        entry for entry in current_data
+        if str(entry.get("discord_id", "")) in current_ids
+    ]
+
+    with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
+        json.dump(updated_data, f, indent=2, ensure_ascii=False)
+
+    print(f"🔄 유효 PUBG ID 갱신 완료: {len(updated_data)}명 남음")
 
 
 
@@ -2185,12 +2210,17 @@ async def 닉네임_자동완성(interaction: discord.Interaction, current: str)
 
 
 
+import json
+import statistics
+import os
+import discord
+from discord import app_commands
+
+GUILD_ID = 1234567890  # Replace with your actual guild ID
 
 @tree.command(name="시즌랭킹", description="현재 시즌의 항목별 TOP7을 확인합니다.", guild=discord.Object(id=GUILD_ID))
 async def 시즌랭킹(interaction: discord.Interaction):
     await interaction.response.defer()
-
-    import os, json, statistics
 
     weights = {
         "avg_damage": 0.28,
@@ -2225,14 +2255,12 @@ async def 시즌랭킹(interaction: discord.Interaction):
         squad = p.get("squad", {})
         return squad.get(key, 0) if isinstance(squad, dict) else 0
 
-    # ✅ valid_pubg_ids.json 로드
     try:
         with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
             valid_data = json.load(f)
     except Exception:
         return await interaction.followup.send("❌ 유효 PUBG ID 목록을 불러오지 못했습니다.", ephemeral=True)
 
-    # ✅ 유효 게임 ID + 디스코드 ID 수집 (is_guest 제외)
     valid_pubg_ids = set()
     valid_discord_ids = set()
     for entry in valid_data:
@@ -2244,7 +2272,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
             if discord_id:
                 valid_discord_ids.add(discord_id)
 
-    # ✅ season_leaderboard.json 로드
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
         return await interaction.followup.send("❌ 저장된 전적 데이터가 없습니다.", ephemeral=True)
@@ -2255,7 +2282,6 @@ async def 시즌랭킹(interaction: discord.Interaction):
     raw_players = data.get("players", [])
     total_saved_non_guest = sum(1 for p in raw_players if "(게스트)" not in p.get("nickname", ""))
 
-    # ✅ 유효 필터링 (nickname / pubg_id / discord_id)
     players = []
     for p in raw_players:
         nickname = p.get("nickname", "")
@@ -2265,10 +2291,8 @@ async def 시즌랭킹(interaction: discord.Interaction):
         if "(게스트)" in nickname:
             continue
         if pubg_id not in valid_pubg_ids:
-            print(f"❌ 제외: pubg_id 불일치 → {pubg_id}")
             continue
         if discord_id not in valid_discord_ids:
-            print(f"❌ 제외: discord_id 불일치 → {discord_id}")
             continue
 
         players.append(p)
@@ -3091,6 +3115,8 @@ async def start_pubg_collection():
 async def run_pubg_collection(manual=False):
     mode = "즉시 수동 실행" if manual else "새벽 4시 자동 실행"
     print(f"🔄 [{mode}] PUBG 전적 수집 시작")
+    
+    await refresh_valid_pubg_ids(bot)
 
     try:
         if not os.path.exists("valid_pubg_ids.json"):
@@ -3126,7 +3152,7 @@ async def run_pubg_collection(manual=False):
 
                 # ✅ 언팩 필수!!
                 player_id, corrected_name = get_player_id(nickname)
-                nickname = corrected_name  # 정확한 닉네임 업데이트
+                nickname = corrected_name
 
                 season_id = get_season_id()
                 stats = get_player_stats(player_id, season_id)
@@ -3137,14 +3163,13 @@ async def run_pubg_collection(manual=False):
                     print(f"⚠️ 전적 없음 → 스킵됨: {nickname} ({reason})")
                     raise ValueError(reason)
 
-                # ✅ 저장 성공 여부 체크
                 save_successful = save_player_stats_to_file(
                     nickname,
                     squad_metrics,
                     ranked_stats,
                     stats,
                     discord_id=m["discord_id"],
-                    pubg_id=nickname,
+                    pubg_id=player_id,
                     source="자동갱신"
                 )
 
@@ -3152,6 +3177,33 @@ async def run_pubg_collection(manual=False):
                     success_nicknames.append(nickname)
                     print(f"✅ 저장 성공: {nickname}")
                     failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
+
+                    # ✅ pubg_id valid 목록 갱신
+                    try:
+                        with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
+                            valid_list = json.load(f)
+                            updated = False
+
+                            for entry in valid_list:
+                                if str(entry.get("discord_id")) == str(m["discord_id"]):
+                                    entry["pubg_id"] = player_id
+                                    entry["game_id"] = nickname  # 최신화
+                                    updated = True
+                                    break
+
+                            if not updated:
+                                valid_list.append({
+                                    "name": m.get("name", nickname),
+                                    "game_id": nickname,
+                                    "discord_id": m["discord_id"],
+                                    "pubg_id": player_id
+                                })
+
+                            f.seek(0)
+                            json.dump(valid_list, f, indent=2, ensure_ascii=False)
+                            f.truncate()
+                    except Exception as e:
+                        print(f"⚠️ valid_pubg_ids.json 갱신 실패: {e}")
 
                     if channel:
                         try:
@@ -3202,6 +3254,7 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
