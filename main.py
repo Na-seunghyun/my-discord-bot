@@ -2572,9 +2572,6 @@ async def update_valid_pubg_ids(guild):
 from collections import defaultdict
 import discord
 
-from collections import defaultdict
-
-from collections import defaultdict
 
 @tree.command(name="검사", description="닉네임 검사", guild=discord.Object(id=GUILD_ID))
 async def 검사(interaction: discord.Interaction):
@@ -2587,24 +2584,37 @@ async def 검사(interaction: discord.Interaction):
         if member.bot:
             continue
 
-        parts = [p.strip() for p in (member.nick or member.name).strip().split("/")]
-        joined = "/".join(parts)
+        raw_nick = member.nick or member.name
+        parts = [p.strip() for p in raw_nick.strip().split("/")]
 
-        if len(parts) != 3 or not nickname_pattern.fullmatch(joined):
+        # 디버깅 로그
+        print(f"[DEBUG] 처리 대상: {raw_nick} → parts: {parts}")
+
+        if len(parts) != 3:
             count += 1
             try:
                 await interaction.channel.send(f"{member.mention} 닉네임 형식이 올바르지 않아요.")
             except Exception as e:
                 print(f"❗ 닉네임 경고 메시지 전송 실패: {member.name} - {e}")
+            continue
+
+        _, game_id, year = parts
+        if year.isdigit():
+            year_groups[year].append(member.display_name)
         else:
-            name, game_id, year = parts
-            if year.isdigit():
-                year_groups[year].append(member.display_name)
+            print(f"⚠️ 년도 형식 아님: {year} from {raw_nick}")
 
     await interaction.followup.send(f"🔍 검사 완료: {count}명 형식 오류 발견", ephemeral=True)
     await update_valid_pubg_ids(interaction.guild)
 
-    # 📊 년생별 유저 분포 Embed 전송 (channel.send)
+    # 📊 년생별 유저 분포 Embed 전송
+    if not year_groups:
+        try:
+            await interaction.channel.send("⚠️ 올바른 닉네임 형식의 유저가 없습니다.")
+        except Exception as e:
+            print(f"❌ 안내 메시지 전송 실패: {e}")
+        return
+
     fields = []
     for year, members in sorted(year_groups.items(), key=lambda x: x[0]):
         member_list = ", ".join(members)
@@ -2625,6 +2635,7 @@ async def 검사(interaction: discord.Interaction):
             await interaction.channel.send(embed=embed)
         except Exception as e:
             print(f"❌ Embed 전송 실패: {e}")
+
 
 
 
