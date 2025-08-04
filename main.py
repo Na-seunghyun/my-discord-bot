@@ -1529,7 +1529,9 @@ recent_saves = {}
 
 def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, discord_id=None, pubg_id=None, source="수동저장"):
     try:
+        nickname = nickname.strip()  # 정규화
         leaderboard_path = "season_leaderboard.json"
+
         if os.path.exists(leaderboard_path):
             with open(leaderboard_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -1553,14 +1555,13 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, disc
             longest_kill = float(squad_stats.get("longestKill", 0))
         elif squad_metrics:
             # fallback 값 적용 (최소한의 구조 보장)
-            rounds_played = 1  # 최소 1판 처리
+            rounds_played = 1
             kills = 1
             top10s = 0
             headshot_kills = 0
             time_survived = 0.0
             longest_kill = 0.0
 
-        # 전적 기록 데이터
         player_data = {
             "nickname": nickname,
             "discord_id": str(discord_id),
@@ -1589,13 +1590,15 @@ def save_player_stats_to_file(nickname, squad_metrics, ranked_stats, stats, disc
                     "points": squad_rank.get("currentRankPoint", 0),
                 }
 
-        # 중복 제거 후 병합
+        # 중복 제거 (discord_id 기반)
         existing_players = data.get("players", [])
         existing_players = [p for p in existing_players if str(p.get("discord_id")) != str(discord_id)]
         existing_players.append(player_data)
 
+        # 저장
         data["season_id"] = get_season_id()
         data["players"] = existing_players
+
         collected_nicknames = set(data.get("collected_nicknames", []))
         collected_nicknames.add(nickname)
         data["collected_nicknames"] = list(collected_nicknames)
@@ -1963,6 +1966,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
     try:
         # ✅ 플레이어 정보 수집
         player_id, corrected_name = get_player_id(닉네임)
+        corrected_name = corrected_name.strip()
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
         ranked = get_player_ranked_stats(player_id, season_id)
@@ -1995,11 +1999,16 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
                     players = data.get("players", [])
                     nicknames = set(data.get("collected_nicknames", []))
-                    players = [p for p in players if p.get("discord_id") != str(interaction.user.id)]
+
+                    # 동일 유저의 이전 데이터 제거
+                    players = [p for p in players if str(p.get("discord_id")) != str(interaction.user.id)]
+
+                    # corrected_name 기준 nickname 저장
+                    player_data["nickname"] = corrected_name
                     players.append(player_data)
                     nicknames.add(corrected_name)
 
-                    data["season_id"] = get_season_id()
+                    data["season_id"] = season_id
                     data["players"] = players
                     data["collected_nicknames"] = list(nicknames)
                     data["collected_count"] = len(nicknames)
@@ -2042,6 +2051,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
     except Exception as e:
         await interaction.followup.send(f"❌ 오류 발생: {e}", ephemeral=True)
+
 
 
 
