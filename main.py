@@ -2025,11 +2025,17 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         try:
             with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                 valid_data = json.load(f)
-                exists = any(
-                    str(entry.get("discord_id")) == str(interaction.user.id)
-                    for entry in valid_data
-                )
-                if not exists:
+                updated = False
+
+                for entry in valid_data:
+                    if str(entry.get("discord_id")) == str(interaction.user.id):
+                        if entry.get("game_id") != corrected_name:
+                            print(f"🔁 닉네임 갱신: {entry.get('game_id')} → {corrected_name}")
+                            entry["game_id"] = corrected_name
+                            entry["name"] = interaction.user.display_name
+                            updated = True
+                        break
+                else:
                     valid_data.append({
                         "name": interaction.user.display_name,
                         "game_id": corrected_name,
@@ -2037,10 +2043,13 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                         "pubg_id": player_id,
                         "is_guest": False
                     })
+                    updated = True
+
+                if updated:
                     f.seek(0)
                     json.dump(valid_data, f, ensure_ascii=False, indent=2)
                     f.truncate()
-                    print(f"✅ valid_pubg_ids에 추가됨: {corrected_name}")
+                    print(f"✅ valid_pubg_ids에 등록 또는 갱신됨: {corrected_name}")
         except Exception as e:
             print(f"⚠️ valid_pubg_ids 추가 실패: {e}")
 
