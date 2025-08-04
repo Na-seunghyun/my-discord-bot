@@ -2506,6 +2506,17 @@ async def 시즌랭킹(interaction: discord.Interaction):
 import asyncio
 
 async def update_valid_pubg_ids(guild):
+    # ✅ 루프 전에 먼저 data 초기화
+    if os.path.exists("valid_pubg_ids.json"):
+        try:
+            with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"⚠️ 기존 파일 읽기 실패: {e}")
+            data = []
+    else:
+        data = []
+
     for i, member in enumerate(guild.members, start=1):
         if member.bot:
             continue
@@ -2528,17 +2539,6 @@ async def update_valid_pubg_ids(guild):
                 "discord_id": member.id,
                 "is_guest": is_guest
             }
-
-            # ✅ 기존 파일 불러오기
-            try:
-                if os.path.exists("valid_pubg_ids.json"):
-                    with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                else:
-                    data = []
-            except Exception as e:
-                print(f"⚠️ 기존 파일 읽기 실패: {e}")
-                data = []
 
             # ✅ 같은 discord_id가 이미 있으면 갱신
             updated = False
