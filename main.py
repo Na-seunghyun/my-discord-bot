@@ -3178,7 +3178,6 @@ async def start_pubg_collection():
 
 
 
-
 async def run_pubg_collection(manual=False):
     AUTO_CHANNEL_ID = 1394268206788775967  # 자동수집 채널 ID
     mode = "즉시 수동 실행" if manual else "새벽 4시 자동 실행"
@@ -3234,28 +3233,31 @@ async def run_pubg_collection(manual=False):
                     source="자동갱신"
                 )
 
+                global failed_members
+                failed_members = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
+
                 if player_data:
                     success_nicknames.append(nickname)
                     collected_players.append(player_data)
                     print(f"✅ 저장 성공: {nickname}")
-                    global failed_members
-                    failed_members = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
+                elif squad_metrics:
+                    fallback_data = {
+                        "nickname": nickname,
+                        "discord_id": m["discord_id"],
+                        "pubg_id": player_id,
+                        "squad": {
+                            "avg_damage": float(squad_metrics[0]),
+                            "kd": float(squad_metrics[1]),
+                            "win_rate": float(squad_metrics[2]),
+                        },
+                        "ranked": ranked_stats or {}
+                    }
+                    collected_players.append(fallback_data)
+                    print(f"⚠️ fallback 저장: {nickname}")
                 else:
-                    print(f"❌ 저장 실패: {nickname} → save_player_stats_to_file() 리턴 False")
+                    print(f"⛔ squad_metrics 없음 → 저장 스킵됨: {nickname}")
 
-                    if squad_metrics:
-                        fallback_data = {
-                            "nickname": nickname,
-                            "discord_id": m["discord_id"],
-                            "pubg_id": player_id,
-                            "squad": squad_metrics,
-                            "ranked": ranked_stats or {}
-                        }
-                        collected_players.append(fallback_data)
-                        print(f"⚠️ fallback 저장: {nickname}")
-                    else:
-                        print(f"⛔ squad_metrics 없음 → 저장 스킵됨: {nickname}")
-
+                # valid_pubg_ids 갱신
                 try:
                     with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                         valid_list = json.load(f)
@@ -3279,6 +3281,7 @@ async def run_pubg_collection(manual=False):
                 except Exception as e:
                     print(f"⚠️ valid_pubg_ids.json 갱신 실패: {e}")
 
+                # 알림 전송
                 if channel:
                     try:
                         user = await bot.fetch_user(m["discord_id"])
@@ -3334,8 +3337,6 @@ async def run_pubg_collection(manual=False):
             data["players"] = merged_players
             data["collected_nicknames"] = list(merged_nicknames)
             data["collected_count"] = len(merged_nicknames)
-
-            print("💾 병합된 season_leaderboard 저장 직전:", json.dumps(data, indent=2, ensure_ascii=False))
 
             with open(leaderboard_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
