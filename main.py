@@ -1545,7 +1545,6 @@ def save_player_stats_to_file(
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: discord_id 없음")
         return False
 
-    # ✅ 자동 저장인 경우에는 중복 저장 방지 생략
     key = str(discord_id)
     now = time.time()
     if source != "자동갱신":
@@ -1634,7 +1633,6 @@ def save_player_stats_to_file(
             leaderboard = []
             collected_nicknames = set()
 
-        # ✅ 기존 유저 제거 후 갱신
         leaderboard = [p for p in leaderboard if p.get("discord_id") != str(discord_id)]
         leaderboard.append(player_data)
         collected_nicknames.add(nickname)
@@ -1650,12 +1648,10 @@ def save_player_stats_to_file(
             json.dump(json_to_save, f, ensure_ascii=False, indent=2)
 
         print(f"💾 저장 성공 ({source}): {nickname} ({pubg_id})")
-        return True
-
+        return player_data  # ✅ 저장된 데이터 반환
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
         return False
-
 
 
 
@@ -3237,8 +3233,8 @@ async def run_pubg_collection(manual=False):
                     print(f"⚠️ 전적 없음 → 스킵됨: {nickname} ({reason})")
                     raise ValueError(reason)
 
-                # ✅ 전적 기록 시도
-                save_successful = save_player_stats_to_file(
+                # ✅ 저장 시도 → player_data 반환
+                player_data = save_player_stats_to_file(
                     nickname,
                     squad_metrics,
                     ranked_stats,
@@ -3248,59 +3244,59 @@ async def run_pubg_collection(manual=False):
                     source="자동갱신"
                 )
 
-                # ✅ 무조건 기록 (조건: squad_metrics 존재)
-                collected_players.append({
-                    "nickname": nickname,
-                    "discord_id": m["discord_id"],
-                    "pubg_id": player_id,
-                    "squad": squad_metrics,
-                    "ranked": ranked_stats
-                })
-
-                if save_successful:
+                if player_data:
                     success_nicknames.append(nickname)
+                    collected_players.append(player_data)
                     print(f"✅ 저장 성공: {nickname}")
                     failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
-
-                    # valid_pubg_ids.json 갱신
-                    try:
-                        with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
-                            valid_list = json.load(f)
-                            updated = False
-                            for entry in valid_list:
-                                if str(entry.get("discord_id")) == str(m["discord_id"]):
-                                    entry["pubg_id"] = player_id
-                                    entry["game_id"] = nickname
-                                    updated = True
-                                    break
-                            if not updated:
-                                valid_list.append({
-                                    "name": m.get("name", nickname),
-                                    "game_id": nickname,
-                                    "discord_id": m["discord_id"],
-                                    "pubg_id": player_id
-                                })
-                            f.seek(0)
-                            json.dump(valid_list, f, indent=2, ensure_ascii=False)
-                            f.truncate()
-                    except Exception as e:
-                        print(f"⚠️ valid_pubg_ids.json 갱신 실패: {e}")
-
-                    if channel:
-                        try:
-                            user = await bot.fetch_user(m["discord_id"])
-                            embed = discord.Embed(
-                                title="📦 전적 자동 저장 완료!",
-                                description=f"{m['name']}님의 전적 데이터가 저장되었습니다!",
-                                color=discord.Color.green()
-                            )
-                            embed.add_field(name="배그 닉네임", value=nickname, inline=True)
-                            embed.set_footer(text="※ 오덕봇 자동 수집 기능")
-                            await channel.send(content=f"{user.mention}", embed=embed)
-                        except Exception as e:
-                            print(f"❌ 유저 멘션 실패 - {nickname}: {e}")
                 else:
+                    # ✅ 저장 실패여도 수집 리스트에는 포함
+                    collected_players.append({
+                        "nickname": nickname,
+                        "discord_id": m["discord_id"],
+                        "pubg_id": player_id,
+                        "squad": squad_metrics,
+                        "ranked": ranked_stats
+                    })
                     print(f"⚠️ 저장 실패 or 중복 무시됨: {nickname}")
+
+                # valid_pubg_ids.json 갱신
+                try:
+                    with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
+                        valid_list = json.load(f)
+                        updated = False
+                        for entry in valid_list:
+                            if str(entry.get("discord_id")) == str(m["discord_id"]):
+                                entry["pubg_id"] = player_id
+                                entry["game_id"] = nickname
+                                updated = True
+                                break
+                        if not updated:
+                            valid_list.append({
+                                "name": m.get("name", nickname),
+                                "game_id": nickname,
+                                "discord_id": m["discord_id"],
+                                "pubg_id": player_id
+                            })
+                        f.seek(0)
+                        json.dump(valid_list, f, indent=2, ensure_ascii=False)
+                        f.truncate()
+                except Exception as e:
+                    print(f"⚠️ valid_pubg_ids.json 갱신 실패: {e}")
+
+                if channel:
+                    try:
+                        user = await bot.fetch_user(m["discord_id"])
+                        embed = discord.Embed(
+                            title="📦 전적 자동 저장 완료!",
+                            description=f"{m['name']}님의 전적 데이터가 저장되었습니다!",
+                            color=discord.Color.green()
+                        )
+                        embed.add_field(name="배그 닉네임", value=nickname, inline=True)
+                        embed.set_footer(text="※ 오덕봇 자동 수집 기능")
+                        await channel.send(content=f"{user.mention}", embed=embed)
+                    except Exception as e:
+                        print(f"❌ 유저 멘션 실패 - {nickname}: {e}")
 
             except Exception as e:
                 print(f"❌ 저장 실패: {nickname} | 이유: {e}")
@@ -3316,14 +3312,13 @@ async def run_pubg_collection(manual=False):
 
             await asyncio.sleep(60)
 
-        # ✅ season_leaderboard.json에 기록
+        # ✅ 시즌 리더보드 파일 저장
         try:
             leaderboard_path = "season_leaderboard.json"
+            data = {}
             if os.path.exists(leaderboard_path):
                 with open(leaderboard_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-            else:
-                data = {}
 
             data["season_id"] = get_season_id()
             data["collected_nicknames"] = success_nicknames
@@ -3348,6 +3343,7 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
