@@ -3233,6 +3233,14 @@ def add_to_valid_pubg_ids(name, game_id, discord_id, pubg_id, is_guest=False):
         print(f"⚠️ valid_pubg_ids 추가 중 오류: {e}")
 
 
+def extract_pubg_nickname(display_name: str) -> str:
+    parts = [p.strip() for p in display_name.split("/")]
+    if len(parts) == 3:
+        return parts[1]  # 가운데 PUBG 닉네임
+    return display_name.strip()  # fallback
+
+
+
 async def run_pubg_collection(manual=False):
     AUTO_CHANNEL_ID = 1394268206788775967
     mode = "즉시 수동 실행" if manual else "새벽 4시 자동 실행"
@@ -3270,13 +3278,13 @@ async def run_pubg_collection(manual=False):
 
         for i, member in enumerate(members, start=1):
             display_name = member.display_name or member.name
-            segments = display_name.split(" / ")
-            if len(segments) < 2:
-                print(f"❌ 닉네임에서 PUBG ID 추출 실패: {display_name}")
+            nickname = extract_pubg_nickname(display_name)
+
+            if not nickname:
+                print(f"❌ PUBG 닉네임 추출 실패: {display_name}")
                 continue
 
             discord_id = member.id
-            nickname = segments[1].strip()
             print(f"📌 ({i}/{len(members)}) 처리 중: {nickname}")
 
             try:
