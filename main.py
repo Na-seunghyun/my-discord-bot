@@ -1450,6 +1450,21 @@ _cached_season_time = None
 with open("feedback_data/pubg_feedback_full.json", "r", encoding="utf-8") as f:
     feedback_json = json.load(f)
 
+def clean_invalid_users(bot):
+    guild = discord.utils.get(bot.guilds, id=GUILD_ID)
+    member_ids = {str(member.id) for member in guild.members}
+
+    with open("valid_pubg_ids.json", "r", encoding="utf-8") as f:
+        members = json.load(f)
+
+    cleaned = [m for m in members if str(m["discord_id"]) in member_ids]
+
+    with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
+        json.dump(cleaned, f, ensure_ascii=False, indent=2)
+
+    print(f"🧹 탈퇴 유저 정리 완료: 총 {len(members) - len(cleaned)}명 제거됨")
+
+
 def can_make_request():
     now = datetime.now()
     global _last_requests
@@ -1817,6 +1832,57 @@ def pick_best_rank_tier(ranked_stats):
 
     return best  # (tier, sub, point)
 
+@tree.command(name="닉네임자동갱신", description="현재 PUBG 닉네임을 자동으로 갱신합니다", guild=discord.Object(id=GUILD_ID))
+async def 닉네임자동갱신(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+
+    file_path = "season_leaderboard.json"
+    if not os.path.exists(file_path):
+        return await interaction.followup.send("❌ `season_leaderboard.json` 파일이 존재하지 않습니다.")
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    players = data.get("players", [])
+    updated = 0
+    unchanged = 0
+    failed = 0
+
+    for player in players:
+        pubg_id = player.get("pubg_id")
+        if not pubg_id:
+            failed += 1
+            continue
+
+        try:
+            # ✅ PUBG ID로 유저 정보 요청
+            url = f"https://api.pubg.com/shards/{PLATFORM}/players/{pubg_id}"
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            info = response.json()
+            new_name = info["data"]["attributes"]["name"]
+
+            if player["nickname"] != new_name:
+                player["nickname"] = new_name
+                updated += 1
+            else:
+                unchanged += 1
+        except Exception as e:
+            failed += 1
+            print(f"❌ 닉네임 갱신 실패: {pubg_id} | 이유: {e}")
+
+    data["players"] = players
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    embed = discord.Embed(title="🔄 닉네임 자동 갱신 결과", color=discord.Color.green())
+    embed.add_field(name="✅ 갱신됨", value=f"{updated}명", inline=True)
+    embed.add_field(name="⚪ 변경 없음", value=f"{unchanged}명", inline=True)
+    embed.add_field(name="❌ 실패", value=f"{failed}명", inline=True)
+    embed.set_footer(text=f"총 {len(players)}명 대상")
+
+    await interaction.followup.send(embed=embed)
 
 
 
