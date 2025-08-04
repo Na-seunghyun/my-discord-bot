@@ -1519,68 +1519,43 @@ def save_player_stats_to_file(
     pubg_id=None,
     source="기본"
 ):
-    """
-    시즌 리더보드 저장 함수 (discord_id 기준 식별)
-    - 닉네임/서버별명이 바뀌어도 같은 유저로 덮어쓰기
-    - pubg_id는 기록용(식별에 사용하지 않음)
-    """
     import os
     import json
     import time
     from datetime import datetime
 
-    # ─────────────────────────────────────────────────────────
-    # 전역 중복저장 방지 캐시 보장
-    # ─────────────────────────────────────────────────────────
     global recent_saves
     if "recent_saves" not in globals():
         recent_saves = {}
 
-    # ─────────────────────────────────────────────────────────
-    # 기본 검증
-    # ─────────────────────────────────────────────────────────
     if discord_id is None:
-        # 식별키가 없으면 저장 불가
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: discord_id 없음")
-        return
+        return False
 
-    # ─────────────────────────────────────────────────────────
-    # 중복 저장 방지 (30초 규칙) - discord_id 단일 키 사용
-    # ─────────────────────────────────────────────────────────
     key = str(discord_id)
     now = time.time()
     last = recent_saves.get(key)
     if last is not None and now - last < 30:
         print(f"⏹ 중복 저장 방지: {nickname} ({source})")
-        return
+        return False
     recent_saves[key] = now
 
-    # ─────────────────────────────────────────────────────────
-    # 시즌 ID
-    # ─────────────────────────────────────────────────────────
     try:
         season_id = get_season_id()
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 시즌 ID 조회 실패: {e}")
-        return
+        return False
 
-    # ─────────────────────────────────────────────────────────
-    # pubg_id 체크(기록용)
-    # ─────────────────────────────────────────────────────────
     if not pubg_id:
         print(f"⚠️ pubg_id 누락됨: {nickname} / discord_id: {discord_id}")
 
-    # 저장 데이터 기본 구조
     data_to_save = {
-        "nickname": nickname,  # 표시용
-        "discord_id": str(discord_id),  # 식별용(불변)
+        "nickname": nickname,
+        "discord_id": str(discord_id),
         "pubg_id": pubg_id.strip().lower() if pubg_id else "",
         "timestamp": datetime.now().isoformat()
     }
 
-    # ─────────────────────────────────────────────────────────
-    # 기본(일반전) 통계 파생치 계산
-    # ─────────────────────────────────────────────────────────
     if stats:
         try:
             squad_stats = stats["data"]["attributes"]["gameModeStats"].get("squad", {})
@@ -1601,7 +1576,6 @@ def save_player_stats_to_file(
         try:
             avg_damage, kd, win_rate = squad_metrics
         except Exception:
-            # 입력 튜플 형식이 불완전한 경우 안전값
             avg_damage, kd, win_rate = 0.0, 0.0, 0.0
         top10_ratio = (top10s / rounds_played * 100) if rounds_played else 0.0
         headshot_pct = (headshot_kills / kills * 100) if kills else 0.0
@@ -1631,9 +1605,6 @@ def save_player_stats_to_file(
             "longest_kill": float(longest_kill),
         }
 
-    # ─────────────────────────────────────────────────────────
-    # 경쟁전(랭크) 통계
-    # ─────────────────────────────────────────────────────────
     try:
         if ranked_stats and "data" in ranked_stats:
             ranked_modes = ranked_stats["data"]["attributes"].get("rankedGameModeStats", {})
@@ -1645,12 +1616,8 @@ def save_player_stats_to_file(
                     "points": squad_rank.get("currentRankPoint", 0) or 0,
                 }
     except Exception:
-        # 랭크 파싱 실패는 저장 자체를 막지 않음
         pass
 
-    # ─────────────────────────────────────────────────────────
-    # 파일 입출력 및 시즌 동기화
-    # ─────────────────────────────────────────────────────────
     leaderboard_path = "season_leaderboard.json"
     try:
         if os.path.exists(leaderboard_path):
@@ -1661,21 +1628,34 @@ def save_player_stats_to_file(
         else:
             stored_season_id = None
             leaderboard = []
+            file_data = {}
 
-        # 시즌이 바뀌면 리셋
         if stored_season_id != season_id:
             leaderboard = []
+            file_data = {}
 
-        # 같은 유저(= 같은 discord_id) 기존 항목 제거 → 최신 정보로 대체
         leaderboard = [p for p in leaderboard if p.get("discord_id") != str(discord_id)]
         leaderboard.append(data_to_save)
 
+        collected_nicknames = set(file_data.get("collected_nicknames", []))
+        collected_nicknames.add(nickname)
+
+        json_to_save = {
+            "season_id": season_id,
+            "players": leaderboard,
+            "collected_nicknames": list(collected_nicknames),
+            "collected_count": len(collected_nicknames)
+        }
+
         with open(leaderboard_path, "w", encoding="utf-8") as f:
-            json.dump({"season_id": season_id, "players": leaderboard}, f, ensure_ascii=False, indent=2)
+            json.dump(json_to_save, f, ensure_ascii=False, indent=2)
 
         print(f"✅ 저장 성공 ({source}): {nickname} ({data_to_save.get('pubg_id')})")
+        return True
+
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
+        return False
 
 
 
@@ -3062,6 +3042,25 @@ async def 저장실패(interaction: discord.Interaction):
         await interaction.followup.send(embed=embed)
 
 
+def update_leaderboard_collection(nickname: str):
+    try:
+        path = "season_leaderboard.json"
+        if not os.path.exists(path):
+            return
+
+        with open(path, "r+", encoding="utf-8") as f:
+            data = json.load(f)
+            nicknames = set(data.get("collected_nicknames", []))
+            nicknames.add(nickname)
+            data["collected_nicknames"] = list(nicknames)
+            data["collected_count"] = len(nicknames)
+            f.seek(0)
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.truncate()
+    except Exception as e:
+        print(f"⚠️ 시즌 리더보드 업데이트 실패: {e}")
+
+
 async def start_pubg_collection():
     await bot.wait_until_ready()
 
@@ -3105,7 +3104,7 @@ async def run_pubg_collection(manual=False):
 
         channel = discord.utils.get(bot.get_all_channels(), name="자동수집")
         today_str = datetime.now(KST).strftime("%Y-%m-%d")
-        success_nicknames = []  # ✅ 성공 기록
+        success_nicknames = []
 
         for i, m in enumerate(valid_members, start=1):
             nickname = m["game_id"].strip()
@@ -3119,7 +3118,6 @@ async def run_pubg_collection(manual=False):
 
                 register_request()
 
-                # ✅ 정확한 닉네임 받기
                 player_id, corrected_name = get_player_id(nickname)
                 nickname = corrected_name
 
@@ -3132,7 +3130,8 @@ async def run_pubg_collection(manual=False):
                     print(f"⚠️ 전적 없음 → 스킵됨: {nickname} ({reason})")
                     raise ValueError(reason)
 
-                save_player_stats_to_file(
+                # ✅ 저장 성공 여부 판단
+                save_successful = save_player_stats_to_file(
                     nickname,
                     squad_metrics,
                     ranked_stats,
@@ -3142,23 +3141,27 @@ async def run_pubg_collection(manual=False):
                     source="자동갱신"
                 )
 
-                success_nicknames.append(nickname)  # ✅ 성공한 닉네임 저장
-                print(f"✅ 저장 성공: {nickname}")
-                failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
+                if save_successful:
+                    success_nicknames.append(nickname)
+                    print(f"✅ 저장 성공: {nickname}")
+                    failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
 
-                if channel:
-                    try:
-                        user = await bot.fetch_user(m["discord_id"])
-                        embed = discord.Embed(
-                            title="📦 전적 자동 저장 완료!",
-                            description=f"{m['name']}님의 전적 데이터가 저장되었습니다!",
-                            color=discord.Color.green()
-                        )
-                        embed.add_field(name="배그 닉네임", value=nickname, inline=True)
-                        embed.set_footer(text="※ 오덕봇 자동 수집 기능")
-                        await channel.send(content=f"{user.mention}", embed=embed)
-                    except Exception as e:
-                        print(f"❌ 유저 멘션 실패 - {nickname}: {e}")
+                    if channel:
+                        try:
+                            user = await bot.fetch_user(m["discord_id"])
+                            embed = discord.Embed(
+                                title="📦 전적 자동 저장 완료!",
+                                description=f"{m['name']}님의 전적 데이터가 저장되었습니다!",
+                                color=discord.Color.green()
+                            )
+                            embed.add_field(name="배그 닉네임", value=nickname, inline=True)
+                            embed.set_footer(text="※ 오덕봇 자동 수집 기능")
+                            await channel.send(content=f"{user.mention}", embed=embed)
+                        except Exception as e:
+                            print(f"❌ 유저 멘션 실패 - {nickname}: {e}")
+
+                else:
+                    print(f"⚠️ 저장 실패 or 중복 무시됨: {nickname}")
 
             except Exception as e:
                 print(f"❌ 저장 실패: {nickname} | 이유: {e}")
@@ -3174,7 +3177,7 @@ async def run_pubg_collection(manual=False):
 
             await asyncio.sleep(60)
 
-        # ✅ 성공 유저 목록 기록
+        # ✅ 수집 결과 요약 저장
         try:
             with open("season_leaderboard.json", "r+", encoding="utf-8") as f:
                 data = json.load(f)
@@ -3192,6 +3195,7 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
