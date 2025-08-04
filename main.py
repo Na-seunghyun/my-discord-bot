@@ -3188,6 +3188,7 @@ async def start_pubg_collection():
         await run_pubg_collection(manual=False)
 
 async def run_pubg_collection(manual=False):
+    AUTO_CHANNEL_ID = 1394268206788775967  # ✅ 자동수집 채널 ID
     mode = "즉시 수동 실행" if manual else "새벽 4시 자동 실행"
     print(f"🔄 [{mode}] PUBG 전적 수집 시작")
     
@@ -3209,7 +3210,7 @@ async def run_pubg_collection(manual=False):
             print("⚠️ 유효한 배그 닉네임이 없습니다.")
             return
 
-        channel = discord.utils.get(bot.get_all_channels(), name="자동수집")
+        channel = bot.get_channel(AUTO_CHANNEL_ID)
         today_str = datetime.now(KST).strftime("%Y-%m-%d")
         success_nicknames = []
 
@@ -3224,8 +3225,6 @@ async def run_pubg_collection(manual=False):
                     continue
 
                 register_request()
-
-                # ✅ 언팩 필수!!
                 player_id, corrected_name = get_player_id(nickname)
                 nickname = corrected_name
 
@@ -3253,7 +3252,7 @@ async def run_pubg_collection(manual=False):
                     print(f"✅ 저장 성공: {nickname}")
                     failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
 
-                    # ✅ pubg_id valid 목록 갱신
+                    # valid_pubg_ids.json 최신화
                     try:
                         with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                             valid_list = json.load(f)
@@ -3262,7 +3261,7 @@ async def run_pubg_collection(manual=False):
                             for entry in valid_list:
                                 if str(entry.get("discord_id")) == str(m["discord_id"]):
                                     entry["pubg_id"] = player_id
-                                    entry["game_id"] = nickname  # 최신화
+                                    entry["game_id"] = nickname
                                     updated = True
                                     break
 
@@ -3293,7 +3292,6 @@ async def run_pubg_collection(manual=False):
                             await channel.send(content=f"{user.mention}", embed=embed)
                         except Exception as e:
                             print(f"❌ 유저 멘션 실패 - {nickname}: {e}")
-
                 else:
                     print(f"⚠️ 저장 실패 or 중복 무시됨: {nickname}")
 
@@ -3324,11 +3322,18 @@ async def run_pubg_collection(manual=False):
         except Exception as e:
             print(f"⚠️ 수집 유저 기록 실패: {e}")
 
+        # ✅ 최종 결과 메시지 전송
         if channel:
-            await channel.send(f"✅ `{today_str}` 기준, 총 {len(success_nicknames)}명의 전적 수집이 완료되었습니다.")
+            try:
+                await channel.send(f"✅ `{today_str}` 기준, 총 {len(success_nicknames)}명의 전적 수집이 완료되었습니다.")
+            except Exception as e:
+                print(f"❌ 최종 전송 실패: {e}")
+        else:
+            print("❗ 자동수집 채널을 찾지 못했습니다.")
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
