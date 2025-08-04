@@ -1463,9 +1463,22 @@ def register_request():
 def get_player_id(player_name):
     url = f"https://api.pubg.com/shards/{PLATFORM}/players?filter[playerNames]={player_name}"
     response = requests.get(url, headers=headers)
+
+    if response.status_code == 404:
+        raise ValueError(f"🔍 닉네임 `{player_name}` 을 PUBG에서 찾을 수 없습니다.")
+
     response.raise_for_status()
     data = response.json()
-    return data["data"][0]["id"]
+
+    if not data.get("data"):
+        raise ValueError(f"🔍 닉네임 `{player_name}` 은 존재하지 않음.")
+
+    player_data = data["data"][0]
+    player_id = player_data["id"]
+    actual_name = player_data["attributes"]["name"]  # ✅ 대소문자 보존된 닉네임
+
+    return player_id, actual_name
+
 
 def get_season_id():
     global _cached_season_id, _cached_season_time
@@ -3091,7 +3104,11 @@ async def run_pubg_collection(manual=False):
                     continue
 
                 register_request()
-                player_id = get_player_id(nickname)
+
+                # ✅ 정확한 닉네임 받기
+                player_id, corrected_name = get_player_id(nickname)
+                nickname = corrected_name  # 대소문자 포함 정확한 닉네임으로 덮어쓰기
+
                 season_id = get_season_id()
                 stats = get_player_stats(player_id, season_id)
                 ranked_stats = get_player_ranked_stats(player_id, season_id)
@@ -3131,17 +3148,23 @@ async def run_pubg_collection(manual=False):
             except Exception as e:
                 print(f"❌ 저장 실패: {nickname} | 이유: {e}")
                 if not any(fm["discord_id"] == m["discord_id"] for fm in failed_members):
-                    failed_members.append(m)
+                    failed_members.append({
+                        "discord_id": m["discord_id"],
+                        "name": m.get("name", ""),
+                        "game_id": nickname,
+                        "reason": str(e)
+                    })
                     with open("failed_members.json", "w", encoding="utf-8") as f:
                         json.dump(failed_members, f, ensure_ascii=False, indent=2)
 
-            await asyncio.sleep(60)  # 1분 간격 처리
+            await asyncio.sleep(60)
 
         if channel:
             await channel.send(f"✅ `{today_str}` 기준, 총 {len(valid_members)}명의 전적 수집이 완료되었습니다.")
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
