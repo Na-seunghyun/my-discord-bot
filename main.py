@@ -3231,11 +3231,6 @@ async def run_pubg_collection(manual=False):
                 ranked_stats = get_player_ranked_stats(player_id, season_id)
                 squad_metrics, reason = extract_squad_metrics(stats)
 
-                if squad_metrics is None:
-                    print(f"⚠️ 전적 없음 → 스킵됨: {nickname} ({reason})")
-                    raise ValueError(reason)
-
-                # ✅ 저장 시도 → player_data 반환
                 player_data = save_player_stats_to_file(
                     nickname,
                     squad_metrics,
@@ -3249,23 +3244,20 @@ async def run_pubg_collection(manual=False):
                 if player_data:
                     success_nicknames.append(nickname)
                     collected_players.append(player_data)
-                    print("📊 collected_players 중간 점검:")
-                    for p in collected_players:
-                        print("-", p["nickname"])
-                    
                     print(f"✅ 저장 성공: {nickname}")
                     failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
                 else:
-                    collected_players.append({
+                    fallback_data = {
                         "nickname": nickname,
                         "discord_id": m["discord_id"],
                         "pubg_id": player_id,
-                        "squad": squad_metrics,
-                        "ranked": ranked_stats
-                    })
-                    print(f"⚠️ 저장 실패 or 중복 무시됨: {nickname}")
+                        "squad": squad_metrics or {},
+                        "ranked": ranked_stats or {}
+                    }
+                    collected_players.append(fallback_data)
+                    print(f"⚠️ 저장 실패 또는 무시됨: {nickname}")
 
-                # ✅ valid_pubg_ids.json 갱신
+                # valid_pubg_ids.json 갱신
                 try:
                     with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                         valid_list = json.load(f)
@@ -3289,7 +3281,7 @@ async def run_pubg_collection(manual=False):
                 except Exception as e:
                     print(f"⚠️ valid_pubg_ids.json 갱신 실패: {e}")
 
-                # ✅ 유저에게 알림 전송
+                # 알림
                 if channel:
                     try:
                         user = await bot.fetch_user(m["discord_id"])
@@ -3318,7 +3310,7 @@ async def run_pubg_collection(manual=False):
 
             await asyncio.sleep(60)
 
-        # ✅ season_leaderboard.json에 저장
+        # 최종 저장
         try:
             leaderboard_path = "season_leaderboard.json"
             data = {}
@@ -3333,7 +3325,6 @@ async def run_pubg_collection(manual=False):
 
             print("💾 season_leaderboard 저장 직전:", json.dumps(data, indent=2, ensure_ascii=False))
 
-
             with open(leaderboard_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -3341,7 +3332,7 @@ async def run_pubg_collection(manual=False):
         except Exception as e:
             print(f"⚠️ 수집 유저 기록 실패: {e}")
 
-        # ✅ 완료 메시지
+        # 완료 메시지
         if channel:
             try:
                 await channel.send(f"✅ `{today_str}` 기준, 총 {len(success_nicknames)}명의 전적 수집이 완료되었습니다.")
@@ -3352,6 +3343,7 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
