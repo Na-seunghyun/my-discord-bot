@@ -1648,6 +1648,8 @@ def save_player_stats_to_file(
             json.dump(json_to_save, f, ensure_ascii=False, indent=2)
 
         print(f"💾 저장 성공 ({source}): {nickname} ({pubg_id})")
+        print("🧾 저장 직전 player_data:", json.dumps(player_data, indent=2, ensure_ascii=False))
+
         return player_data  # ✅ 저장된 데이터 반환
     except Exception as e:
         print(f"❌ 저장 실패 ({source}): {nickname} | 이유: {e}")
@@ -3247,6 +3249,10 @@ async def run_pubg_collection(manual=False):
                 if player_data:
                     success_nicknames.append(nickname)
                     collected_players.append(player_data)
+                    print("📊 collected_players 중간 점검:")
+                    for p in collected_players:
+                        print("-", p["nickname"])
+                    
                     print(f"✅ 저장 성공: {nickname}")
                     failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
                 else:
@@ -3324,6 +3330,9 @@ async def run_pubg_collection(manual=False):
             data["collected_nicknames"] = success_nicknames
             data["collected_count"] = len(success_nicknames)
             data["players"] = collected_players
+
+            print("💾 season_leaderboard 저장 직전:", json.dumps(data, indent=2, ensure_ascii=False))
+
 
             with open(leaderboard_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
