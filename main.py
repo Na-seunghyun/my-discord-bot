@@ -2000,10 +2000,9 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                     players = data.get("players", [])
                     nicknames = set(data.get("collected_nicknames", []))
 
-                    # 동일 유저의 이전 데이터 제거
-                    players = [p for p in players if str(p.get("discord_id")) != str(interaction.user.id)]
+                    # ✅ 동일 nickname 기준으로 중복 제거 (대소문자 포함 정확히 일치)
+                    players = [p for p in players if p.get("nickname", "").strip() != corrected_name]
 
-                    # corrected_name 기준 nickname 저장
                     player_data["nickname"] = corrected_name
                     players.append(player_data)
                     nicknames.add(corrected_name)
@@ -2021,21 +2020,15 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 except Exception as e:
                     print(f"❌ /전적 저장 실패: {e}")
 
-        # ✅ valid_pubg_ids.json 자동 등록
+        # ✅ valid_pubg_ids.json 등록 또는 갱신 (닉네임 중복 방지)
         try:
             with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                 valid_data = json.load(f)
                 updated = False
 
-                for entry in valid_data:
-                    if str(entry.get("discord_id")) == str(interaction.user.id):
-                        if entry.get("game_id") != corrected_name:
-                            print(f"🔁 닉네임 갱신: {entry.get('game_id')} → {corrected_name}")
-                            entry["game_id"] = corrected_name
-                            entry["name"] = interaction.user.display_name
-                            updated = True
-                        break
-                else:
+                # 중복 game_id가 이미 다른 유저에 등록되어 있는 경우 제외
+                exists = any(entry.get("game_id", "").strip() == corrected_name for entry in valid_data)
+                if not exists:
                     valid_data.append({
                         "name": interaction.user.display_name,
                         "game_id": corrected_name,
@@ -2044,12 +2037,24 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                         "is_guest": False
                     })
                     updated = True
+                    print(f"✅ valid_pubg_ids에 신규 등록: {corrected_name}")
+
+                else:
+                    # 만약 동일 discord_id가 game_id를 변경하려는 경우 → 갱신
+                    for entry in valid_data:
+                        if str(entry.get("discord_id")) == str(interaction.user.id):
+                            if entry.get("game_id") != corrected_name:
+                                print(f"🔁 닉네임 갱신: {entry.get('game_id')} → {corrected_name}")
+                                entry["game_id"] = corrected_name
+                                entry["name"] = interaction.user.display_name
+                                updated = True
+                            break
 
                 if updated:
                     f.seek(0)
                     json.dump(valid_data, f, ensure_ascii=False, indent=2)
                     f.truncate()
-                    print(f"✅ valid_pubg_ids에 등록 또는 갱신됨: {corrected_name}")
+
         except Exception as e:
             print(f"⚠️ valid_pubg_ids 추가 실패: {e}")
 
@@ -2060,6 +2065,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
 
     except Exception as e:
         await interaction.followup.send(f"❌ 오류 발생: {e}", ephemeral=True)
+
 
 
 
@@ -2324,12 +2330,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     except Exception:
         return await interaction.followup.send("❌ 유효 PUBG ID 목록을 불러오지 못했습니다.", ephemeral=True)
 
-    # ✅ 수정된 필터 매핑: discord_id → game_id
-    valid_pubg_map = {
-        str(entry["discord_id"]).strip(): entry["game_id"].strip()
-        for entry in valid_data
-        if entry.get("discord_id") and entry.get("game_id") and not entry.get("is_guest", False)
-    }
+    valid_ids = set(entry.get("game_id", "").strip() for entry in valid_data if not entry.get("is_guest", False))
 
     leaderboard_path = "season_leaderboard.json"
     if not os.path.exists(leaderboard_path):
@@ -2344,25 +2345,16 @@ async def 시즌랭킹(interaction: discord.Interaction):
     players = []
     for p in raw_players:
         nickname = p.get("nickname", "").strip()
-        discord_id = str(p.get("discord_id", "")).strip()
-
         if "(게스트)" in nickname:
             continue
-
-        # ✅ 대소문자/공백 무시한 정규화 비교
-        expected_game_id = valid_pubg_map.get(discord_id, "").strip().lower()
-        actual_nickname = nickname.strip().lower()
-
-        if expected_game_id and actual_nickname != expected_game_id:
-            print(f"❌ 제외: {nickname} (닉네임 불일치: {expected_game_id})")
+        if nickname not in valid_ids:
+            print(f"❌ 제외: {nickname} (닉네임 불일치)")
             continue
-
         players.append(p)
 
     if not players:
         return await interaction.followup.send("❌ 유효한 유저 전적이 없습니다. (게스트 제외 + ID검사 통과자 없음)", ephemeral=True)
 
-    # 💯 점수 계산
     keys = list(weights.keys())
     means = {
         "avg_damage": 150.00,
@@ -2491,6 +2483,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     embed.set_footer(text=f"※ 기준: 저장 유저 {total_saved_non_guest}명 / 유효 계정 {len(players)}명 (게스트 제외 + ID검사 통과)")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
