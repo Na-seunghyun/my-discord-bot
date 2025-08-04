@@ -1970,7 +1970,7 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         # ✅ squad 전적 추출 및 저장
         squad_metrics, error = extract_squad_metrics(stats)
         if squad_metrics:
-            save_player_stats_to_file(
+            player_data = save_player_stats_to_file(
                 corrected_name,
                 squad_metrics,
                 ranked,
@@ -1980,36 +1980,37 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                 source="전적명령"
             )
 
-            # ✅ valid_pubg_ids.json 자동 등록
-            try:
-                with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
-                    valid_data = json.load(f)
-                    exists = any(
-                        str(entry.get("discord_id")) == str(interaction.user.id)
-                        for entry in valid_data
-                    )
-                    if not exists:
-                        valid_data.append({
-                            "name": interaction.user.display_name,
-                            "game_id": corrected_name,
-                            "discord_id": interaction.user.id,
-                            "pubg_id": player_id,
-                            "is_guest": False
-                        })
-                        f.seek(0)
-                        json.dump(valid_data, f, ensure_ascii=False, indent=2)
-                        f.truncate()
-                        print(f"✅ valid_pubg_ids에 추가됨: {corrected_name}")
-            except Exception as e:
-                print(f"⚠️ valid_pubg_ids 추가 실패: {e}")
+            if player_data:
+                try:
+                    path = "season_leaderboard.json"
+                    if os.path.exists(path):
+                        with open(path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                    else:
+                        data = {
+                            "players": [],
+                            "collected_nicknames": [],
+                            "collected_count": 0
+                        }
 
-        # ✅ 전적 출력
-        embed = generate_mode_embed(stats, "squad", corrected_name)
-        view = ModeSwitchView(nickname=corrected_name, stats=stats, ranked_stats=ranked)
-        await interaction.followup.send(embed=embed, view=view)
+                    players = data.get("players", [])
+                    nicknames = set(data.get("collected_nicknames", []))
+                    players = [p for p in players if p.get("discord_id") != str(interaction.user.id)]
+                    players.append(player_data)
+                    nicknames.add(corrected_name)
 
-    except Exception as e:
-        await interaction.followup.send(f"❌ 오류 발생: {e}", ephemeral=True)
+                    data["season_id"] = get_season_id()
+                    data["players"] = players
+                    data["collected_nicknames"] = list(nicknames)
+                    data["collected_count"] = len(nicknames)
+
+                    with open(path, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2, ensure_ascii=False)
+
+                    print(f"💾 /전적 → season_leaderboard.json 저장 완료: {corrected_name}")
+
+                except Exception as e:
+                    print(f"❌ /전적 저장 실패: {e}")
 
 
 
