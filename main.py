@@ -3190,11 +3190,10 @@ async def start_pubg_collection():
         await run_pubg_collection(manual=False)
 
 async def run_pubg_collection(manual=False):
-    AUTO_CHANNEL_ID = 1394268206788775967  # ✅ 자동수집 채널 ID
+    AUTO_CHANNEL_ID = 1394268206788775967  # 자동수집 채널 ID
     mode = "즉시 수동 실행" if manual else "새벽 4시 자동 실행"
     print(f"🔄 [{mode}] PUBG 전적 수집 시작")
-    
- 
+
     try:
         if not os.path.exists("valid_pubg_ids.json"):
             with open("valid_pubg_ids.json", "w", encoding="utf-8") as f:
@@ -3214,6 +3213,7 @@ async def run_pubg_collection(manual=False):
         channel = bot.get_channel(AUTO_CHANNEL_ID)
         today_str = datetime.now(KST).strftime("%Y-%m-%d")
         success_nicknames = []
+        collected_players = []
 
         for i, m in enumerate(valid_members, start=1):
             nickname = m["game_id"].strip()
@@ -3253,19 +3253,26 @@ async def run_pubg_collection(manual=False):
                     print(f"✅ 저장 성공: {nickname}")
                     failed_members[:] = [fm for fm in failed_members if fm["discord_id"] != m["discord_id"]]
 
+                    # ✅ 랭킹용 데이터 추가
+                    collected_players.append({
+                        "nickname": nickname,
+                        "discord_id": m["discord_id"],
+                        "pubg_id": player_id,
+                        "squad": squad_metrics,
+                        "ranked": ranked_stats
+                    })
+
                     # valid_pubg_ids.json 최신화
                     try:
                         with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                             valid_list = json.load(f)
                             updated = False
-
                             for entry in valid_list:
                                 if str(entry.get("discord_id")) == str(m["discord_id"]):
                                     entry["pubg_id"] = player_id
                                     entry["game_id"] = nickname
                                     updated = True
                                     break
-
                             if not updated:
                                 valid_list.append({
                                     "name": m.get("name", nickname),
@@ -3273,7 +3280,6 @@ async def run_pubg_collection(manual=False):
                                     "discord_id": m["discord_id"],
                                     "pubg_id": player_id
                                 })
-
                             f.seek(0)
                             json.dump(valid_list, f, indent=2, ensure_ascii=False)
                             f.truncate()
@@ -3310,16 +3316,24 @@ async def run_pubg_collection(manual=False):
 
             await asyncio.sleep(60)
 
-        # ✅ 수집 유저 기록
+        # ✅ season_leaderboard.json에 기록
         try:
-            with open("season_leaderboard.json", "r+", encoding="utf-8") as f:
-                data = json.load(f)
-                data["collected_nicknames"] = success_nicknames
-                data["collected_count"] = len(success_nicknames)
-                f.seek(0)
+            leaderboard_path = "season_leaderboard.json"
+            if os.path.exists(leaderboard_path):
+                with open(leaderboard_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = {}
+
+            data["season_id"] = get_season_id()
+            data["collected_nicknames"] = success_nicknames
+            data["collected_count"] = len(success_nicknames)
+            data["players"] = collected_players
+
+            with open(leaderboard_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-                f.truncate()
-                print(f"📥 수집 성공 유저 {len(success_nicknames)}명 기록 완료")
+
+            print(f"📥 수집 성공 유저 {len(success_nicknames)}명 기록 완료")
         except Exception as e:
             print(f"⚠️ 수집 유저 기록 실패: {e}")
 
@@ -3334,6 +3348,7 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
