@@ -1951,7 +1951,8 @@ def generate_ranked_embed(ranked_stats, nickname="플레이어"):
 async def 전적(interaction: discord.Interaction, 닉네임: str):
     await interaction.response.defer()
     try:
-        player_id = get_player_id(닉네임)  # ✅ account.xxxx 형식의 고유 ID
+        # ✅ 언패킹 필요!!
+        player_id, corrected_name = get_player_id(닉네임)
         season_id = get_season_id()
         stats = get_player_stats(player_id, season_id)
         ranked = get_player_ranked_stats(player_id, season_id)
@@ -1959,17 +1960,17 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
         squad_metrics, error = extract_squad_metrics(stats)
         if squad_metrics:
             save_player_stats_to_file(
-                닉네임,
+                corrected_name,              # ✅ 대소문자 보존된 닉네임
                 squad_metrics,
                 ranked,
                 stats=stats,
                 discord_id=interaction.user.id,
-                pubg_id=닉네임.strip(),  # ✅ 닉네임 기반으로 pubg_id 저장
+                pubg_id=player_id,           # ✅ 고유 pubg_id 저장
                 source="전적명령"
             )
 
-        embed = generate_mode_embed(stats, "squad", 닉네임)
-        view = ModeSwitchView(nickname=닉네임, stats=stats, ranked_stats=ranked)
+        embed = generate_mode_embed(stats, "squad", corrected_name)
+        view = ModeSwitchView(nickname=corrected_name, stats=stats, ranked_stats=ranked)
         await interaction.followup.send(embed=embed, view=view)
 
     except Exception as e:
