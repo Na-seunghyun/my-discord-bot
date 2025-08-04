@@ -2307,7 +2307,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     valid_discord_ids = set()
     for entry in valid_data:
         if not entry.get("is_guest", False):
-            game_id = entry.get("game_id", "").strip().lower()
+            game_id = entry.get("game_id", "").strip()  # ✅ 대소문자 구별 유지
             discord_id = str(entry.get("discord_id", "")).strip()
             if game_id:
                 valid_game_ids.add(game_id)
@@ -2331,7 +2331,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
 
         if "(게스트)" in nickname:
             continue
-        if nickname.strip().lower() not in valid_game_ids:
+        if nickname.strip() not in valid_game_ids:  # ✅ lower() 제거
             continue
         if discord_id not in valid_discord_ids:
             continue
@@ -2469,6 +2469,7 @@ async def 시즌랭킹(interaction: discord.Interaction):
     embed.set_footer(text=f"※ 기준: 저장 유저 {total_saved_non_guest}명 / 유효 계정 {len(players)}명 (게스트 제외 + ID검사 통과)")
 
     await interaction.followup.send(embed=embed)
+
 
 
 
