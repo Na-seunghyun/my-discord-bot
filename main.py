@@ -2022,10 +2022,30 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
             with open("valid_pubg_ids.json", "r+", encoding="utf-8") as f:
                 valid_data = json.load(f)
                 updated = False
+                user_id = str(interaction.user.id)
 
-                # 중복 game_id가 이미 다른 유저에 등록되어 있는 경우 제외
-                exists = any(entry.get("game_id", "").strip() == corrected_name for entry in valid_data)
-                if not exists:
+                # 현재 유저의 기존 entry 확인
+                existing_entry = next(
+                    (entry for entry in valid_data if str(entry.get("discord_id")) == user_id),
+                    None
+                )
+
+                # 동일 PUBG 닉네임이 이미 다른 유저에게 등록되어 있으면 차단
+                nickname_taken_by_others = any(
+                    entry.get("game_id", "").strip().lower() == corrected_name.lower() and
+                    str(entry.get("discord_id")) != user_id
+                    for entry in valid_data
+                )
+
+                if nickname_taken_by_others:
+                    print(f"⚠️ 이미 다른 유저가 등록한 닉네임이므로 무시됨: {corrected_name}")
+                elif existing_entry:
+                    if existing_entry.get("game_id") != corrected_name:
+                        print(f"🔁 닉네임 갱신: {existing_entry.get('game_id')} → {corrected_name}")
+                        existing_entry["game_id"] = corrected_name
+                        existing_entry["name"] = interaction.user.display_name
+                        updated = True
+                else:
                     valid_data.append({
                         "name": interaction.user.display_name,
                         "game_id": corrected_name,
@@ -2033,19 +2053,8 @@ async def 전적(interaction: discord.Interaction, 닉네임: str):
                         "pubg_id": player_id,
                         "is_guest": False
                     })
-                    updated = True
                     print(f"✅ valid_pubg_ids에 신규 등록: {corrected_name}")
-
-                else:
-                    # 만약 동일 discord_id가 game_id를 변경하려는 경우 → 갱신
-                    for entry in valid_data:
-                        if str(entry.get("discord_id")) == str(interaction.user.id):
-                            if entry.get("game_id") != corrected_name:
-                                print(f"🔁 닉네임 갱신: {entry.get('game_id')} → {corrected_name}")
-                                entry["game_id"] = corrected_name
-                                entry["name"] = interaction.user.display_name
-                                updated = True
-                            break
+                    updated = True
 
                 if updated:
                     f.seek(0)
