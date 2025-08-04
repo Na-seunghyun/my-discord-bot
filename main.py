@@ -1755,10 +1755,15 @@ def detailed_feedback(avg_damage, kd, win_rate):
 
 def get_player_ranked_stats(player_id, season_id):
     url = f"https://api.pubg.com/shards/{PLATFORM}/players/{player_id}/seasons/{season_id}/ranked"
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 404:
+            print(f"ℹ️ 랭크 정보 없음: {player_id}")
+            return None  # 랭크 정보 없는 유저는 None 반환
+        response.raise_for_status()
         return response.json()
-    else:
+    except requests.RequestException as e:
+        print(f"❌ get_player_ranked_stats 요청 실패: {e}")
         return None
 
 
@@ -3118,8 +3123,9 @@ async def run_pubg_collection(manual=False):
 
                 register_request()
 
+                # ✅ 언팩 필수!!
                 player_id, corrected_name = get_player_id(nickname)
-                nickname = corrected_name
+                nickname = corrected_name  # 정확한 닉네임 업데이트
 
                 season_id = get_season_id()
                 stats = get_player_stats(player_id, season_id)
@@ -3130,7 +3136,7 @@ async def run_pubg_collection(manual=False):
                     print(f"⚠️ 전적 없음 → 스킵됨: {nickname} ({reason})")
                     raise ValueError(reason)
 
-                # ✅ 저장 성공 여부 판단
+                # ✅ 저장 성공 여부 체크
                 save_successful = save_player_stats_to_file(
                     nickname,
                     squad_metrics,
@@ -3177,7 +3183,7 @@ async def run_pubg_collection(manual=False):
 
             await asyncio.sleep(60)
 
-        # ✅ 수집 결과 요약 저장
+        # ✅ 수집 유저 기록
         try:
             with open("season_leaderboard.json", "r+", encoding="utf-8") as f:
                 data = json.load(f)
@@ -3195,6 +3201,7 @@ async def run_pubg_collection(manual=False):
 
     except Exception as e:
         print(f"💥 run_pubg_collection 전체 실패: {e}")
+
 
 
 
